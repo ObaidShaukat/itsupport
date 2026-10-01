@@ -1,0 +1,68 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Users</h1>
+    <p class="muted">People who can sign in to the portal.</p>
+  </div>
+</header>
+
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <h2>All users</h2>
+    <ul class="rows">
+      <% for (const u of users) { %>
+        <li class="row">
+          <div class="row-main">
+            <strong><%= u.username %></strong>
+            <% if (u.id === currentUser.id) { %><span class="badge badge-you">You</span><% } %>
+            <div class="muted small"><%= u.role %> · added <%= fmtDate(u.created_at) %></div>
+          </div>
+          <div class="row-actions">
+            <details class="edit">
+              <summary class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></summary>
+              <div class="edit-panel">
+                <form method="post" action="/users/<%= u.id %>" class="inline-form">
+                  <%- csrfField %>
+                  <label class="field">
+                    <span>Username</span>
+                    <input type="text" name="username" value="<%= u.username %>" required maxlength="100">
+                  </label>
+                  <button type="submit" class="btn">Rename</button>
+                </form>
+                <form method="post" action="/users/<%= u.id %>/password" class="inline-form">
+                  <%- csrfField %>
+                  <label class="field">
+                    <span>New password</span>
+                    <input type="password" name="password" required minlength="8" autocomplete="new-password">
+                  </label>
+                  <button type="submit" class="btn">Reset password</button>
+                </form>
+              </div>
+            </details>
+            <% if (u.id !== currentUser.id) { %>
+              <%- include('../partials/delete', { action: `/users/${u.id}/delete`, confirm: `Delete user "${u.username}"?` }) %>
+            <% } %>
+          </div>
+        </li>
+      <% } %>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>Add user</h2>
+    <form method="post" action="/users" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Username</span>
+        <input type="text" name="username" required maxlength="100" autocomplete="off">
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" required minlength="8" autocomplete="new-password">
+        <small class="muted">At least 8 characters.</small>
+      </label>
+      <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add user</span></button>
+    </form>
+  </section>
+</div>
+<%- include('../partials/foot') %>

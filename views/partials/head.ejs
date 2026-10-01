@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title><%= locals.title ? title + ' · ' : '' %>Cleartwo IT Support</title>
+  <% if (fonts.needPoppins) { %>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <% } %>
+  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<%- include('icons') %>
+<% if (locals.currentUser) { %>
+<div class="shell">
+  <input type="checkbox" id="nav-toggle" class="nav-toggle">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <a href="/" class="brand">
+        <% if (locals.hasLogo) { %>
+          <img src="/img/logo.svg" alt="Cleartwo" class="brand-logo">
+        <% } else { %>
+          <span class="brand-name">Cleartwo</span>
+        <% } %>
+        <span class="brand-sub">IT Support</span>
+      </a>
+      <label for="nav-toggle" class="nav-button" aria-label="Toggle menu"><%- icon('menu') %></label>
+    </div>
+    <nav class="nav" aria-label="Main">
+      <% for (const item of navItems) { %>
+        <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
+      <% } %>
+      <div class="nav-foot">
+        <span class="whoami"><%= currentUser.username %></span>
+        <form method="post" action="/logout">
+          <%- locals.csrfField %>
+          <button type="submit" class="nav-signout"><%- icon('logout') %><span>Sign out</span></button>
+        </form>
+      </div>
+    </nav>
+  </aside>
+  <main class="main">
+<% } else { %>
+<div class="shell shell-bare">
+  <main class="main">
+<% } %>
+    <% if (locals.flash) { %>
+      <div class="flash flash-<%= flash.type %>" role="status"><%= flash.message %></div>
+    <% } %>

@@ -1,0 +1,52 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Clients</h1>
+  </div>
+  <div class="actions">
+    <a href="/clients/new" class="btn btn-primary"><%- icon('plus') %><span>New client</span></a>
+  </div>
+</header>
+
+<section class="card">
+  <form method="get" action="/clients" class="inline-form search">
+    <label class="field field-grow">
+      <span class="visually-hidden">Search clients</span>
+      <input type="search" name="q" value="<%= q %>" placeholder="Search by name, contact or email" maxlength="100">
+    </label>
+    <button type="submit" class="btn"><%- icon('search') %><span>Search</span></button>
+    <% if (q) { %><a href="/clients" class="btn btn-ghost">Clear</a><% } %>
+  </form>
+
+  <% if (!clients.length) { %>
+    <p class="empty"><%= q ? 'No clients match your search.' : 'No clients yet.' %></p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th class="num">Active tickets</th>
+            <th class="num">Open services</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const c of clients) { %>
+            <tr>
+              <td><a href="/clients/<%= c.id %>"><strong><%= c.name %></strong></a></td>
+              <td><%= c.contact_name || '' %></td>
+              <td><% if (c.email) { %><a href="mailto:<%= c.email %>"><%= c.email %></a><% } %></td>
+              <td class="nowrap"><%= c.phone || '' %></td>
+              <td class="num"><%= Number(c.active_tickets) %></td>
+              <td class="num"><%= Number(c.open_services) %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/foot') %>

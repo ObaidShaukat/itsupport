@@ -1,0 +1,41 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/clients">Clients</a><% if (client.id) { %> / <a href="/clients/<%= client.id %>"><%= client.name %></a><% } %></p>
+    <h1><%= client.id ? 'Edit client' : 'New client' %></h1>
+  </div>
+</header>
+
+<section class="card card-narrow">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="<%= action %>" class="form">
+    <%- csrfField %>
+    <label class="field">
+      <span>Client name</span>
+      <input type="text" name="name" value="<%= client.name %>" required maxlength="200">
+    </label>
+    <div class="form-row">
+      <label class="field">
+        <span>Contact name</span>
+        <input type="text" name="contact_name" value="<%= client.contact_name %>" maxlength="200">
+      </label>
+      <label class="field">
+        <span>Phone</span>
+        <input type="tel" name="phone" value="<%= client.phone %>" maxlength="50">
+      </label>
+    </div>
+    <label class="field">
+      <span>Email</span>
+      <input type="email" name="email" value="<%= client.email %>" maxlength="254">
+    </label>
+    <label class="field">
+      <span>Notes</span>
+      <textarea name="notes" rows="5" maxlength="5000"><%= client.notes %></textarea>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary"><%= client.id ? 'Save changes' : 'Add client' %></button>
+      <a href="<%= client.id ? `/clients/${client.id}` : '/clients' %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../partials/foot') %>

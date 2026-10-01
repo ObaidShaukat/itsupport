@@ -1,0 +1,75 @@
+<%- include('partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="muted">Welcome back, <%= currentUser.username %>.</p>
+  </div>
+  <div class="actions">
+    <a href="/tickets/new" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
+  </div>
+</header>
+
+<section class="stats">
+  <a href="/tickets?status=open" class="card stat">
+    <span class="stat-icon"><%- icon('message') %></span>
+    <span class="stat-value"><%= counts.openTickets %></span>
+    <span class="stat-label">Open tickets</span>
+  </a>
+  <a href="/tickets?status=customer_waiting" class="card stat">
+    <span class="stat-icon"><%- icon('clock') %></span>
+    <span class="stat-value"><%= counts.waitingTickets %></span>
+    <span class="stat-label">Customer waiting</span>
+  </a>
+  <a href="/clients" class="card stat">
+    <span class="stat-icon"><%- icon('layers') %></span>
+    <span class="stat-value"><%= counts.openServices %></span>
+    <span class="stat-label">Open client services</span>
+  </a>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head">
+      <h2>Active tickets</h2>
+      <a href="/tickets" class="link-more">All tickets <%- icon('arrow-right') %></a>
+    </div>
+    <% if (!recentTickets.length) { %>
+      <p class="empty">No open or waiting tickets.</p>
+    <% } else { %>
+      <ul class="list">
+        <% for (const t of recentTickets) { %>
+          <li>
+            <div>
+              <a href="/tickets/<%= t.id %>"><%= t.title %></a>
+              <div class="muted small"><%= t.client_name %> · <%= fmtDate(t.updated_at) %></div>
+            </div>
+            <%- include('partials/status', { status: t.status }) %>
+          </li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>Open client services</h2>
+      <a href="/clients" class="link-more">All clients <%- icon('arrow-right') %></a>
+    </div>
+    <% if (!openServices.length) { %>
+      <p class="empty">No open client services.</p>
+    <% } else { %>
+      <ul class="list">
+        <% for (const cs of openServices) { %>
+          <li>
+            <div>
+              <a href="/clients/<%= cs.client_id %>#cs-<%= cs.id %>"><%= cs.service_name %></a>
+              <div class="muted small"><%= cs.client_name %></div>
+            </div>
+            <span class="progress-text"><%= Number(cs.done_count) %>/<%= Number(cs.step_count) %></span>
+          </li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+<%- include('partials/foot') %>

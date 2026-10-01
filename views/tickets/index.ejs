@@ -1,0 +1,15 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Tickets</h1>
+  </div>
+  <div class="actions">
+    <a href="/tickets/new" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
+  </div>
+</header>
+
+<section class="card">
+  <%- include('../partials/status-filter', { base: '/tickets', counts }) %>
+  <%- include('../partials/ticket-table', { tickets, status, showClient: true }) %>
+</section>
+<%- include('../partials/foot') %>

@@ -1,0 +1,69 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/services">Services</a></p>
+    <h1><%= category.name %></h1>
+  </div>
+  <div class="actions">
+    <details class="edit edit-right">
+      <summary class="btn"><%- icon('edit') %><span>Rename</span></summary>
+      <div class="edit-panel">
+        <form method="post" action="/categories/<%= category.id %>" class="inline-form">
+          <%- csrfField %>
+          <label class="field">
+            <span>Category name</span>
+            <input type="text" name="name" value="<%= category.name %>" required maxlength="150">
+          </label>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+      </div>
+    </details>
+    <%- include('../partials/delete', {
+      action: `/categories/${category.id}/delete`,
+      confirm: `Delete "${category.name}" and all of its services and steps? Services already assigned to clients are kept.`,
+      text: 'Delete',
+    }) %>
+  </div>
+</header>
+
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <h2>Services</h2>
+    <% if (!services.length) { %>
+      <p class="empty">No services in this category yet.</p>
+    <% } else { %>
+      <ul class="rows">
+        <% services.forEach((s, i) => { %>
+          <li class="row">
+            <div class="row-main">
+              <a href="/services/<%= s.id %>"><strong><%= s.name %></strong></a>
+              <div class="muted small"><%= Number(s.step_count) %> step<%= Number(s.step_count) === 1 ? '' : 's' %><% if (s.description) { %> · <%= s.description %><% } %></div>
+            </div>
+            <div class="row-actions">
+              <%- include('../partials/move', { action: `/services/${s.id}/move`, first: i === 0, last: i === services.length - 1 }) %>
+              <a href="/services/<%= s.id %>" class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></a>
+              <%- include('../partials/delete', { action: `/services/${s.id}/delete`, confirm: `Delete "${s.name}" and its steps?` }) %>
+            </div>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <h2>Add service</h2>
+    <form method="post" action="/categories/<%= category.id %>/services" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Service name</span>
+        <input type="text" name="name" required maxlength="200">
+      </label>
+      <label class="field">
+        <span>Description <span class="muted">(optional)</span></span>
+        <textarea name="description" rows="3" maxlength="5000"></textarea>
+      </label>
+      <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add service</span></button>
+    </form>
+  </section>
+</div>
+<%- include('../partials/foot') %>

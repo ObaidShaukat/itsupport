@@ -1,0 +1,6 @@
+<form method="post" action="<%= action %>" class="move">
+  <%- csrfField %>
+  <% if (locals.back) { %><input type="hidden" name="back" value="<%= back %>"><% } %>
+  <button type="submit" name="direction" value="up" class="icon-btn" title="Move up" aria-label="Move up" <%= first ? 'disabled' : '' %>><%- icon('up') %></button>
+  <button type="submit" name="direction" value="down" class="icon-btn" title="Move down" aria-label="Move down" <%= last ? 'disabled' : '' %>><%- icon('down') %></button>
+</form>

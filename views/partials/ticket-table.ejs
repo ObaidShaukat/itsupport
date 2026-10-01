@@ -1,0 +1,28 @@
+<% if (!tickets.length) { %>
+  <p class="empty">No tickets<%= status ? ' with this status' : '' %>.</p>
+<% } else { %>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Title</th>
+          <% if (locals.showClient) { %><th>Client</th><% } %>
+          <th>Status</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% for (const t of tickets) { %>
+          <tr>
+            <td class="muted"><%= t.id %></td>
+            <td><a href="/tickets/<%= t.id %>"><%= t.title %></a></td>
+            <% if (locals.showClient) { %><td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td><% } %>
+            <td><%- include('status', { status: t.status }) %></td>
+            <td class="muted nowrap"><%= fmtDate(t.updated_at) %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+<% } %>

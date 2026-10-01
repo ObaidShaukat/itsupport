@@ -1,0 +1,85 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/tickets">Tickets</a> / <a href="/clients/<%= ticket.client_id %>"><%= ticket.client_name %></a></p>
+    <h1><span class="muted">#<%= ticket.id %></span> <%= ticket.title %></h1>
+    <p class="muted small">Opened <%= fmtDate(ticket.created_at) %><% if (ticket.created_by_name) { %> by <%= ticket.created_by_name %><% } %></p>
+  </div>
+  <div class="actions">
+    <%- include('../partials/status', { status: ticket.status }) %>
+  </div>
+</header>
+
+<div class="grid-2 grid-wide-left">
+  <div>
+    <section class="card">
+      <h2>Description</h2>
+      <% if (ticket.description) { %>
+        <p class="pre-line"><%= ticket.description %></p>
+      <% } else { %>
+        <p class="empty">No description.</p>
+      <% } %>
+    </section>
+
+    <section class="card" id="comments">
+      <h2>Comments</h2>
+      <% if (!comments.length) { %>
+        <p class="empty">No comments yet.</p>
+      <% } else { %>
+        <ul class="comments">
+          <% for (const c of comments) { %>
+            <li class="comment">
+              <div class="comment-meta"><strong><%= c.username || 'Deleted user' %></strong> <span class="muted small"><%= fmtDate(c.created_at) %></span></div>
+              <p class="pre-line"><%= c.body %></p>
+            </li>
+          <% } %>
+        </ul>
+      <% } %>
+      <form method="post" action="/tickets/<%= ticket.id %>/comments" class="form">
+        <%- csrfField %>
+        <label class="field">
+          <span>Add a comment</span>
+          <textarea name="body" rows="4" required maxlength="10000"></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary">Post comment</button>
+      </form>
+    </section>
+  </div>
+
+  <div>
+    <section class="card">
+      <h2>Status</h2>
+      <form method="post" action="/tickets/<%= ticket.id %>/status" class="form">
+        <%- csrfField %>
+        <div class="status-options">
+          <% for (const [key, label] of Object.entries(ticketStatuses)) { %>
+            <label class="status-option">
+              <input type="radio" name="status" value="<%= key %>" <%= ticket.status === key ? 'checked' : '' %>>
+              <span class="badge badge-<%= key %>"><%= label %></span>
+            </label>
+          <% } %>
+        </div>
+        <button type="submit" class="btn btn-primary">Update status</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>History</h2>
+      <ul class="timeline">
+        <% for (const h of history) { %>
+          <li>
+            <div>
+              <% if (h.old_status) { %>
+                <%= ticketStatuses[h.old_status] %> <%- icon('arrow-right') %> <strong><%= ticketStatuses[h.new_status] %></strong>
+              <% } else { %>
+                Created as <strong><%= ticketStatuses[h.new_status] %></strong>
+              <% } %>
+            </div>
+            <div class="muted small"><%= h.username || 'Deleted user' %> · <%= fmtDate(h.created_at) %></div>
+          </li>
+        <% } %>
+      </ul>
+    </section>
+  </div>
+</div>
+<%- include('../partials/foot') %>

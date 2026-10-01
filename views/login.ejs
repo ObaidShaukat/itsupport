@@ -1,0 +1,28 @@
+<%- include('partials/head') %>
+<div class="login">
+  <div class="card login-card">
+    <div class="login-brand">
+      <% if (hasLogo) { %>
+        <img src="/img/logo.svg" alt="Cleartwo" class="brand-logo">
+      <% } else { %>
+        <span class="brand-name">Cleartwo</span>
+      <% } %>
+      <span class="brand-sub">IT Support</span>
+    </div>
+    <h1>Sign in</h1>
+    <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+    <form method="post" action="/login" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Username</span>
+        <input type="text" name="username" value="<%= username %>" autocomplete="username" required autofocus maxlength="100">
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">Sign in</button>
+    </form>
+  </div>
+</div>
+<%- include('partials/foot') %>

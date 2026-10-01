@@ -1,0 +1,53 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Services</h1>
+    <p class="muted">Categories, services and the steps for each one.</p>
+  </div>
+</header>
+
+<section class="card">
+  <h2>Add category</h2>
+  <form method="post" action="/categories" class="inline-form">
+    <%- csrfField %>
+    <label class="field field-grow">
+      <span>Category name</span>
+      <input type="text" name="name" required maxlength="150">
+    </label>
+    <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add</span></button>
+  </form>
+</section>
+
+<% if (!categories.length) { %>
+  <p class="empty">No categories yet. Add one above, or run <code>npm run seed</code>.</p>
+<% } %>
+
+<div class="category-grid">
+  <% categories.forEach((category, ci) => { %>
+    <section class="card" id="category-<%= category.id %>">
+      <div class="card-head">
+        <h2><a href="/categories/<%= category.id %>"><%= category.name %></a></h2>
+        <%- include('../partials/move', { action: `/categories/${category.id}/move`, first: ci === 0, last: ci === categories.length - 1 }) %>
+      </div>
+      <% if (!category.services.length) { %>
+        <p class="empty">No services yet.</p>
+      <% } else { %>
+        <ul class="rows rows-compact">
+          <% category.services.forEach((s, si) => { %>
+            <li class="row">
+              <div class="row-main">
+                <a href="/services/<%= s.id %>"><%= s.name %></a>
+                <span class="muted small"><%= Number(s.step_count) %> step<%= Number(s.step_count) === 1 ? '' : 's' %></span>
+              </div>
+              <div class="row-actions">
+                <%- include('../partials/move', { action: `/services/${s.id}/move`, back: 'overview', first: si === 0, last: si === category.services.length - 1 }) %>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+      <a href="/categories/<%= category.id %>" class="link-more">Manage category <%- icon('arrow-right') %></a>
+    </section>
+  <% }) %>
+</div>
+<%- include('../partials/foot') %>

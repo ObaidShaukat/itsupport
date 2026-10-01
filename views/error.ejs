@@ -1,0 +1,7 @@
+<%- include('partials/head') %>
+<div class="card error-card">
+  <h1><%= title %></h1>
+  <p><%= message %></p>
+  <p><a href="<%= locals.currentUser ? '/' : '/login' %>" class="btn"><%= locals.currentUser ? 'Back to dashboard' : 'Go to sign in' %></a></p>
+</div>
+<%- include('partials/foot') %>

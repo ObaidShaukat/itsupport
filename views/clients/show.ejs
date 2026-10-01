@@ -1,0 +1,123 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/clients">Clients</a></p>
+    <h1><%= client.name %></h1>
+  </div>
+  <div class="actions">
+    <a href="/clients/<%= client.id %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
+    <%- include('../partials/delete', {
+      action: `/clients/${client.id}/delete`,
+      confirm: `Delete "${client.name}"? This also deletes their tickets and service checklists.`,
+      text: 'Delete',
+    }) %>
+  </div>
+</header>
+
+<section class="card">
+  <dl class="details">
+    <div><dt>Contact</dt><dd><%= client.contact_name || '—' %></dd></div>
+    <div><dt>Email</dt><dd><% if (client.email) { %><a href="mailto:<%= client.email %>"><%= client.email %></a><% } else { %>—<% } %></dd></div>
+    <div><dt>Phone</dt><dd><%= client.phone || '—' %></dd></div>
+    <div><dt>Added</dt><dd><%= fmtDate(client.created_at) %></dd></div>
+  </dl>
+  <% if (client.notes) { %>
+    <h3>Notes</h3>
+    <p class="pre-line"><%= client.notes %></p>
+  <% } %>
+</section>
+
+<section class="section" id="services">
+  <div class="section-head">
+    <h2>Services</h2>
+    <form method="post" action="/clients/<%= client.id %>/services" class="inline-form">
+      <%- csrfField %>
+      <label class="field">
+        <span class="visually-hidden">Service to assign</span>
+        <select name="service_id" required>
+          <option value="">Choose a service…</option>
+          <% for (const group of serviceGroups) { %>
+            <optgroup label="<%= group.name %>">
+              <% for (const s of group.services) { %>
+                <option value="<%= s.id %>"><%= s.name %></option>
+              <% } %>
+            </optgroup>
+          <% } %>
+        </select>
+      </label>
+      <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Assign</span></button>
+    </form>
+  </div>
+
+  <% if (!clientServices.length) { %>
+    <p class="empty card">No services assigned yet.</p>
+  <% } %>
+  <div class="cs-grid">
+    <% for (const cs of clientServices) { %>
+      <article class="card cs-card <%= cs.status === 'closed' ? 'is-closed' : '' %>" id="cs-<%= cs.id %>">
+        <div class="card-head">
+          <div>
+            <h3><%= cs.service_name %></h3>
+            <div class="muted small">
+              Assigned <%= fmtDate(cs.created_at) %><% if (cs.assigned_by) { %> by <%= cs.assigned_by %><% } %>
+              <% if (cs.closed_at) { %> · closed <%= fmtDate(cs.closed_at) %><% } %>
+            </div>
+          </div>
+          <%- include('../partials/status', { status: cs.status }) %>
+        </div>
+
+        <% if (cs.steps.length) { %>
+          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="<%= cs.steps.length %>" aria-valuenow="<%= cs.doneCount %>">
+            <span style="width: <%= Math.round((cs.doneCount / cs.steps.length) * 100) %>%"></span>
+          </div>
+          <p class="muted small"><%= cs.doneCount %> of <%= cs.steps.length %> steps done</p>
+          <ol class="checklist checklist-live">
+            <% for (const step of cs.steps) { %>
+              <li class="<%= step.done ? 'is-done' : '' %>">
+                <form method="post" action="/client-services/<%= cs.id %>/steps/<%= step.id %>/toggle">
+                  <%- csrfField %>
+                  <button type="submit" class="check-btn" aria-pressed="<%= step.done ? 'true' : 'false' %>">
+                    <span class="check-icon"><%- icon(step.done ? 'box-check' : 'box') %></span>
+                    <span class="check-text">
+                      <%= step.title %>
+                      <% if (step.done) { %><span class="muted small check-meta"><%= step.done_by || 'Unknown user' %> · <%= fmtDate(step.done_at) %></span><% } %>
+                    </span>
+                  </button>
+                </form>
+              </li>
+            <% } %>
+          </ol>
+        <% } else { %>
+          <p class="empty">This service had no steps when it was assigned. Close it manually when done.</p>
+        <% } %>
+
+        <div class="card-foot">
+          <% if (cs.status === 'closed') { %>
+            <form method="post" action="/client-services/<%= cs.id %>/reopen" class="inline">
+              <%- csrfField %>
+              <button type="submit" class="btn">Reopen</button>
+            </form>
+          <% } else { %>
+            <form method="post" action="/client-services/<%= cs.id %>/close" class="inline">
+              <%- csrfField %>
+              <button type="submit" class="btn btn-ghost">Close</button>
+            </form>
+          <% } %>
+          <%- include('../partials/delete', { action: `/client-services/${cs.id}/delete`, confirm: `Remove "${cs.service_name}" and its checklist from this client?` }) %>
+        </div>
+      </article>
+    <% } %>
+  </div>
+</section>
+
+<section class="section" id="tickets">
+  <div class="section-head">
+    <h2>Tickets</h2>
+    <a href="/tickets/new?client_id=<%= client.id %>" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
+  </div>
+  <div class="card">
+    <%- include('../partials/status-filter', { base: `/clients/${client.id}`, counts: null }) %>
+    <%- include('../partials/ticket-table', { tickets, status }) %>
+  </div>
+</section>
+<%- include('../partials/foot') %>

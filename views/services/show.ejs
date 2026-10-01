@@ -1,0 +1,92 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/services">Services</a> / <a href="/categories/<%= service.category_id %>"><%= service.category_name %></a></p>
+    <h1><%= service.name %></h1>
+    <% if (service.description) { %><p class="muted pre-line"><%= service.description %></p><% } %>
+  </div>
+  <div class="actions">
+    <details class="edit edit-right">
+      <summary class="btn"><%- icon('edit') %><span>Edit</span></summary>
+      <div class="edit-panel">
+        <form method="post" action="/services/<%= service.id %>" class="form">
+          <%- csrfField %>
+          <label class="field">
+            <span>Service name</span>
+            <input type="text" name="name" value="<%= service.name %>" required maxlength="200">
+          </label>
+          <label class="field">
+            <span>Category</span>
+            <select name="category_id">
+              <% for (const c of categories) { %>
+                <option value="<%= c.id %>" <%= c.id === service.category_id ? 'selected' : '' %>><%= c.name %></option>
+              <% } %>
+            </select>
+          </label>
+          <label class="field">
+            <span>Description</span>
+            <textarea name="description" rows="3" maxlength="5000"><%= service.description || '' %></textarea>
+          </label>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+      </div>
+    </details>
+    <%- include('../partials/delete', {
+      action: `/services/${service.id}/delete`,
+      confirm: `Delete "${service.name}" and its steps? Copies already assigned to clients are kept.`,
+      text: 'Delete',
+    }) %>
+  </div>
+</header>
+
+<div class="grid-2">
+  <section class="card" id="steps">
+    <h2>Checklist</h2>
+    <% if (!steps.length) { %>
+      <p class="empty">No steps yet. Add the first one below.</p>
+    <% } else { %>
+      <ol class="rows checklist">
+        <% steps.forEach((step, i) => { %>
+          <li class="row">
+            <span class="check-icon"><%- icon('box') %></span>
+            <div class="row-main"><span class="step-num"><%= i + 1 %>.</span> <%= step.title %></div>
+            <div class="row-actions">
+              <%- include('../partials/move', { action: `/steps/${step.id}/move`, first: i === 0, last: i === steps.length - 1 }) %>
+              <details class="edit">
+                <summary class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></summary>
+                <div class="edit-panel">
+                  <form method="post" action="/steps/<%= step.id %>" class="inline-form">
+                    <%- csrfField %>
+                    <label class="field field-grow">
+                      <span>Step</span>
+                      <input type="text" name="title" value="<%= step.title %>" required maxlength="500">
+                    </label>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                  </form>
+                </div>
+              </details>
+              <%- include('../partials/delete', { action: `/steps/${step.id}/delete`, confirm: 'Delete this step?' }) %>
+            </div>
+          </li>
+        <% }) %>
+      </ol>
+    <% } %>
+    <form method="post" action="/services/<%= service.id %>/steps" class="inline-form add-step">
+      <%- csrfField %>
+      <label class="field field-grow">
+        <span>New step</span>
+        <input type="text" name="title" required maxlength="500">
+      </label>
+      <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add step</span></button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2>Flowchart</h2>
+    <div class="flowchart">
+      <pre class="mermaid"><%= flowchart %></pre>
+    </div>
+  </section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<%- include('../partials/foot') %>

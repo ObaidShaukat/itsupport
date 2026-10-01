@@ -1,0 +1,41 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/tickets">Tickets</a></p>
+    <h1>New ticket</h1>
+  </div>
+</header>
+
+<section class="card card-narrow">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <% if (!clients.length) { %>
+    <p class="empty">Add a client before creating tickets.</p>
+    <p><a href="/clients/new" class="btn btn-primary"><%- icon('plus') %><span>New client</span></a></p>
+  <% } else { %>
+    <form method="post" action="/tickets" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Client</span>
+        <select name="client_id" required>
+          <option value="">Choose a client…</option>
+          <% for (const c of clients) { %>
+            <option value="<%= c.id %>" <%= c.id === ticket.client_id ? 'selected' : '' %>><%= c.name %></option>
+          <% } %>
+        </select>
+      </label>
+      <label class="field">
+        <span>Title</span>
+        <input type="text" name="title" value="<%= ticket.title %>" required maxlength="255">
+      </label>
+      <label class="field">
+        <span>Description</span>
+        <textarea name="description" rows="6" maxlength="10000"><%= ticket.description %></textarea>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Create ticket</button>
+        <a href="<%= ticket.client_id ? `/clients/${ticket.client_id}#tickets` : '/tickets' %>" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  <% } %>
+</section>
+<%- include('../partials/foot') %>
