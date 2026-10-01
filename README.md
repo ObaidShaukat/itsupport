@@ -1,14 +1,14 @@
 # itsupport
 
-Cleartwo IT support portal: clients, service checklists with flowcharts, and tickets.
+Cleartwo IT support portal: clients, service checklists with flowcharts and tutorials, tickets, and a General IT Support knowledge base.
 
-Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt and helmet. It runs under PM2.
+Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads) and marked (Markdown). It runs under PM2.
 
 ## Server setup
 
 ### 1. Requirements
 
-- Node.js 20 or later, and npm
+- Node.js 22.12 or later (or 20.19+), and npm. The Markdown library needs `require()` of ES modules, which older versions lack.
 - MySQL 8 (or MariaDB 10.5+)
 - PM2: `npm install -g pm2`
 
@@ -46,6 +46,7 @@ Fill in:
 | `SESSION_SECRET` | Long random string. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `COOKIE_SECURE` | `true` when users reach the portal over HTTPS |
 | `TRUST_PROXY` | `true` when running behind nginx, IIS or another reverse proxy |
+| `UPLOAD_DIR` | Optional. Folder for uploaded files. Defaults to `uploads/` in the app folder |
 
 `.env` is git-ignored. Never commit it.
 
@@ -98,6 +99,24 @@ npm run migrate
 pm2 restart itsupport
 ```
 
+## Uploads
+
+Tutorials (on each service) and knowledge base attachments are stored on disk in `uploads/`, or in `UPLOAD_DIR` if you set it. Files are saved under random names, kept out of `public/`, and only served to signed-in users at `/files/<name>`.
+
+- **Size limit:** 500 MB per file. Large uploads are allowed up to an hour per request.
+- **What opens in the browser:** images (png, jpg, gif, webp, avif, bmp), videos (mp4, webm) and PDFs. Every other file type, including SVG and HTML, is always downloaded, never opened in the page.
+- **Reverse proxy:** if nginx sits in front of the app, raise its limits or large uploads will fail with "413 Request Entity Too Large":
+
+  ```nginx
+  client_max_body_size 500m;
+  proxy_request_buffering off;
+  proxy_read_timeout 3600s;
+  ```
+
+  IIS (`maxAllowedContentLength`) and other proxies have equivalent settings.
+- **Backups:** `uploads/` is git-ignored and is not in the database. Back it up together with the MySQL database.
+- **Cleanup:** deleting a tutorial, an attachment, an article, a service or a category also deletes its files from disk.
+
 ## Branding assets
 
 - **Logo:** `public/logo.png` (served at `/logo.png`) appears in the sidebar and on the sign-in page. Until it exists, the text "Cleartwo" is shown instead. It's picked up without a restart.
@@ -111,9 +130,10 @@ index.js              App entry: middleware, sessions, routes
 pm2.config.cjs        PM2 process definition
 db/schema.sql         Table definitions (npm run migrate)
 scripts/              migrate, seed and create-user scripts
-src/routes/           auth, dashboard, users, services, clients, tickets
+src/routes/           auth, dashboard, users, services (+ tutorials), clients, tickets, kb, files
 src/middleware/       login check and CSRF protection
 src/lib/              helpers (ordering, Mermaid flowcharts, fonts, validation)
 views/                EJS templates
 public/               CSS, JS, fonts, images
+uploads/              uploaded files (git-ignored, created automatically)
 ```

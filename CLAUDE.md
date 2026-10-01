@@ -7,9 +7,11 @@
 - Parameterised queries only. Never build SQL from user input.
 - Every page requires login; every POST form needs the CSRF field (`<%- csrfField %>`).
 - Schema changes go in db/schema.sql and must be safe to re-run (CREATE TABLE IF NOT EXISTS). `npm run seed` must stay safe to run twice.
-- Categories, services and clients are always listed A-Z. Service steps keep the order they were added (process order); there is no manual reordering.
+- Categories, services, clients and knowledge base articles are always listed A-Z. Only service steps can be reordered (drag and drop via SortableJS, saved to /services/:id/steps/order, flowchart redrawn from the JSON reply).
+- Uploads: multer, stored in uploads/ (or UPLOAD_DIR), outside public/, git-ignored, max 500 MB per file. Served only to signed-in users via /files/:name; only images, mp4/webm and PDF are shown inline, everything else is a download. Multipart requests are parsed and CSRF-checked in src/middleware/multipart.js before any route; a route must set `req.keepUploads = true` after recording files or they are deleted. Deleting a record must also delete its files from disk.
+- Knowledge base (/kb) issue and solution are Markdown, rendered with marked and sanitised with sanitize-html (src/lib/markdown.js). Never output user HTML unsanitised.
 - Inline edit popovers (`<details class="edit">`) have Save and Cancel (`data-cancel`); Esc or a click outside closes them and discards changes (public/js/app.js).
-- No frontend framework: EJS views, plain responsive CSS in public/css/style.css, Mermaid from cdn.jsdelivr.net.
+- No frontend framework: EJS views, plain responsive CSS in public/css/style.css, Mermaid and SortableJS from cdn.jsdelivr.net.
 - Branding: deep indigo #200D6C (sidebar, headings, top bar), blue #0390D7 (primary buttons, links, active nav, focus), purple #6741C3 (accents, hover, badges, flowchart nodes), black #000000 text, white cards on #F5F5F7 with #E5E5EA borders. Status badges: Open #0390D7, Customer Waiting #6741C3, Closed grey. Colours are CSS variables at the top of public/css/style.css. Kollektif (body) and Made Tommy (headings) from public/fonts, falling back to Poppins, then sans-serif.
 - npm scripts: start (node index.js, foreground for testing, Ctrl+C stops it), migrate, seed, create-user.
 - Logo is public/logo.png (/logo.png); favicon is public/favicon.svg (/favicon.svg).

@@ -2,9 +2,10 @@
 // Categories and services are listed A-Z; steps keep the order they were added in.
 const express = require('express');
 const { pool, transaction } = require('../db');
-const { str, requireId, toId, flash, notFound } = require('../lib/http');
+const { HttpError, str, requireId, toId, flash, notFound } = require('../lib/http');
 const { nextStepPosition } = require('../lib/order');
 const { buildFlowchart } = require('../lib/mermaid');
+const { receivedFiles, removeStoredFiles, discardUploads } = require('../lib/uploads');
 
 const router = express.Router();
 
@@ -81,7 +82,13 @@ router.post('/categories/:id', async (req, res) => {
 
 router.post('/categories/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
+  const [files] = await pool.query(`
+    SELECT t.file_name FROM service_tutorials t
+    JOIN services s ON s.id = t.service_id
+    WHERE s.category_id = ?
+  `, [id]);
   await pool.query('DELETE FROM service_categories WHERE id = ?', [id]);
+  await removeStoredFiles(files.map((f) => f.file_name));
   flash(req, 'success', 'Category deleted.');
   res.redirect('/services');
 });
@@ -129,11 +136,21 @@ router.get('/services/:id', async (req, res) => {
     [id]
   );
   const [categories] = await pool.query('SELECT id, name FROM service_categories ORDER BY name');
+  const [tutorials] = await pool.query(`
+    SELECT t.id, t.title, t.description, t.file_name, t.original_name, t.size_bytes, t.kind,
+           t.created_at, t.updated_at, u.username AS uploaded_by
+    FROM service_tutorials t
+    LEFT JOIN users u ON u.id = t.uploaded_by
+    WHERE t.service_id = ?
+    ORDER BY t.title, t.id
+  `, [id]);
   res.render('services/show', {
     title: service.name,
+    tab: req.query.tab === 'tutorials' ? 'tutorials' : 'steps',
     service,
     steps,
     categories,
+    tutorials,
     flowchart: buildFlowchart(steps),
   });
 });
@@ -176,7 +193,9 @@ router.post('/services/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   const [[service]] = await pool.query('SELECT category_id FROM services WHERE id = ?', [id]);
   if (!service) return res.redirect('/services');
+  const [files] = await pool.query('SELECT file_name FROM service_tutorials WHERE service_id = ?', [id]);
   await pool.query('DELETE FROM services WHERE id = ?', [id]);
+  await removeStoredFiles(files.map((f) => f.file_name));
   flash(req, 'success', 'Service deleted.');
   res.redirect(`/categories/${service.category_id}`);
 });
@@ -202,6 +221,33 @@ router.post('/services/:id/steps', async (req, res) => {
   res.redirect(`/services/${serviceId}#steps`);
 });
 
+// Saves a drag-and-drop reorder. Expects order=<step ids, comma-separated> covering
+// every step of the service; replies with the rebuilt flowchart.
+router.post('/services/:id/steps/order', async (req, res) => {
+  const serviceId = requireId(req.params.id);
+  const order = str(req.body.order, 20000).split(',').map(toId);
+
+  const steps = await transaction(async (conn) => {
+    const [[service]] = await conn.query('SELECT id FROM services WHERE id = ? FOR UPDATE', [serviceId]);
+    if (!service) throw notFound();
+    const [rows] = await conn.query(
+      'SELECT id, title FROM service_steps WHERE service_id = ? ORDER BY position, id',
+      [serviceId]
+    );
+    const current = new Set(rows.map((r) => r.id));
+    const valid = order.length === rows.length && new Set(order).size === order.length && order.every((sid) => current.has(sid));
+    if (!valid) throw new HttpError(409, 'The steps changed since this page loaded. Refresh and try again.');
+
+    for (let i = 0; i < order.length; i++) {
+      await conn.query('UPDATE service_steps SET position = ? WHERE id = ?', [i, order[i]]);
+    }
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    return order.map((sid) => byId.get(sid));
+  });
+
+  res.json({ ok: true, flowchart: buildFlowchart(steps) });
+});
+
 async function stepServiceId(id) {
   const [[step]] = await pool.query('SELECT service_id FROM service_steps WHERE id = ?', [id]);
   if (!step) throw notFound();
@@ -225,6 +271,85 @@ router.post('/steps/:id/delete', async (req, res) => {
   const serviceId = await stepServiceId(id);
   await pool.query('DELETE FROM service_steps WHERE id = ?', [id]);
   res.redirect(`/services/${serviceId}#steps`);
+});
+
+// ---- Tutorials (files on a service) ----
+
+const tutorialsTab = (serviceId) => `/services/${serviceId}?tab=tutorials`;
+
+router.post('/services/:id/tutorials', async (req, res) => {
+  const serviceId = requireId(req.params.id);
+  const [file] = receivedFiles(req, 'file');
+  const title = str(req.body.title, 255);
+  const description = str(req.body.description, 5000) || null;
+
+  let problem = req.uploadError;
+  if (!problem && !file) problem = 'Choose a file to upload.';
+  if (!problem && !title) problem = 'Title is required.';
+  const [[service]] = await pool.query('SELECT id FROM services WHERE id = ?', [serviceId]);
+  if (!service) {
+    await discardUploads(req);
+    throw notFound();
+  }
+  if (problem) {
+    await discardUploads(req);
+    flash(req, 'error', problem);
+    return res.redirect(tutorialsTab(serviceId));
+  }
+
+  await pool.query(`
+    INSERT INTO service_tutorials (service_id, title, description, file_name, original_name, size_bytes, kind, uploaded_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `, [serviceId, title, description, file.file_name, file.original_name, file.size_bytes, file.kind, req.user.id]);
+  req.keepUploads = true;
+  flash(req, 'success', `Tutorial "${title}" added.`);
+  res.redirect(tutorialsTab(serviceId));
+});
+
+// Updates the title/description and, if a new file was chosen, replaces the file.
+router.post('/tutorials/:id', async (req, res) => {
+  const id = requireId(req.params.id);
+  const [[tutorial]] = await pool.query('SELECT id, service_id, file_name FROM service_tutorials WHERE id = ?', [id]);
+  if (!tutorial) {
+    await discardUploads(req);
+    throw notFound();
+  }
+  const [file] = receivedFiles(req, 'file');
+  const title = str(req.body.title, 255);
+  const description = str(req.body.description, 5000) || null;
+  const problem = req.uploadError || (!title ? 'Title is required.' : null);
+  if (problem) {
+    await discardUploads(req);
+    flash(req, 'error', problem);
+    return res.redirect(tutorialsTab(tutorial.service_id));
+  }
+
+  if (file) {
+    await pool.query(`
+      UPDATE service_tutorials
+      SET title = ?, description = ?, file_name = ?, original_name = ?, size_bytes = ?, kind = ?, updated_at = NOW()
+      WHERE id = ?
+    `, [title, description, file.file_name, file.original_name, file.size_bytes, file.kind, id]);
+    req.keepUploads = true;
+    await removeStoredFiles([tutorial.file_name]);
+  } else {
+    await pool.query(
+      'UPDATE service_tutorials SET title = ?, description = ?, updated_at = NOW() WHERE id = ?',
+      [title, description, id]
+    );
+  }
+  flash(req, 'success', 'Tutorial updated.');
+  res.redirect(tutorialsTab(tutorial.service_id));
+});
+
+router.post('/tutorials/:id/delete', async (req, res) => {
+  const id = requireId(req.params.id);
+  const [[tutorial]] = await pool.query('SELECT service_id, file_name FROM service_tutorials WHERE id = ?', [id]);
+  if (!tutorial) throw notFound();
+  await pool.query('DELETE FROM service_tutorials WHERE id = ?', [id]);
+  await removeStoredFiles([tutorial.file_name]);
+  flash(req, 'success', 'Tutorial deleted.');
+  res.redirect(tutorialsTab(tutorial.service_id));
 });
 
 module.exports = router;

@@ -1,0 +1,43 @@
+<div class="media-caption">
+  <div class="media-text">
+    <strong class="media-title"><%= item.title || item.original_name %></strong>
+    <% if (item.description) { %><p class="media-desc pre-line"><%= item.description %></p><% } %>
+    <div class="muted small">
+      <%= item.title ? `${item.original_name} · ` : '' %><%= fmtBytes(item.size_bytes) %>
+      · <%= item.uploaded_by || 'Deleted user' %> · <%= fmtDate(item.created_at) %>
+    </div>
+  </div>
+  <% if (mode === 'tutorial') { %>
+    <div class="row-actions">
+      <details class="edit">
+        <summary class="icon-btn" title="Edit tutorial" aria-label="Edit tutorial"><%- icon('edit') %></summary>
+        <div class="edit-panel">
+          <form method="post" action="/tutorials/<%= item.id %>" enctype="multipart/form-data" class="form">
+            <%- csrfField %>
+            <label class="field">
+              <span>Title</span>
+              <input type="text" name="title" value="<%= item.title %>" required maxlength="255">
+            </label>
+            <label class="field">
+              <span>Description</span>
+              <textarea name="description" rows="3" maxlength="5000"><%= item.description || '' %></textarea>
+            </label>
+            <label class="field">
+              <span>Replace file <span class="muted">(optional)</span></span>
+              <input type="file" name="file">
+            </label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary">Save</button>
+              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+            </div>
+          </form>
+        </div>
+      </details>
+      <%- include('delete', { action: `/tutorials/${item.id}/delete`, confirm: `Delete "${item.title}"?` }) %>
+    </div>
+  <% } else if (mode === 'attachment') { %>
+    <div class="row-actions">
+      <%- include('delete', { action: `/kb/attachments/${item.id}/delete`, confirm: `Remove "${item.original_name}"?` }) %>
+    </div>
+  <% } %>
+</div>

@@ -60,12 +60,22 @@
     <% } else { %>
       <ul class="list">
         <% for (const cs of openServices) { %>
+          <% const total = Number(cs.step_count), done = Number(cs.done_count); %>
           <li>
             <div>
               <a href="/clients/<%= cs.client_id %>#cs-<%= cs.id %>"><%= cs.service_name %></a>
               <div class="muted small"><%= cs.client_name %></div>
             </div>
-            <span class="progress-text"><%= Number(cs.done_count) %>/<%= Number(cs.step_count) %></span>
+            <% if (total) { %>
+              <div class="mini-progress" title="<%= done %> of <%= total %> steps done">
+                <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="<%= total %>" aria-valuenow="<%= done %>">
+                  <span style="width: <%= Math.round((done / total) * 100) %>%"></span>
+                </div>
+                <span class="progress-text"><%= done %>/<%= total %></span>
+              </div>
+            <% } else { %>
+              <span class="chip">No checklist</span>
+            <% } %>
           </li>
         <% } %>
       </ul>

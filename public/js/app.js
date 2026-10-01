@@ -96,20 +96,92 @@ document.querySelectorAll('input[data-filter]').forEach((input) => {
 });
 
 // Render Mermaid flowcharts (the library is only loaded on service pages).
+let chartCount = 0;
+
+async function renderFlowchart(container, definition) {
+  try {
+    const { svg } = await window.mermaid.render(`flowchart-${++chartCount}`, definition);
+    container.innerHTML = svg;
+  } catch (err) {
+    container.innerHTML = '<p class="is-error small">The flowchart could not be drawn. Refresh the page to try again.</p>';
+  }
+}
+
 if (window.mermaid) {
-  const bodyFont = getComputedStyle(document.body).fontFamily;
   window.mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'strict',
     theme: 'base',
     themeVariables: {
-      fontFamily: bodyFont,
-      primaryColor: '#F1ECFA',
+      fontFamily: getComputedStyle(document.body).fontFamily,
+      fontSize: '14px',
+      primaryColor: '#FFFFFF',
       primaryBorderColor: '#6741C3',
       primaryTextColor: '#000000',
-      lineColor: '#200D6C',
+      lineColor: '#0390D7',
     },
-    flowchart: { curve: 'basis', useMaxWidth: true },
+    flowchart: {
+      curve: 'basis',
+      useMaxWidth: true,
+      nodeSpacing: 40,
+      rankSpacing: 38,
+      padding: 18,
+      diagramPadding: 12,
+    },
   });
   window.mermaid.run({ querySelector: 'pre.mermaid' });
+}
+
+// Drag-and-drop step reordering (SortableJS is only loaded on service pages).
+// Each drop is saved straight away and the flowchart is redrawn from the reply.
+const stepList = document.querySelector('[data-sortable-steps]');
+if (stepList && window.Sortable) {
+  const status = document.querySelector('[data-reorder-status]');
+  const chart = document.querySelector('[data-flowchart]');
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  const showStatus = (message, isError) => {
+    if (!status) return;
+    status.textContent = message;
+    status.classList.toggle('is-error', Boolean(isError));
+    status.hidden = !message;
+  };
+
+  const renumber = () => {
+    stepList.querySelectorAll('.step-num').forEach((num, i) => {
+      num.textContent = String(i + 1);
+    });
+  };
+
+  window.Sortable.create(stepList, {
+    handle: '.drag-handle',
+    animation: 160,
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    onEnd: async (event) => {
+      if (event.oldIndex === event.newIndex) return;
+      renumber();
+      const order = [...stepList.querySelectorAll(':scope > li[data-id]')].map((li) => li.dataset.id);
+      stepList.classList.add('is-saving');
+      showStatus('Saving order…');
+      try {
+        const res = await fetch(stepList.dataset.orderUrl, {
+          method: 'POST',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({ _csrf: csrfToken, order: order.join(',') }),
+          credentials: 'same-origin',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'The new order could not be saved.');
+        if (chart && window.mermaid) await renderFlowchart(chart, data.flowchart);
+        showStatus('Order saved.');
+        setTimeout(() => showStatus(''), 2000);
+      } catch (err) {
+        showStatus(`${err.message} Reloading…`, true);
+        setTimeout(() => window.location.reload(), 1500);
+      } finally {
+        stepList.classList.remove('is-saving');
+      }
+    },
+  });
 }

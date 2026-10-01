@@ -1,0 +1,57 @@
+<%
+  // items: rows with kind, file_name, original_name, size_bytes, uploaded_by, created_at
+  // (tutorials also have title and description). mode: 'tutorial' | 'attachment' | 'view'.
+  const images = items.filter((i) => i.kind === 'image');
+  const videos = items.filter((i) => i.kind === 'video');
+  const documents = items.filter((i) => i.kind === 'pdf' || i.kind === 'file');
+  const label = (item) => item.title || item.original_name;
+%>
+<% if (images.length) { %>
+  <h3 class="media-heading">Images</h3>
+  <div class="gallery">
+    <% for (const item of images) { %>
+      <figure class="media-card">
+        <a href="/files/<%= item.file_name %>" target="_blank" rel="noopener" class="gallery-thumb">
+          <img src="/files/<%= item.file_name %>" alt="<%= label(item) %>" loading="lazy">
+        </a>
+        <figcaption>
+          <%- include('media-caption', { item, mode }) %>
+        </figcaption>
+      </figure>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (videos.length) { %>
+  <h3 class="media-heading">Videos</h3>
+  <div class="video-list">
+    <% for (const item of videos) { %>
+      <figure class="media-card">
+        <video controls preload="metadata" src="/files/<%= item.file_name %>"></video>
+        <figcaption>
+          <%- include('media-caption', { item, mode }) %>
+        </figcaption>
+      </figure>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (documents.length) { %>
+  <h3 class="media-heading">Files</h3>
+  <ul class="file-list">
+    <% for (const item of documents) { %>
+      <li class="file-row">
+        <span class="file-icon"><%- icon('file') %></span>
+        <div class="row-main">
+          <%- include('media-caption', { item, mode }) %>
+        </div>
+        <div class="file-links">
+          <% if (item.kind === 'pdf') { %>
+            <a href="/files/<%= item.file_name %>" target="_blank" rel="noopener" class="btn btn-small"><%- icon('external') %><span>Open</span></a>
+          <% } %>
+          <a href="/files/<%= item.file_name %>?download=1" class="btn btn-small"><%- icon('download') %><span>Download</span></a>
+        </div>
+      </li>
+    <% } %>
+  </ul>
+<% } %>

@@ -10,6 +10,7 @@ const config = require('./src/config');
 const { pool } = require('./src/db');
 const csrf = require('./src/middleware/csrf');
 const { requireAuth } = require('./src/middleware/auth');
+const multipart = require('./src/middleware/multipart');
 const { detectFonts } = require('./src/lib/fonts');
 const { TICKET_STATUSES } = require('./src/lib/tickets');
 
@@ -53,12 +54,25 @@ app.locals.navItems = [
   { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
   { key: 'tickets', href: '/tickets', label: 'Tickets', icon: 'message' },
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
+  { key: 'kb', href: '/kb', label: 'General IT Support', icon: 'book' },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 app.locals.fmtDate = (value) => (value
   ? new Date(value).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })
   : '');
+app.locals.fmtBytes = (bytes) => {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = n / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i++;
+  }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
+};
 
 // ---- Static files (served before sessions so they never touch the database) ----
 
@@ -69,7 +83,7 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
 // ---- Sessions, forms and CSRF ----
 
-app.use(express.urlencoded({ extended: false, limit: '200kb' }));
+app.use(express.urlencoded({ extended: false, limit: '2mb' }));
 
 const sessionStore = new MySQLStore({
   expiration: SESSION_HOURS * 60 * 60 * 1000,
@@ -98,6 +112,7 @@ app.use((req, res, next) => {
 });
 
 app.use(csrf);
+app.use(multipart);
 
 // Highlights the current section in the sidebar.
 const NAV_PREFIXES = [
@@ -105,6 +120,7 @@ const NAV_PREFIXES = [
   ['/tickets', 'tickets'],
   ['/services', 'services'], ['/categories', 'services'], ['/steps', 'services'],
   ['/users', 'users'],
+  ['/kb', 'kb'],
 ];
 app.use((req, res, next) => {
   const hit = NAV_PREFIXES.find(([prefix]) => req.path === prefix || req.path.startsWith(`${prefix}/`));
@@ -121,6 +137,8 @@ app.use('/users', require('./src/routes/users'));
 app.use('/tickets', require('./src/routes/tickets'));
 app.use(require('./src/routes/services'));
 app.use(require('./src/routes/clients'));
+app.use('/kb', require('./src/routes/kb'));
+app.use('/files', require('./src/routes/files'));
 
 // ---- Errors ----
 
@@ -132,12 +150,17 @@ app.use((err, req, res, next) => {
   const status = err.status || err.statusCode || 500;
   if (status >= 500) console.error(err);
   if (res.headersSent) return next(err);
+  const message = status >= 500 ? 'Something went wrong. Please try again.' : err.message;
+  // fetch() calls (e.g. saving a step reorder) get JSON instead of a page.
+  if (req.accepts(['html', 'json']) === 'json') return res.status(status).json({ ok: false, error: message });
   res.status(status).render('error', {
     title: status === 404 ? 'Not found' : status === 403 ? 'Forbidden' : 'Error',
-    message: status >= 500 ? 'Something went wrong. Please try again.' : err.message,
+    message,
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+// Allow up to an hour per request so large uploads (up to 500 MB) are not cut off.
+server.requestTimeout = 60 * 60 * 1000;

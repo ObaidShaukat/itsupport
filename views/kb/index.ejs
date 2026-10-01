@@ -1,0 +1,45 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>General IT Support</h1>
+    <p class="muted">Known issues and how to fix them.</p>
+  </div>
+  <div class="actions">
+    <a href="/kb/new" class="btn btn-primary"><%- icon('plus') %><span>New article</span></a>
+  </div>
+</header>
+
+<%- include('../partials/search', { target: '#kb-list', placeholder: 'Search titles, tags and issues' }) %>
+
+<section class="card" id="kb-list">
+  <% if (categories.length) { %>
+    <nav class="filters" aria-label="Filter by category">
+      <a href="/kb" class="<%= !category ? 'active' : '' %>">All <span class="count"><%= total %></span></a>
+      <% for (const c of categories) { %>
+        <a href="/kb?category=<%= encodeURIComponent(c.name) %>" class="<%= category === c.name ? 'active' : '' %>"><%= c.name %> <span class="count"><%= c.count %></span></a>
+      <% } %>
+    </nav>
+  <% } %>
+
+  <% if (!articles.length) { %>
+    <p class="empty"><%= category ? 'No articles in this category.' : 'No articles yet.' %></p>
+  <% } else { %>
+    <p class="empty" data-filter-empty hidden>No articles match your search.</p>
+    <ul class="rows kb-rows">
+      <% for (const a of articles) { %>
+        <li class="row" data-filter-item data-search="<%= [a.title, a.category, a.tags, a.issue_preview].filter(Boolean).join(' ') %>">
+          <div class="row-main">
+            <a href="/kb/<%= a.id %>" class="kb-title"><%= a.title %></a>
+            <div class="kb-meta">
+              <span class="chip chip-category"><%= a.category %></span>
+              <% for (const t of a.tagList) { %><span class="chip"><%= t %></span><% } %>
+              <% if (Number(a.attachment_count)) { %><span class="muted small"><%- icon('file') %> <%= Number(a.attachment_count) %></span><% } %>
+            </div>
+          </div>
+          <span class="muted small nowrap">Updated <%= fmtDate(a.updated_at) %></span>
+        </li>
+      <% } %>
+    </ul>
+  <% } %>
+</section>
+<%- include('../partials/foot') %>

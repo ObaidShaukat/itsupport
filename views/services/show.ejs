@@ -42,16 +42,26 @@
   </div>
 </header>
 
+<nav class="tabs" aria-label="Service sections">
+  <a href="/services/<%= service.id %>" class="<%= tab === 'steps' ? 'active' : '' %>" <%- tab === 'steps' ? 'aria-current="page"' : '' %>><%- icon('layers') %><span>Steps &amp; flowchart</span></a>
+  <a href="/services/<%= service.id %>?tab=tutorials" class="<%= tab === 'tutorials' ? 'active' : '' %>" <%- tab === 'tutorials' ? 'aria-current="page"' : '' %>><%- icon('book') %><span>Tutorials</span><% if (tutorials.length) { %> <span class="count"><%= tutorials.length %></span><% } %></a>
+</nav>
+
+<% if (tab === 'steps') { %>
 <div class="grid-2">
   <section class="card" id="steps">
-    <h2>Steps</h2>
+    <div class="card-head">
+      <h2>Steps</h2>
+      <% if (steps.length > 1) { %><span class="muted small">Drag <%- icon('grip') %> to reorder</span><% } %>
+    </div>
     <% if (!steps.length) { %>
       <p class="empty">No steps yet. Add the first one below.</p>
     <% } else { %>
-      <ol class="rows step-list">
+      <ol class="rows step-list" data-sortable-steps data-order-url="/services/<%= service.id %>/steps/order">
         <% steps.forEach((step, i) => { %>
-          <li class="row">
-            <span class="step-num"><%= i + 1 %>.</span>
+          <li class="row" data-id="<%= step.id %>">
+            <span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span>
+            <span class="step-num"><%= i + 1 %></span>
             <div class="row-main"><%= step.title %></div>
             <div class="row-actions">
               <details class="edit">
@@ -75,6 +85,7 @@
           </li>
         <% }) %>
       </ol>
+      <p class="reorder-status small" data-reorder-status role="status" hidden></p>
     <% } %>
     <form method="post" action="/services/<%= service.id %>/steps" class="inline-form add-step">
       <%- csrfField %>
@@ -88,10 +99,44 @@
 
   <section class="card">
     <h2>Flowchart</h2>
-    <div class="flowchart">
+    <div class="flowchart" data-flowchart>
       <pre class="mermaid"><%= flowchart %></pre>
     </div>
   </section>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<% if (steps.length > 1) { %><script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script><% } %>
+<% } else { %>
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <h2>Tutorials</h2>
+    <% if (!tutorials.length) { %>
+      <p class="empty">No tutorials yet. Upload screenshots, videos, PDFs or other files.</p>
+    <% } else { %>
+      <%- include('../partials/media', { items: tutorials, mode: 'tutorial' }) %>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <h2>Add tutorial</h2>
+    <form method="post" action="/services/<%= service.id %>/tutorials" enctype="multipart/form-data" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Title</span>
+        <input type="text" name="title" required maxlength="255">
+      </label>
+      <label class="field">
+        <span>Description <span class="muted">(optional)</span></span>
+        <textarea name="description" rows="3" maxlength="5000"></textarea>
+      </label>
+      <label class="field">
+        <span>File</span>
+        <input type="file" name="file" required>
+        <small class="muted">Images, videos (mp4, webm), PDFs or any other file. Up to 500 MB.</small>
+      </label>
+      <div><button type="submit" class="btn btn-primary"><%- icon('upload') %><span>Upload</span></button></div>
+    </form>
+  </section>
+</div>
+<% } %>
 <%- include('../partials/foot') %>

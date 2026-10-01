@@ -88,7 +88,7 @@
             <% } %>
           </ol>
         <% } else { %>
-          <p class="empty">This service had no steps when it was assigned. Close it manually when done.</p>
+          <p class="no-checklist"><span class="chip">No checklist</span> <span class="muted small">Mark it as closed when the work is done.</span></p>
         <% } %>
 
         <div class="notes">
@@ -146,7 +146,7 @@
           <% } else { %>
             <form method="post" action="/client-services/<%= cs.id %>/close" class="inline">
               <%- csrfField %>
-              <button type="submit" class="btn btn-ghost">Close</button>
+              <button type="submit" class="btn <%= cs.steps.length ? 'btn-ghost' : 'btn-primary' %>"><%- icon('check') %><span>Mark as closed</span></button>
             </form>
           <% } %>
           <%- include('../partials/delete', { action: `/client-services/${cs.id}/delete`, confirm: `Remove "${cs.service_name}" and its checklist from this client?` }) %>

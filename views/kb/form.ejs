@@ -1,0 +1,65 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/kb">General IT Support</a><% if (article.id) { %> / <a href="/kb/<%= article.id %>"><%= article.title %></a><% } %></p>
+    <h1><%= article.id ? 'Edit article' : 'New article' %></h1>
+  </div>
+</header>
+
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <% if (error) { %>
+      <div class="flash flash-error" role="alert"><%= error %> Any files you chose need to be selected again.</div>
+    <% } %>
+    <form method="post" action="<%= action %>" enctype="multipart/form-data" class="form" id="article-form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Title</span>
+        <input type="text" name="title" value="<%= article.title %>" required maxlength="255">
+      </label>
+      <div class="form-row">
+        <label class="field">
+          <span>Category</span>
+          <input type="text" name="category" value="<%= article.category %>" list="kb-categories" maxlength="100" required>
+          <datalist id="kb-categories">
+            <% for (const c of categories) { %><option value="<%= c %>"><% } %>
+          </datalist>
+        </label>
+        <label class="field">
+          <span>Tags <span class="muted">(comma-separated)</span></span>
+          <input type="text" name="tags" value="<%= article.tags %>" maxlength="1000" placeholder="e.g. Outlook, VPN, printer">
+        </label>
+      </div>
+      <label class="field">
+        <span>Issue</span>
+        <textarea name="issue" rows="7" maxlength="200000" placeholder="What the user sees, error messages, when it happens…"><%= article.issue %></textarea>
+      </label>
+      <label class="field">
+        <span>Solution</span>
+        <textarea name="solution" rows="12" maxlength="200000" placeholder="1. Open Settings&#10;2. …"><%= article.solution %></textarea>
+        <small class="muted">Markdown: <code>**bold**</code>, <code>*italic*</code>, <code>- list</code>, <code>1. steps</code>, <code>`code`</code>, <code>[link](https://…)</code>, <code>## heading</code>.</small>
+      </label>
+      <label class="field">
+        <span>Add attachments <span class="muted">(optional)</span></span>
+        <input type="file" name="files" multiple>
+        <small class="muted">Images, videos (mp4, webm), PDFs or any other file. Up to 500 MB each, 20 at a time.</small>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><%= article.id ? 'Save changes' : 'Create article' %></button>
+        <a href="<%= article.id ? `/kb/${article.id}` : '/kb' %>" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </section>
+
+  <% if (article.id) { %>
+    <section class="card" id="attachments">
+      <h2>Attachments</h2>
+      <% if (!attachments.length) { %>
+        <p class="empty">No attachments yet. Add files with the form.</p>
+      <% } else { %>
+        <%- include('../partials/media', { items: attachments, mode: 'attachment' }) %>
+      <% } %>
+    </section>
+  <% } %>
+</div>
+<%- include('../partials/foot') %>

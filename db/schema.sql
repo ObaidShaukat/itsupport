@@ -164,3 +164,65 @@ CREATE TABLE IF NOT EXISTS ticket_history (
   CONSTRAINT fk_ticket_history_user FOREIGN KEY (user_id)
     REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tutorial files on a service (images, videos, PDFs, other files).
+-- file_name is the random name on disk; original_name is what the user uploaded.
+CREATE TABLE IF NOT EXISTS service_tutorials (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  service_id INT UNSIGNED NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  description TEXT NULL,
+  file_name VARCHAR(64) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  size_bytes BIGINT UNSIGNED NOT NULL,
+  kind ENUM('image', 'video', 'pdf', 'file') NOT NULL,
+  uploaded_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_service_tutorials_file (file_name),
+  KEY idx_service_tutorials_service (service_id, created_at),
+  CONSTRAINT fk_service_tutorials_service FOREIGN KEY (service_id)
+    REFERENCES services (id) ON DELETE CASCADE,
+  CONSTRAINT fk_service_tutorials_user FOREIGN KEY (uploaded_by)
+    REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- General IT Support knowledge base.
+CREATE TABLE IF NOT EXISTS kb_articles (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  title VARCHAR(255) NOT NULL,
+  category VARCHAR(100) NOT NULL DEFAULT 'General',
+  tags VARCHAR(500) NULL,
+  issue MEDIUMTEXT NULL,
+  solution MEDIUMTEXT NULL,
+  created_by INT UNSIGNED NULL,
+  updated_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_kb_articles_category (category),
+  KEY idx_kb_articles_title (title),
+  CONSTRAINT fk_kb_articles_creator FOREIGN KEY (created_by)
+    REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_kb_articles_editor FOREIGN KEY (updated_by)
+    REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS kb_attachments (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  article_id INT UNSIGNED NOT NULL,
+  file_name VARCHAR(64) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  size_bytes BIGINT UNSIGNED NOT NULL,
+  kind ENUM('image', 'video', 'pdf', 'file') NOT NULL,
+  uploaded_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_kb_attachments_file (file_name),
+  KEY idx_kb_attachments_article (article_id),
+  CONSTRAINT fk_kb_attachments_article FOREIGN KEY (article_id)
+    REFERENCES kb_articles (id) ON DELETE CASCADE,
+  CONSTRAINT fk_kb_attachments_user FOREIGN KEY (uploaded_by)
+    REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

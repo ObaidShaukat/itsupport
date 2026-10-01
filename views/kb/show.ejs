@@ -1,0 +1,45 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/kb">General IT Support</a> / <a href="/kb?category=<%= encodeURIComponent(article.category) %>"><%= article.category %></a></p>
+    <h1><%= article.title %></h1>
+    <div class="kb-meta">
+      <span class="chip chip-category"><%= article.category %></span>
+      <% for (const t of tags) { %><span class="chip"><%- icon('tag') %><%= t %></span><% } %>
+    </div>
+    <p class="muted small">
+      Updated <%= fmtDate(article.updated_at) %><% if (article.updated_by_name) { %> by <%= article.updated_by_name %><% } %>
+      · created <%= fmtDate(article.created_at) %><% if (article.created_by_name) { %> by <%= article.created_by_name %><% } %>
+    </p>
+  </div>
+  <div class="actions">
+    <a href="/kb/<%= article.id %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
+    <%- include('../partials/delete', {
+      action: `/kb/${article.id}/delete`,
+      confirm: `Delete "${article.title}" and its attachments?`,
+      text: 'Delete',
+    }) %>
+  </div>
+</header>
+
+<div class="grid-2 grid-wide-left">
+  <div>
+    <section class="card">
+      <h2>Issue</h2>
+      <% if (issueHtml) { %><div class="prose"><%- issueHtml %></div><% } else { %><p class="empty">No issue description.</p><% } %>
+    </section>
+    <section class="card card-solution">
+      <h2>Solution</h2>
+      <% if (solutionHtml) { %><div class="prose"><%- solutionHtml %></div><% } else { %><p class="empty">No solution written yet.</p><% } %>
+    </section>
+  </div>
+  <section class="card">
+    <h2>Attachments</h2>
+    <% if (!attachments.length) { %>
+      <p class="empty">No attachments.</p>
+    <% } else { %>
+      <%- include('../partials/media', { items: attachments, mode: 'view' }) %>
+    <% } %>
+  </section>
+</div>
+<%- include('../partials/foot') %>
