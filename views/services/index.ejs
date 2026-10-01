@@ -6,6 +6,8 @@
   </div>
 </header>
 
+<%- include('../partials/search', { target: '#service-list', placeholder: 'Search categories and services' }) %>
+
 <section class="card">
   <h2>Add category</h2>
   <form method="post" action="/categories" class="inline-form">
@@ -22,32 +24,31 @@
   <p class="empty">No categories yet. Add one above, or run <code>npm run seed</code>.</p>
 <% } %>
 
-<div class="category-grid">
-  <% categories.forEach((category, ci) => { %>
-    <section class="card" id="category-<%= category.id %>">
-      <div class="card-head">
-        <h2><a href="/categories/<%= category.id %>"><%= category.name %></a></h2>
-        <%- include('../partials/move', { action: `/categories/${category.id}/move`, first: ci === 0, last: ci === categories.length - 1 }) %>
-      </div>
-      <% if (!category.services.length) { %>
-        <p class="empty">No services yet.</p>
-      <% } else { %>
-        <ul class="rows rows-compact">
-          <% category.services.forEach((s, si) => { %>
-            <li class="row">
-              <div class="row-main">
-                <a href="/services/<%= s.id %>"><%= s.name %></a>
-                <span class="muted small"><%= Number(s.step_count) %> step<%= Number(s.step_count) === 1 ? '' : 's' %></span>
-              </div>
-              <div class="row-actions">
-                <%- include('../partials/move', { action: `/services/${s.id}/move`, back: 'overview', first: si === 0, last: si === category.services.length - 1 }) %>
-              </div>
-            </li>
-          <% }) %>
-        </ul>
-      <% } %>
-      <a href="/categories/<%= category.id %>" class="link-more">Manage category <%- icon('arrow-right') %></a>
-    </section>
-  <% }) %>
+<div id="service-list">
+  <p class="empty card" data-filter-empty hidden>No categories or services match your search.</p>
+  <div class="category-grid">
+    <% for (const category of categories) { %>
+      <section class="card" id="category-<%= category.id %>" data-filter-group>
+        <div class="card-head">
+          <h2 data-filter-label><a href="/categories/<%= category.id %>"><%= category.name %></a></h2>
+        </div>
+        <% if (!category.services.length) { %>
+          <p class="empty">No services yet.</p>
+        <% } else { %>
+          <ul class="rows rows-compact">
+            <% for (const s of category.services) { %>
+              <li class="row" data-filter-item data-search="<%= s.name %>">
+                <div class="row-main">
+                  <a href="/services/<%= s.id %>"><%= s.name %></a>
+                  <span class="muted small"><%= Number(s.step_count) %> step<%= Number(s.step_count) === 1 ? '' : 's' %></span>
+                </div>
+              </li>
+            <% } %>
+          </ul>
+        <% } %>
+        <a href="/categories/<%= category.id %>" class="link-more">Manage category <%- icon('arrow-right') %></a>
+      </section>
+    <% } %>
+  </div>
 </div>
 <%- include('../partials/foot') %>

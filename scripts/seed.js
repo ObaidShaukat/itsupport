@@ -2,7 +2,6 @@
 // Safe to run more than once: existing categories and services are left alone, and
 // steps are only added to services that have none.
 const { pool, transaction } = require('../src/db');
-const { nextPosition } = require('../src/lib/order');
 
 const CATEGORIES = [
   ['Email Services', ['Emails setup', 'Intune configuration', 'Email migration', 'Codetwo email signatures']],
@@ -54,11 +53,7 @@ async function main() {
     for (const [categoryName, serviceNames] of CATEGORIES) {
       let [[category]] = await conn.query('SELECT id FROM service_categories WHERE name = ?', [categoryName]);
       if (!category) {
-        const position = await nextPosition(conn, 'service_categories');
-        const [result] = await conn.query(
-          'INSERT INTO service_categories (name, position) VALUES (?, ?)',
-          [categoryName, position]
-        );
+        const [result] = await conn.query('INSERT INTO service_categories (name) VALUES (?)', [categoryName]);
         category = { id: result.insertId };
         added.categories++;
       }
@@ -69,10 +64,9 @@ async function main() {
           [category.id, serviceName]
         );
         if (!service) {
-          const position = await nextPosition(conn, 'services', category.id);
           const [result] = await conn.query(
-            'INSERT INTO services (category_id, name, position) VALUES (?, ?, ?)',
-            [category.id, serviceName, position]
+            'INSERT INTO services (category_id, name) VALUES (?, ?)',
+            [category.id, serviceName]
           );
           service = { id: result.insertId };
           added.services++;

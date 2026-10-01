@@ -8,19 +8,13 @@
   </div>
 </header>
 
-<section class="card">
-  <form method="get" action="/clients" class="inline-form search">
-    <label class="field field-grow">
-      <span class="visually-hidden">Search clients</span>
-      <input type="search" name="q" value="<%= q %>" placeholder="Search by name, contact or email" maxlength="100">
-    </label>
-    <button type="submit" class="btn"><%- icon('search') %><span>Search</span></button>
-    <% if (q) { %><a href="/clients" class="btn btn-ghost">Clear</a><% } %>
-  </form>
+<%- include('../partials/search', { target: '#client-list', placeholder: 'Search by name, contact, email or phone' }) %>
 
+<section class="card" id="client-list">
   <% if (!clients.length) { %>
-    <p class="empty"><%= q ? 'No clients match your search.' : 'No clients yet.' %></p>
+    <p class="empty">No clients yet.</p>
   <% } else { %>
+    <p class="empty" data-filter-empty hidden>No clients match your search.</p>
     <div class="table-wrap">
       <table class="table">
         <thead>
@@ -35,7 +29,7 @@
         </thead>
         <tbody>
           <% for (const c of clients) { %>
-            <tr>
+            <tr data-filter-item data-search="<%= [c.name, c.contact_name, c.email, c.phone].filter(Boolean).join(' ') %>">
               <td><a href="/clients/<%= c.id %>"><strong><%= c.name %></strong></a></td>
               <td><%= c.contact_name || '' %></td>
               <td><% if (c.email) { %><a href="mailto:<%= c.email %>"><%= c.email %></a><% } %></td>

@@ -98,6 +98,25 @@ CREATE TABLE IF NOT EXISTS client_service_steps (
     REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Notes log on an assigned service, e.g. one entry per laptop configured.
+CREATE TABLE IF NOT EXISTS client_service_notes (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  client_service_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NULL,
+  body TEXT NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_by INT UNSIGNED NULL,
+  updated_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_client_service_notes_cs (client_service_id, created_at),
+  CONSTRAINT fk_client_service_notes_cs FOREIGN KEY (client_service_id)
+    REFERENCES client_services (id) ON DELETE CASCADE,
+  CONSTRAINT fk_client_service_notes_user FOREIGN KEY (user_id)
+    REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_client_service_notes_editor FOREIGN KEY (updated_by)
+    REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS tickets (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   client_id INT UNSIGNED NOT NULL,

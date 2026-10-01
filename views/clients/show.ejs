@@ -91,6 +91,49 @@
           <p class="empty">This service had no steps when it was assigned. Close it manually when done.</p>
         <% } %>
 
+        <div class="notes">
+          <h4>Notes <% if (cs.notes.length) { %><span class="muted small">(<%= cs.notes.length %>)</span><% } %></h4>
+          <form method="post" action="/client-services/<%= cs.id %>/notes" class="form note-form">
+            <%- csrfField %>
+            <label class="field">
+              <span class="visually-hidden">New note</span>
+              <textarea name="body" rows="2" required maxlength="10000" placeholder="e.g. Laptop for Kay, serial ABC123"></textarea>
+            </label>
+            <div><button type="submit" class="btn"><%- icon('plus') %><span>Add note</span></button></div>
+          </form>
+          <% if (cs.notes.length) { %>
+            <ul class="note-list">
+              <% for (const note of cs.notes) { %>
+                <li class="note">
+                  <div class="note-head">
+                    <div class="muted small">
+                      <strong class="note-author"><%= note.author || 'Deleted user' %></strong> · <%= fmtDate(note.created_at) %>
+                      <% if (note.updated_at) { %><span class="note-edited">· edited <%= fmtDate(note.updated_at) %><% if (note.editor) { %> by <%= note.editor %><% } %></span><% } %>
+                    </div>
+                    <div class="row-actions">
+                      <details class="edit">
+                        <summary class="icon-btn" title="Edit note" aria-label="Edit note"><%- icon('edit') %></summary>
+                        <div class="edit-panel">
+                          <form method="post" action="/client-service-notes/<%= note.id %>" class="form">
+                            <%- csrfField %>
+                            <label class="field">
+                              <span>Note</span>
+                              <textarea name="body" rows="4" required maxlength="10000"><%= note.body %></textarea>
+                            </label>
+                            <div><button type="submit" class="btn btn-primary">Save</button></div>
+                          </form>
+                        </div>
+                      </details>
+                      <%- include('../partials/delete', { action: `/client-service-notes/${note.id}/delete`, confirm: 'Delete this note?' }) %>
+                    </div>
+                  </div>
+                  <p class="pre-line"><%= note.body %></p>
+                </li>
+              <% } %>
+            </ul>
+          <% } %>
+        </div>
+
         <div class="card-foot">
           <% if (cs.status === 'closed') { %>
             <form method="post" action="/client-services/<%= cs.id %>/reopen" class="inline">

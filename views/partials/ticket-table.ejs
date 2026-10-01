@@ -1,6 +1,7 @@
 <% if (!tickets.length) { %>
   <p class="empty">No tickets<%= status ? ' with this status' : '' %>.</p>
 <% } else { %>
+  <p class="empty" data-filter-empty hidden>No tickets match your search.</p>
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -14,7 +15,7 @@
       </thead>
       <tbody>
         <% for (const t of tickets) { %>
-          <tr>
+          <tr data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name || '' %> <%= ticketStatuses[t.status] %>">
             <td class="muted"><%= t.id %></td>
             <td><a href="/tickets/<%= t.id %>"><%= t.title %></a></td>
             <% if (locals.showClient) { %><td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td><% } %>

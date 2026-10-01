@@ -6,12 +6,15 @@
   </div>
 </header>
 
+<%- include('../partials/search', { target: '#user-list', placeholder: 'Search users' }) %>
+
 <div class="grid-2 grid-wide-left">
-  <section class="card">
+  <section class="card" id="user-list">
     <h2>All users</h2>
+    <p class="empty" data-filter-empty hidden>No users match your search.</p>
     <ul class="rows">
       <% for (const u of users) { %>
-        <li class="row">
+        <li class="row" data-filter-item data-search="<%= u.username %> <%= u.role %>">
           <div class="row-main">
             <strong><%= u.username %></strong>
             <% if (u.id === currentUser.id) { %><span class="badge badge-you">You</span><% } %>

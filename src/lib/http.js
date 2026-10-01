@@ -32,8 +32,4 @@ function flash(req, type, message) {
   req.session.flash = { type, message };
 }
 
-function direction(value) {
-  return value === 'up' || value === 'down' ? value : null;
-}
-
-module.exports = { HttpError, notFound, str, toId, requireId, flash, direction };
+module.exports = { HttpError, notFound, str, toId, requireId, flash };

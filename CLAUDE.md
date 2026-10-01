@@ -7,6 +7,7 @@
 - Parameterised queries only. Never build SQL from user input.
 - Every page requires login; every POST form needs the CSRF field (`<%- csrfField %>`).
 - Schema changes go in db/schema.sql and must be safe to re-run (CREATE TABLE IF NOT EXISTS). `npm run seed` must stay safe to run twice.
+- Categories, services and clients are always listed A-Z. Service steps keep the order they were added (process order); there is no manual reordering.
 - No frontend framework: EJS views, plain responsive CSS in public/css/style.css, Mermaid from cdn.jsdelivr.net.
 - Branding: Azure Blue #00A6FF (primary), Charcoal #222222, Off-White #FAF8F0 (background), Navy #0B1B5C (accent). Kollektif (body) and Made Tommy (headings) from public/fonts, falling back to Poppins, then sans-serif.
 - npm scripts: start (node index.js, foreground for testing, Ctrl+C stops it), migrate, seed, create-user.

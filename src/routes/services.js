@@ -1,8 +1,9 @@
-// Service catalogue: categories > services > ordered steps.
+// Service catalogue: categories > services > steps.
+// Categories and services are listed A-Z; steps keep the order they were added in.
 const express = require('express');
 const { pool, transaction } = require('../db');
-const { str, requireId, toId, flash, direction, notFound } = require('../lib/http');
-const { nextPosition, move } = require('../lib/order');
+const { str, requireId, toId, flash, notFound } = require('../lib/http');
+const { nextStepPosition } = require('../lib/order');
 const { buildFlowchart } = require('../lib/mermaid');
 
 const router = express.Router();
@@ -12,13 +13,13 @@ const isDuplicate = (err) => err.code === 'ER_DUP_ENTRY';
 // ---- Overview ----
 
 router.get('/services', async (req, res) => {
-  const [categories] = await pool.query('SELECT id, name FROM service_categories ORDER BY position, id');
+  const [categories] = await pool.query('SELECT id, name FROM service_categories ORDER BY name');
   const [services] = await pool.query(`
     SELECT s.id, s.name, s.category_id, COUNT(st.id) AS step_count
     FROM services s
     LEFT JOIN service_steps st ON st.service_id = s.id
-    GROUP BY s.id, s.name, s.category_id, s.position
-    ORDER BY s.position, s.id
+    GROUP BY s.id, s.name, s.category_id
+    ORDER BY s.name
   `);
   for (const category of categories) {
     category.services = services.filter((s) => s.category_id === category.id);
@@ -35,8 +36,7 @@ router.post('/categories', async (req, res) => {
     return res.redirect('/services');
   }
   try {
-    const position = await nextPosition(pool, 'service_categories');
-    await pool.query('INSERT INTO service_categories (name, position) VALUES (?, ?)', [name, position]);
+    await pool.query('INSERT INTO service_categories (name) VALUES (?)', [name]);
   } catch (err) {
     if (!isDuplicate(err)) throw err;
     flash(req, 'error', `A category called "${name}" already exists.`);
@@ -55,8 +55,8 @@ router.get('/categories/:id', async (req, res) => {
     FROM services s
     LEFT JOIN service_steps st ON st.service_id = s.id
     WHERE s.category_id = ?
-    GROUP BY s.id, s.name, s.description, s.position
-    ORDER BY s.position, s.id
+    GROUP BY s.id, s.name, s.description
+    ORDER BY s.name
   `, [id]);
   res.render('services/category', { title: category.name, category, services });
 });
@@ -86,13 +86,6 @@ router.post('/categories/:id/delete', async (req, res) => {
   res.redirect('/services');
 });
 
-router.post('/categories/:id/move', async (req, res) => {
-  const id = requireId(req.params.id);
-  const dir = direction(req.body.direction);
-  if (dir) await move('service_categories', id, dir);
-  res.redirect(`/services#category-${id}`);
-});
-
 // ---- Services ----
 
 router.post('/categories/:id/services', async (req, res) => {
@@ -106,16 +99,13 @@ router.post('/categories/:id/services', async (req, res) => {
 
   let serviceId;
   try {
-    serviceId = await transaction(async (conn) => {
-      const [[category]] = await conn.query('SELECT id FROM service_categories WHERE id = ? FOR UPDATE', [categoryId]);
-      if (!category) throw notFound();
-      const position = await nextPosition(conn, 'services', categoryId);
-      const [result] = await conn.query(
-        'INSERT INTO services (category_id, name, description, position) VALUES (?, ?, ?, ?)',
-        [categoryId, name, description, position]
-      );
-      return result.insertId;
-    });
+    const [[category]] = await pool.query('SELECT id FROM service_categories WHERE id = ?', [categoryId]);
+    if (!category) throw notFound();
+    const [result] = await pool.query(
+      'INSERT INTO services (category_id, name, description) VALUES (?, ?, ?)',
+      [categoryId, name, description]
+    );
+    serviceId = result.insertId;
   } catch (err) {
     if (!isDuplicate(err)) throw err;
     flash(req, 'error', `This category already has a service called "${name}".`);
@@ -138,7 +128,7 @@ router.get('/services/:id', async (req, res) => {
     'SELECT id, title FROM service_steps WHERE service_id = ? ORDER BY position, id',
     [id]
   );
-  const [categories] = await pool.query('SELECT id, name FROM service_categories ORDER BY position, id');
+  const [categories] = await pool.query('SELECT id, name FROM service_categories ORDER BY name');
   res.render('services/show', {
     title: service.name,
     service,
@@ -164,23 +154,14 @@ router.post('/services/:id', async (req, res) => {
       if (!service) throw notFound();
 
       let newCategory = service.category_id;
-      let position = null;
       if (categoryId && categoryId !== service.category_id) {
         const [[category]] = await conn.query('SELECT id FROM service_categories WHERE id = ?', [categoryId]);
-        if (category) {
-          newCategory = category.id;
-          position = await nextPosition(conn, 'services', category.id);
-        }
+        if (category) newCategory = category.id;
       }
-
-      if (position === null) {
-        await conn.query('UPDATE services SET name = ?, description = ? WHERE id = ?', [name, description, id]);
-      } else {
-        await conn.query(
-          'UPDATE services SET name = ?, description = ?, category_id = ?, position = ? WHERE id = ?',
-          [name, description, newCategory, position, id]
-        );
-      }
+      await conn.query(
+        'UPDATE services SET name = ?, description = ?, category_id = ? WHERE id = ?',
+        [name, description, newCategory, id]
+      );
     });
   } catch (err) {
     if (!isDuplicate(err)) throw err;
@@ -200,19 +181,6 @@ router.post('/services/:id/delete', async (req, res) => {
   res.redirect(`/categories/${service.category_id}`);
 });
 
-router.post('/services/:id/move', async (req, res) => {
-  const id = requireId(req.params.id);
-  const dir = direction(req.body.direction);
-  const item = dir ? await move('services', id, dir) : null;
-  if (!item) {
-    const [[service]] = await pool.query('SELECT category_id FROM services WHERE id = ?', [id]);
-    return res.redirect(service ? `/categories/${service.category_id}` : '/services');
-  }
-  // Moves are made from either the overview or the category page.
-  const back = req.body.back === 'overview' ? `/services#category-${item.scope}` : `/categories/${item.scope}`;
-  res.redirect(back);
-});
-
 // ---- Steps ----
 
 router.post('/services/:id/steps', async (req, res) => {
@@ -225,7 +193,7 @@ router.post('/services/:id/steps', async (req, res) => {
   await transaction(async (conn) => {
     const [[service]] = await conn.query('SELECT id FROM services WHERE id = ? FOR UPDATE', [serviceId]);
     if (!service) throw notFound();
-    const position = await nextPosition(conn, 'service_steps', serviceId);
+    const position = await nextStepPosition(conn, serviceId);
     await conn.query(
       'INSERT INTO service_steps (service_id, title, position) VALUES (?, ?, ?)',
       [serviceId, title, position]
@@ -256,14 +224,6 @@ router.post('/steps/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   const serviceId = await stepServiceId(id);
   await pool.query('DELETE FROM service_steps WHERE id = ?', [id]);
-  res.redirect(`/services/${serviceId}#steps`);
-});
-
-router.post('/steps/:id/move', async (req, res) => {
-  const id = requireId(req.params.id);
-  const serviceId = await stepServiceId(id);
-  const dir = direction(req.body.direction);
-  if (dir) await move('service_steps', id, dir);
   res.redirect(`/services/${serviceId}#steps`);
 });
 

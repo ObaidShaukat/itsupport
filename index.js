@@ -101,7 +101,7 @@ app.use(csrf);
 
 // Highlights the current section in the sidebar.
 const NAV_PREFIXES = [
-  ['/clients', 'clients'], ['/client-services', 'clients'],
+  ['/clients', 'clients'], ['/client-services', 'clients'], ['/client-service-notes', 'clients'],
   ['/tickets', 'tickets'],
   ['/services', 'services'], ['/categories', 'services'], ['/steps', 'services'],
   ['/users', 'users'],

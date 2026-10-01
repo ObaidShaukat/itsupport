@@ -57,6 +57,7 @@ a:hover { color: var(--blue); }
 code { background: var(--grey-soft); padding: 0.1em 0.4em; border-radius: 6px; font-size: 0.9em; }
 
 .sprite { display: none; }
+[hidden] { display: none !important; }
 
 .icon {
   width: 18px;
@@ -277,8 +278,28 @@ p.empty.card { margin-bottom: 1.5rem; }
 .rows-compact .row { padding: 0.5rem 0; }
 .rows-compact .row-main { display: flex; justify-content: space-between; gap: 0.75rem; align-items: baseline; }
 
-.step-num { color: var(--blue); font-weight: 600; }
-.checklist .check-icon { color: var(--blue); display: inline-flex; }
+.step-list .row { align-items: flex-start; flex-wrap: nowrap; }
+.step-list .row-main { padding-top: 0.4rem; }
+.step-num { color: var(--blue); font-weight: 700; min-width: 1.75rem; padding-top: 0.4rem; }
+
+/* ---- Instant search ---- */
+
+.list-search { margin-bottom: 1.5rem; }
+.search-field { position: relative; display: block; max-width: 520px; }
+.search-field .icon { position: absolute; left: 0.9rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search-field input[type="search"] { padding-left: 2.6rem; border-radius: 999px; background: var(--white); }
+
+/* ---- Notes on assigned services ---- */
+
+.notes { border-top: 1px solid var(--border); margin-top: 1.25rem; padding-top: 1rem; }
+.notes h4 { font-family: var(--font-head); color: var(--navy); margin: 0 0 0.75rem; font-size: 0.95rem; }
+.note-form { gap: 0.5rem; margin-bottom: 1rem; }
+.note-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.note { background: var(--offwhite); border-radius: var(--radius-sm); padding: 0.75rem 0.9rem; }
+.note-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+.note-author { color: var(--charcoal); }
+.note p { margin: 0.25rem 0 0; overflow-wrap: anywhere; }
+.note .icon-btn { width: 30px; height: 30px; }
 
 /* ---- Inline edit panels ---- */
 
@@ -355,7 +376,7 @@ p.empty.card { margin-bottom: 1.5rem; }
   outline-offset: 2px;
 }
 
-form.inline, form.move { display: inline-flex; gap: 0.1rem; margin: 0; }
+form.inline { display: inline-flex; gap: 0.1rem; margin: 0; }
 
 /* ---- Forms ---- */
 

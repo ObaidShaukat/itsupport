@@ -33,19 +33,18 @@
       <p class="empty">No services in this category yet.</p>
     <% } else { %>
       <ul class="rows">
-        <% services.forEach((s, i) => { %>
+        <% for (const s of services) { %>
           <li class="row">
             <div class="row-main">
               <a href="/services/<%= s.id %>"><strong><%= s.name %></strong></a>
               <div class="muted small"><%= Number(s.step_count) %> step<%= Number(s.step_count) === 1 ? '' : 's' %><% if (s.description) { %> · <%= s.description %><% } %></div>
             </div>
             <div class="row-actions">
-              <%- include('../partials/move', { action: `/services/${s.id}/move`, first: i === 0, last: i === services.length - 1 }) %>
               <a href="/services/<%= s.id %>" class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></a>
               <%- include('../partials/delete', { action: `/services/${s.id}/delete`, confirm: `Delete "${s.name}" and its steps?` }) %>
             </div>
           </li>
-        <% }) %>
+        <% } %>
       </ul>
     <% } %>
   </section>

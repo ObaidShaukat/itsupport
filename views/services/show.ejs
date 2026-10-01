@@ -41,17 +41,16 @@
 
 <div class="grid-2">
   <section class="card" id="steps">
-    <h2>Checklist</h2>
+    <h2>Steps</h2>
     <% if (!steps.length) { %>
       <p class="empty">No steps yet. Add the first one below.</p>
     <% } else { %>
-      <ol class="rows checklist">
+      <ol class="rows step-list">
         <% steps.forEach((step, i) => { %>
           <li class="row">
-            <span class="check-icon"><%- icon('box') %></span>
-            <div class="row-main"><span class="step-num"><%= i + 1 %>.</span> <%= step.title %></div>
+            <span class="step-num"><%= i + 1 %>.</span>
+            <div class="row-main"><%= step.title %></div>
             <div class="row-actions">
-              <%- include('../partials/move', { action: `/steps/${step.id}/move`, first: i === 0, last: i === steps.length - 1 }) %>
               <details class="edit">
                 <summary class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></summary>
                 <div class="edit-panel">

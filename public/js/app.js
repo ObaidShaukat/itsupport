@@ -25,6 +25,53 @@ document.addEventListener('keydown', (event) => {
   });
 });
 
+// Instant client-side search. <input data-filter="#scope"> filters the
+// [data-filter-item] elements inside #scope by their data-search text.
+// [data-filter-group] elements (e.g. service categories) stay visible when their
+// [data-filter-label] matches or any of their items match. [data-filter-empty]
+// is shown when a search matches nothing.
+const normalise = (text) => text.toLowerCase().replace(/\s+/g, ' ').trim();
+const searchText = (el) => normalise(el.dataset.search ?? el.textContent);
+
+document.querySelectorAll('input[data-filter]').forEach((input) => {
+  const scope = document.querySelector(input.dataset.filter);
+  if (!scope) return;
+  const groups = scope.querySelectorAll('[data-filter-group]');
+  const empty = scope.querySelector('[data-filter-empty]');
+
+  const apply = () => {
+    const query = normalise(input.value);
+    let visible = 0;
+
+    if (groups.length) {
+      groups.forEach((group) => {
+        const label = group.querySelector('[data-filter-label]');
+        const groupMatches = !query || (label && searchText(label).includes(query));
+        let anyItem = false;
+        group.querySelectorAll('[data-filter-item]').forEach((item) => {
+          const show = groupMatches || searchText(item).includes(query);
+          item.hidden = !show;
+          if (show) anyItem = true;
+        });
+        group.hidden = !(groupMatches || anyItem);
+        if (!group.hidden) visible++;
+      });
+    } else {
+      scope.querySelectorAll('[data-filter-item]').forEach((item) => {
+        const show = !query || searchText(item).includes(query);
+        item.hidden = !show;
+        if (show) visible++;
+      });
+    }
+
+    if (empty) empty.hidden = !query || visible > 0;
+  };
+
+  input.addEventListener('input', apply);
+  // Browsers may restore the box's text on back/forward navigation.
+  if (input.value) apply();
+});
+
 // Render Mermaid flowcharts (the library is only loaded on service pages).
 if (window.mermaid) {
   const bodyFont = getComputedStyle(document.body).fontFamily;

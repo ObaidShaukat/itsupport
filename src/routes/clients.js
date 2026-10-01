@@ -31,23 +31,14 @@ const emptyClient = { name: '', contact_name: '', email: '', phone: '', notes: '
 // ---- Clients ----
 
 router.get('/clients', async (req, res) => {
-  const q = str(req.query.q, 100);
-  const params = [];
-  let where = '';
-  if (q) {
-    where = 'WHERE c.name LIKE ? OR c.contact_name LIKE ? OR c.email LIKE ?';
-    const like = `%${q.replace(/[\\%_]/g, '\\$&')}%`;
-    params.push(like, like, like);
-  }
   const [clients] = await pool.query(`
     SELECT c.id, c.name, c.contact_name, c.email, c.phone,
       (SELECT COUNT(*) FROM tickets t WHERE t.client_id = c.id AND t.status <> 'closed') AS active_tickets,
       (SELECT COUNT(*) FROM client_services cs WHERE cs.client_id = c.id AND cs.status = 'open') AS open_services
     FROM clients c
-    ${where}
     ORDER BY c.name
-  `, params);
-  res.render('clients/index', { title: 'Clients', clients, q });
+  `);
+  res.render('clients/index', { title: 'Clients', clients });
 });
 
 router.get('/clients/new', (req, res) => {
@@ -88,9 +79,20 @@ router.get('/clients/:id', async (req, res) => {
     WHERE cs.client_id = ?
     ORDER BY css.position, css.id
   `, [id]);
+  const [notes] = await pool.query(`
+    SELECT n.id, n.client_service_id, n.body, n.created_at, n.updated_at,
+           u.username AS author, e.username AS editor
+    FROM client_service_notes n
+    JOIN client_services cs ON cs.id = n.client_service_id
+    LEFT JOIN users u ON u.id = n.user_id
+    LEFT JOIN users e ON e.id = n.updated_by
+    WHERE cs.client_id = ?
+    ORDER BY n.created_at DESC, n.id DESC
+  `, [id]);
   for (const cs of clientServices) {
     cs.steps = steps.filter((s) => s.client_service_id === cs.id);
     cs.doneCount = cs.steps.filter((s) => s.done).length;
+    cs.notes = notes.filter((n) => n.client_service_id === cs.id);
   }
 
   const status = isTicketStatus(req.query.status) ? req.query.status : '';
@@ -106,7 +108,7 @@ router.get('/clients/:id', async (req, res) => {
     SELECT s.id, s.name, c.id AS category_id, c.name AS category_name
     FROM services s
     JOIN service_categories c ON c.id = s.category_id
-    ORDER BY c.position, c.id, s.position, s.id
+    ORDER BY c.name, c.id, s.name
   `);
   const serviceGroups = [];
   for (const s of catalogue) {
@@ -254,6 +256,57 @@ async function setClientServiceStatus(req, res, status) {
 
 router.post('/client-services/:id/reopen', (req, res) => setClientServiceStatus(req, res, 'open'));
 router.post('/client-services/:id/close', (req, res) => setClientServiceStatus(req, res, 'closed'));
+
+// ---- Notes on assigned services ----
+
+router.post('/client-services/:id/notes', async (req, res) => {
+  const csId = requireId(req.params.id);
+  const [[cs]] = await pool.query('SELECT client_id FROM client_services WHERE id = ?', [csId]);
+  if (!cs) throw notFound();
+  const body = str(req.body.body, 10000);
+  if (!body) {
+    flash(req, 'error', 'Note cannot be empty.');
+  } else {
+    await pool.query(
+      'INSERT INTO client_service_notes (client_service_id, user_id, body) VALUES (?, ?, ?)',
+      [csId, req.user.id, body]
+    );
+  }
+  res.redirect(`/clients/${cs.client_id}#cs-${csId}`);
+});
+
+async function noteContext(noteId) {
+  const [[note]] = await pool.query(`
+    SELECT n.id, n.client_service_id, cs.client_id
+    FROM client_service_notes n
+    JOIN client_services cs ON cs.id = n.client_service_id
+    WHERE n.id = ?
+  `, [noteId]);
+  if (!note) throw notFound();
+  return note;
+}
+
+router.post('/client-service-notes/:id', async (req, res) => {
+  const note = await noteContext(requireId(req.params.id));
+  const body = str(req.body.body, 10000);
+  if (!body) {
+    flash(req, 'error', 'Note cannot be empty.');
+  } else {
+    await pool.query(
+      'UPDATE client_service_notes SET body = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
+      [body, req.user.id, note.id]
+    );
+    flash(req, 'success', 'Note updated.');
+  }
+  res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);
+});
+
+router.post('/client-service-notes/:id/delete', async (req, res) => {
+  const note = await noteContext(requireId(req.params.id));
+  await pool.query('DELETE FROM client_service_notes WHERE id = ?', [note.id]);
+  flash(req, 'success', 'Note deleted.');
+  res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);
+});
 
 router.post('/client-services/:id/delete', async (req, res) => {
   const csId = requireId(req.params.id);
