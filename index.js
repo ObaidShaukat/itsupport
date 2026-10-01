@@ -44,7 +44,7 @@ app.use(helmet({
 // ---- View helpers ----
 
 const fonts = detectFonts();
-const LOGO_PATH = path.join(__dirname, 'public', 'img', 'logo.svg');
+const LOGO_PATH = path.join(__dirname, 'public', 'logo.png');
 
 app.locals.fonts = fonts;
 app.locals.ticketStatuses = TICKET_STATUSES;

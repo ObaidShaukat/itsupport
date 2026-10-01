@@ -63,10 +63,18 @@ npm run create-user -- admin 'a-strong-password'
 
 The sessions table is created automatically the first time the app starts.
 
-### 6. Start with PM2
+### 6. Test in the foreground
 
 ```bash
-npm start            # pm2 start pm2.config.cjs
+npm start            # node index.js; press Ctrl+C to stop
+```
+
+### 7. Run with PM2
+
+PM2 is run manually, not through npm scripts:
+
+```bash
+pm2 start pm2.config.cjs
 pm2 save             # remember the process list
 pm2 startup          # (once) start PM2 on boot; follow its instructions
 ```
@@ -74,26 +82,26 @@ pm2 startup          # (once) start PM2 on boot; follow its instructions
 Other commands:
 
 ```bash
-npm run restart      # pm2 restart itsupport
-npm run stop         # pm2 stop itsupport
-pm2 logs itsupport   # view logs
-npm run dev          # run in the foreground without PM2 (node index.js)
+pm2 restart itsupport
+pm2 stop itsupport
+pm2 logs itsupport
 ```
 
-The repository's `pm2.config.cjs` is deliberately minimal (app name `itsupport`, script `index.js`). If the server keeps its own `pm2.config.cjs`, keep the app name `itsupport` so the npm scripts still work.
+The repository's `pm2.config.cjs` is deliberately minimal (app name `itsupport`, script `index.js`). If the server keeps its own `pm2.config.cjs`, keep the app name `itsupport` so the commands above still work.
 
-### 7. Updating
+### 8. Updating
 
 ```bash
 git pull
 npm install
 npm run migrate
-npm run restart
+pm2 restart itsupport
 ```
 
 ## Branding assets
 
-- **Logo:** put `public/img/logo.svg` in place and it appears in the sidebar and on the sign-in page. It's picked up without a restart.
+- **Logo:** `public/logo.png` (served at `/logo.png`) appears in the sidebar and on the sign-in page. Until it exists, the text "Cleartwo" is shown instead. It's picked up without a restart.
+- **Favicon:** `public/favicon.svg` (served at `/favicon.svg`).
 - **Fonts:** put Kollektif and Made Tommy files (`.woff2`, `.woff`, `.ttf` or `.otf`) in `public/fonts/`. They're matched by file name, so names should contain "Kollektif" or "Made Tommy" (for example `Kollektif-Bold.woff2`). Weight is read from the name (Regular, Medium, Bold, ExtraBold, Black). Restart the app after adding fonts. Until they're present, the portal uses Poppins from Google Fonts.
 
 ## Project layout
