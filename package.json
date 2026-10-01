@@ -1,0 +1,23 @@
+{
+  "name": "itsupport",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ObaidShaukat/itsupport.git"
+  },
+  "keywords": [],
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ObaidShaukat/itsupport/issues"
+  },
+  "homepage": "https://github.com/ObaidShaukat/itsupport#readme",
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "express": "^5.2.1"
+  }
+}
