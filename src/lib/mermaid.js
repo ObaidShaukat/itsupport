@@ -18,8 +18,8 @@ function buildFlowchart(steps) {
     prev = node;
   });
   lines.push('  done(["Done"])', `  ${prev} --> done`);
-  lines.push('  classDef terminal fill:#0B1B5C,stroke:#0B1B5C,color:#FFFFFF');
-  lines.push('  classDef step fill:#FFFFFF,stroke:#00A6FF,color:#222222');
+  lines.push('  classDef terminal fill:#200D6C,stroke:#200D6C,color:#FFFFFF');
+  lines.push('  classDef step fill:#F1ECFA,stroke:#6741C3,color:#000000');
   lines.push('  class start,done terminal');
   if (steps.length) lines.push(`  class ${steps.map((_, i) => `s${i + 1}`).join(',')} step`);
   return lines.join('\n');

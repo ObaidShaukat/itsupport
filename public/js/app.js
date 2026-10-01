@@ -7,22 +7,45 @@ document.addEventListener('submit', (event) => {
   if (message && !window.confirm(message)) event.preventDefault();
 });
 
-// Only one inline edit panel open at a time; Escape closes it.
+// Inline edit popovers (<details class="edit">). Only one is open at a time.
+// Cancel, Esc or a click outside closes it, and closing discards unsaved changes.
+const openPopovers = () => document.querySelectorAll('details.edit[open]');
+
+function closePopover(details, { focusSummary = false } = {}) {
+  details.open = false;
+  if (focusSummary) details.querySelector('summary')?.focus();
+}
+
 document.addEventListener('toggle', (event) => {
   const details = event.target;
-  if (!details.matches || !details.matches('details.edit') || !details.open) return;
-  document.querySelectorAll('details.edit[open]').forEach((other) => {
-    if (other !== details) other.open = false;
+  if (!details.matches || !details.matches('details.edit')) return;
+
+  if (!details.open) {
+    details.querySelectorAll('form').forEach((form) => form.reset());
+    return;
+  }
+  openPopovers().forEach((other) => {
+    if (other !== details) closePopover(other);
   });
   const input = details.querySelector('input:not([type="hidden"]), textarea, select');
   if (input) input.focus();
 }, true);
 
+document.addEventListener('click', (event) => {
+  const cancel = event.target.closest('[data-cancel]');
+  if (cancel) {
+    const details = cancel.closest('details.edit');
+    if (details) closePopover(details, { focusSummary: true });
+    return;
+  }
+  openPopovers().forEach((details) => {
+    if (!details.contains(event.target)) closePopover(details);
+  });
+});
+
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
-  document.querySelectorAll('details.edit[open]').forEach((details) => {
-    details.open = false;
-  });
+  openPopovers().forEach((details) => closePopover(details, { focusSummary: true }));
 });
 
 // Instant client-side search. <input data-filter="#scope"> filters the
@@ -81,10 +104,10 @@ if (window.mermaid) {
     theme: 'base',
     themeVariables: {
       fontFamily: bodyFont,
-      primaryColor: '#FFFFFF',
-      primaryBorderColor: '#00A6FF',
-      primaryTextColor: '#222222',
-      lineColor: '#0B1B5C',
+      primaryColor: '#F1ECFA',
+      primaryBorderColor: '#6741C3',
+      primaryTextColor: '#000000',
+      lineColor: '#200D6C',
     },
     flowchart: { curve: 'basis', useMaxWidth: true },
   });

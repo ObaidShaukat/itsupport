@@ -8,8 +8,9 @@
 - Every page requires login; every POST form needs the CSRF field (`<%- csrfField %>`).
 - Schema changes go in db/schema.sql and must be safe to re-run (CREATE TABLE IF NOT EXISTS). `npm run seed` must stay safe to run twice.
 - Categories, services and clients are always listed A-Z. Service steps keep the order they were added (process order); there is no manual reordering.
+- Inline edit popovers (`<details class="edit">`) have Save and Cancel (`data-cancel`); Esc or a click outside closes them and discards changes (public/js/app.js).
 - No frontend framework: EJS views, plain responsive CSS in public/css/style.css, Mermaid from cdn.jsdelivr.net.
-- Branding: Azure Blue #00A6FF (primary), Charcoal #222222, Off-White #FAF8F0 (background), Navy #0B1B5C (accent). Kollektif (body) and Made Tommy (headings) from public/fonts, falling back to Poppins, then sans-serif.
+- Branding: deep indigo #200D6C (sidebar, headings, top bar), blue #0390D7 (primary buttons, links, active nav, focus), purple #6741C3 (accents, hover, badges, flowchart nodes), black #000000 text, white cards on #F5F5F7 with #E5E5EA borders. Status badges: Open #0390D7, Customer Waiting #6741C3, Closed grey. Colours are CSS variables at the top of public/css/style.css. Kollektif (body) and Made Tommy (headings) from public/fonts, falling back to Poppins, then sans-serif.
 - npm scripts: start (node index.js, foreground for testing, Ctrl+C stops it), migrate, seed, create-user.
 - Logo is public/logo.png (/logo.png); favicon is public/favicon.svg (/favicon.svg).
 - Do not test locally: no starting the app and no connecting to the database. `npm install` and `node --check` on .js files are fine.

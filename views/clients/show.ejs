@@ -120,7 +120,10 @@
                               <span>Note</span>
                               <textarea name="body" rows="4" required maxlength="10000"><%= note.body %></textarea>
                             </label>
-                            <div><button type="submit" class="btn btn-primary">Save</button></div>
+                            <div class="form-actions">
+                              <button type="submit" class="btn btn-primary">Save</button>
+                              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                            </div>
                           </form>
                         </div>
                       </details>
