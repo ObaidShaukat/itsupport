@@ -1,6 +1,0 @@
-<nav class="filters" aria-label="Filter by status">
-  <a href="<%= base %>" class="<%= !status ? 'active' : '' %>">All<% if (locals.counts) { %> <span class="count"><%= counts.all %></span><% } %></a>
-  <% for (const [key, label] of Object.entries(ticketStatuses)) { %>
-    <a href="<%= base %>?status=<%= key %>" class="<%= status === key ? 'active' : '' %>"><%= label %><% if (locals.counts) { %> <span class="count"><%= counts[key] %></span><% } %></a>
-  <% } %>
-</nav>

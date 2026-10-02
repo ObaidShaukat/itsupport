@@ -43,7 +43,10 @@
               <a href="/tickets/<%= t.id %>"><%= t.title %></a>
               <div class="muted small"><%= t.client_name %> · created by <%= t.created_by || 'Deleted user' %> · updated <%= fmtDate(t.updated_at) %></div>
             </div>
-            <%- include('partials/status', { status: t.status }) %>
+            <div class="list-badges">
+              <%- include('partials/priority', { priority: t.priority }) %>
+              <%- include('partials/status', { status: t.status }) %>
+            </div>
           </li>
         <% } %>
       </ul>

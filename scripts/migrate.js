@@ -10,6 +10,10 @@ const config = require('../src/config');
 const ADDED_COLUMNS = [
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
   ['services', 'report_phrase', 'VARCHAR(255) NULL AFTER description'],
+  ['tickets', 'priority', "ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal' AFTER status"],
+  ['tickets', 'updated_by', 'INT UNSIGNED NULL AFTER created_by'],
+  ['ticket_history', 'old_priority', "ENUM('low', 'normal', 'high', 'urgent') NULL AFTER new_status"],
+  ['ticket_history', 'new_priority', "ENUM('low', 'normal', 'high', 'urgent') NULL AFTER old_priority"],
   // Daily Report action / issue / detail on comments, notes and log entries.
   ...['ticket_comments', 'client_service_notes', 'activity_log'].flatMap((table) => [
     [table, 'action_id', 'INT UNSIGNED NULL'],

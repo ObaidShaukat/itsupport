@@ -23,10 +23,20 @@
           <% } %>
         </select>
       </label>
-      <label class="field">
-        <span>Title</span>
-        <input type="text" name="title" value="<%= ticket.title %>" required maxlength="255">
-      </label>
+      <div class="form-row">
+        <label class="field">
+          <span>Title</span>
+          <input type="text" name="title" value="<%= ticket.title %>" required maxlength="255">
+        </label>
+        <label class="field">
+          <span>Priority</span>
+          <select name="priority">
+            <% for (const key of ['low', 'normal', 'high', 'urgent']) { %>
+              <option value="<%= key %>" <%= (ticket.priority || 'normal') === key ? 'selected' : '' %>><%= ticketPriorities[key] %></option>
+            <% } %>
+          </select>
+        </label>
+      </div>
       <label class="field">
         <span>Description</span>
         <textarea name="description" rows="6" maxlength="10000"><%= ticket.description %></textarea>

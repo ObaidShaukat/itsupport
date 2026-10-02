@@ -162,8 +162,8 @@
     <a href="/tickets/new?client_id=<%= client.id %>" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
   </div>
   <div class="card">
-    <%- include('../partials/status-filter', { base: `/clients/${client.id}`, counts: null }) %>
-    <%- include('../partials/ticket-table', { tickets, status }) %>
+    <%- include('../partials/ticket-filters', { controls: ticketControls }) %>
+    <%- include('../partials/ticket-table', { tickets, controls: ticketControls, filtered: Boolean(ticketState.status || ticketState.priority) }) %>
   </div>
 </section>
 

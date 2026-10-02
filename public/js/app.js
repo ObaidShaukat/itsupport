@@ -338,3 +338,19 @@ document.querySelectorAll('[data-copy]').forEach((button) => {
     }
   });
 });
+
+// Dashboard numbers count up from 0 (skipped when reduced motion is requested).
+const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+document.querySelectorAll('.stat-value').forEach((el) => {
+  const target = Number(el.textContent.trim());
+  if (reduceMotion || !Number.isFinite(target) || target <= 0) return;
+  const duration = Math.min(1200, 400 + target * 40);
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / duration);
+    el.textContent = String(Math.round(target * (1 - (1 - t) ** 3)));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  el.textContent = '0';
+  requestAnimationFrame(step);
+});

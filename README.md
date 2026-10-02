@@ -99,6 +99,10 @@ npm run migrate
 pm2 restart itsupport
 ```
 
+## Tickets
+
+Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as coloured flags: green, yellow, orange and red, with urgent and high pulsing. Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time).
+
 ## Activity log and Daily Report
 
 Every create, update and delete (tickets, comments, client services, steps, notes, services, tutorials, KB articles, clients and users) is written to the `activity_log` table with the signed-in user and time. Records show "Created by … / Last updated by …" and a History panel built from it. Records created before the activity log existed fall back to their own created fields.

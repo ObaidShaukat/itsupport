@@ -12,7 +12,7 @@ const csrf = require('./src/middleware/csrf');
 const { requireAuth } = require('./src/middleware/auth');
 const multipart = require('./src/middleware/multipart');
 const { detectFonts } = require('./src/lib/fonts');
-const { TICKET_STATUSES } = require('./src/lib/tickets');
+const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./src/lib/tickets');
 const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
 
 if (!config.sessionSecret) {
@@ -50,6 +50,7 @@ const LOGO_PATH = path.join(__dirname, 'public', 'logo.png');
 
 app.locals.fonts = fonts;
 app.locals.ticketStatuses = TICKET_STATUSES;
+app.locals.ticketPriorities = TICKET_PRIORITIES;
 app.locals.activityLabels = ACTION_LABELS;
 app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },

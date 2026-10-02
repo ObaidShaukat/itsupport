@@ -1,0 +1,15 @@
+<%# controls: { statusFilters, priorityFilters } from src/lib/ticket-list.js %>
+<div class="ticket-filters">
+  <nav class="filters" aria-label="Filter by status">
+    <% for (const f of controls.statusFilters) { %>
+      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %>"><%= f.label %> <span class="count"><%= f.count %></span></a>
+    <% } %>
+  </nav>
+  <nav class="filters filters-priority" aria-label="Filter by priority">
+    <% for (const f of controls.priorityFilters) { %>
+      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %> <%= f.key ? `filter-priority-${f.key}` : '' %>">
+        <% if (f.key) { %><span class="priority-dot priority-dot-<%= f.key %>" aria-hidden="true"></span><% } %><%= f.label %> <span class="count"><%= f.count %></span>
+      </a>
+    <% } %>
+  </nav>
+</div>

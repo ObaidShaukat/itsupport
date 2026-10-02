@@ -8,10 +8,10 @@
   </div>
 </header>
 
-<%- include('../partials/search', { target: '#ticket-list', placeholder: 'Search by number, title or client' }) %>
+<%- include('../partials/search', { target: '#ticket-list', placeholder: 'Search by number, title, client, priority or user' }) %>
 
 <section class="card" id="ticket-list">
-  <%- include('../partials/status-filter', { base: '/tickets', counts }) %>
-  <%- include('../partials/ticket-table', { tickets, status, showClient: true }) %>
+  <%- include('../partials/ticket-filters', { controls }) %>
+  <%- include('../partials/ticket-table', { tickets, controls, filtered: Boolean(state.status || state.priority) }) %>
 </section>
 <%- include('../partials/foot') %>

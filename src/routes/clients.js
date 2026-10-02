@@ -1,7 +1,7 @@
 const express = require('express');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
-const { isTicketStatus } = require('../lib/tickets');
+const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
 const { logActivity, historyFor, clientHistory, recordMeta } = require('../lib/activity');
 
 const router = express.Router();
@@ -121,14 +121,9 @@ router.get('/clients/:id', async (req, res) => {
   const clientMeta = recordMeta(await historyFor(['client'], [id]), 'client', { createdAt: client.created_at });
   const activity = await clientHistory(id);
 
-  const status = isTicketStatus(req.query.status) ? req.query.status : '';
-  const [tickets] = await pool.query(`
-    SELECT t.id, t.title, t.status, t.created_at, t.updated_at, u.username AS created_by
-    FROM tickets t
-    LEFT JOIN users u ON u.id = t.created_by
-    WHERE t.client_id = ? ${status ? 'AND t.status = ?' : ''}
-    ORDER BY t.updated_at DESC
-  `, status ? [id, status] : [id]);
+  const ticketState = readListQuery(req.query);
+  const tickets = await listTickets({ ...ticketState, clientId: id });
+  const ticketControls = listControls(`/clients/${id}`, ticketState, await ticketCounts(id), '#tickets');
 
   const [catalogue] = await pool.query(`
     SELECT s.id, s.name, c.id AS category_id, c.name AS category_name
@@ -147,7 +142,7 @@ router.get('/clients/:id', async (req, res) => {
   }
 
   res.render('clients/show', {
-    title: client.name, client, clientMeta, activity, clientServices, tickets, status, serviceGroups,
+    title: client.name, client, clientMeta, activity, clientServices, tickets, ticketState, ticketControls, serviceGroups,
   });
 });
 

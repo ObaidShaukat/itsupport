@@ -1,7 +1,8 @@
 const express = require('express');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound, safePath } = require('../lib/http');
-const { TICKET_STATUSES, isTicketStatus } = require('../lib/tickets');
+const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } = require('../lib/tickets');
+const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
 const ticketEntry = (ticket, type, action, summary) => ({
@@ -10,7 +11,7 @@ const ticketEntry = (ticket, type, action, summary) => ({
 
 async function ticketContext(db, id, lock = false) {
   const [[ticket]] = await db.query(`
-    SELECT t.id, t.title, t.status, t.client_id, c.name AS client_name
+    SELECT t.id, t.title, t.status, t.priority, t.client_id, c.name AS client_name
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     WHERE t.id = ? ${lock ? 'FOR UPDATE' : ''}
@@ -27,29 +28,15 @@ async function clientOptions() {
 }
 
 router.get('/', async (req, res) => {
-  const status = isTicketStatus(req.query.status) ? req.query.status : '';
-  const [tickets] = await pool.query(`
-    SELECT t.id, t.title, t.status, t.created_at, t.updated_at,
-           c.id AS client_id, c.name AS client_name, u.username AS created_by
-    FROM tickets t
-    JOIN clients c ON c.id = t.client_id
-    LEFT JOIN users u ON u.id = t.created_by
-    ${status ? 'WHERE t.status = ?' : ''}
-    ORDER BY t.updated_at DESC
-  `, status ? [status] : []);
-  const [countRows] = await pool.query('SELECT status, COUNT(*) AS count FROM tickets GROUP BY status');
-  const counts = { all: 0 };
-  for (const key of Object.keys(TICKET_STATUSES)) counts[key] = 0;
-  for (const row of countRows) {
-    counts[row.status] = Number(row.count);
-    counts.all += Number(row.count);
-  }
-  res.render('tickets/index', { title: 'Tickets', tickets, status, counts });
+  const state = readListQuery(req.query);
+  const tickets = await listTickets(state);
+  const controls = listControls('/tickets', state, await ticketCounts());
+  res.render('tickets/index', { title: 'Tickets', tickets, state, controls });
 });
 
 router.get('/new', async (req, res) => {
   const clients = await clientOptions();
-  const ticket = { client_id: toId(req.query.client_id), title: '', description: '' };
+  const ticket = { client_id: toId(req.query.client_id), title: '', description: '', priority: 'normal' };
   res.render('tickets/new', { title: 'New ticket', clients, ticket, error: null });
 });
 
@@ -58,6 +45,7 @@ router.post('/', async (req, res) => {
     client_id: toId(req.body.client_id),
     title: str(req.body.title, 255),
     description: str(req.body.description, 10000),
+    priority: isTicketPriority(req.body.priority) ? req.body.priority : 'normal',
   };
 
   let error = null;
@@ -70,8 +58,8 @@ router.post('/', async (req, res) => {
       const [[client]] = await conn.query('SELECT id, name FROM clients WHERE id = ?', [ticket.client_id]);
       if (!client) return null;
       const [result] = await conn.query(
-        "INSERT INTO tickets (client_id, title, description, status, created_by) VALUES (?, ?, ?, 'open', ?)",
-        [ticket.client_id, ticket.title, ticket.description || null, req.user.id]
+        "INSERT INTO tickets (client_id, title, description, status, priority, created_by, updated_by) VALUES (?, ?, ?, 'open', ?, ?, ?)",
+        [ticket.client_id, ticket.title, ticket.description || null, ticket.priority, req.user.id, req.user.id]
       );
       await conn.query(
         "INSERT INTO ticket_history (ticket_id, user_id, old_status, new_status) VALUES (?, ?, NULL, 'open')",
@@ -79,7 +67,7 @@ router.post('/', async (req, res) => {
       );
       await logActivity(conn, req.user, ticketEntry(
         { id: result.insertId, title: ticket.title, client_id: client.id, client_name: client.name },
-        'ticket', 'created', `Opened ticket #${result.insertId}: ${ticket.title}`
+        'ticket', 'created', `Opened ticket #${result.insertId}: ${ticket.title} (${TICKET_PRIORITIES[ticket.priority]} priority)`
       ));
       return result.insertId;
     });
@@ -97,10 +85,11 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const [[ticket]] = await pool.query(`
-    SELECT t.*, c.name AS client_name, u.username AS created_by_name
+    SELECT t.*, c.name AS client_name, u.username AS created_by_name, uu.username AS updated_by_name
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.created_by
+    LEFT JOIN users uu ON uu.id = t.updated_by
     WHERE t.id = ?
   `, [id]);
   if (!ticket) throw notFound();
@@ -112,7 +101,7 @@ router.get('/:id', async (req, res) => {
     ORDER BY tc.created_at, tc.id
   `, [id]);
   const [history] = await pool.query(`
-    SELECT th.old_status, th.new_status, th.created_at, u.username
+    SELECT th.old_status, th.new_status, th.old_priority, th.new_priority, th.created_at, u.username
     FROM ticket_history th
     LEFT JOIN users u ON u.id = th.user_id
     WHERE th.ticket_id = ?
@@ -134,7 +123,7 @@ router.post('/:id/status', async (req, res) => {
   const changed = await transaction(async (conn) => {
     const ticket = await ticketContext(conn, id, true);
     if (ticket.status === status) return false;
-    await conn.query('UPDATE tickets SET status = ? WHERE id = ?', [status, id]);
+    await conn.query('UPDATE tickets SET status = ?, updated_by = ?, updated_at = NOW() WHERE id = ?', [status, req.user.id, id]);
     await conn.query(
       'INSERT INTO ticket_history (ticket_id, user_id, old_status, new_status) VALUES (?, ?, ?, ?)',
       [id, req.user.id, ticket.status, status]
@@ -149,6 +138,61 @@ router.post('/:id/status', async (req, res) => {
   res.redirect(`/tickets/${id}`);
 });
 
+router.post('/:id/priority', async (req, res) => {
+  const id = requireId(req.params.id);
+  const priority = req.body.priority;
+  if (!isTicketPriority(priority)) {
+    flash(req, 'error', 'Choose a valid priority.');
+    return res.redirect(`/tickets/${id}`);
+  }
+
+  const changed = await transaction(async (conn) => {
+    const ticket = await ticketContext(conn, id, true);
+    if (ticket.priority === priority) return false;
+    await conn.query('UPDATE tickets SET priority = ?, updated_by = ?, updated_at = NOW() WHERE id = ?', [priority, req.user.id, id]);
+    await conn.query(
+      'INSERT INTO ticket_history (ticket_id, user_id, old_priority, new_priority) VALUES (?, ?, ?, ?)',
+      [id, req.user.id, ticket.priority, priority]
+    );
+    await logActivity(conn, req.user, ticketEntry(
+      ticket, 'ticket', 'updated', `Priority: ${TICKET_PRIORITIES[ticket.priority]} → ${TICKET_PRIORITIES[priority]}`
+    ));
+    return true;
+  });
+
+  flash(req, changed ? 'success' : 'info', changed ? `Priority changed to ${TICKET_PRIORITIES[priority]}.` : 'Priority unchanged.');
+  res.redirect(`/tickets/${id}`);
+});
+
+// Edits the title and description.
+router.post('/:id', async (req, res) => {
+  const id = requireId(req.params.id);
+  const title = str(req.body.title, 255);
+  const description = str(req.body.description, 10000);
+  if (!title) {
+    flash(req, 'error', 'Title is required.');
+    return res.redirect(`/tickets/${id}`);
+  }
+  await transaction(async (conn) => {
+    const [[before]] = await conn.query('SELECT title, description FROM tickets WHERE id = ? FOR UPDATE', [id]);
+    if (!before) throw notFound();
+    const changes = [];
+    if (before.title !== title) changes.push('title');
+    if ((before.description || '') !== description) changes.push('description');
+    await conn.query(
+      'UPDATE tickets SET title = ?, description = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
+      [title, description || null, req.user.id, id]
+    );
+    const ticket = await ticketContext(conn, id);
+    await logActivity(conn, req.user, {
+      ...ticketEntry(ticket, 'ticket', 'updated', changes.length ? `Edited the ${changes.join(' and ')}` : 'Saved with no changes'),
+      changes,
+    });
+  });
+  flash(req, 'success', 'Ticket updated.');
+  res.redirect(`/tickets/${id}`);
+});
+
 router.post('/:id/comments', async (req, res) => {
   const id = requireId(req.params.id);
   const body = str(req.body.body, 10000);
@@ -160,7 +204,7 @@ router.post('/:id/comments', async (req, res) => {
     const ticket = await ticketContext(conn, id, true);
     await conn.query('INSERT INTO ticket_comments (ticket_id, user_id, body) VALUES (?, ?, ?)', [id, req.user.id, body]);
     await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', body));
-    await conn.query('UPDATE tickets SET updated_at = NOW() WHERE id = ?', [id]);
+    await conn.query('UPDATE tickets SET updated_by = ?, updated_at = NOW() WHERE id = ?', [req.user.id, id]);
   });
   res.redirect(`/tickets/${id}#comments`);
 });

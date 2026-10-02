@@ -1,29 +1,34 @@
+<%#
+  tickets: rows from listTickets(); controls.columns: sortable headers;
+  filtered: true when a status/priority filter is applied.
+%>
 <% if (!tickets.length) { %>
-  <p class="empty">No tickets<%= status ? ' with this status' : '' %>.</p>
+  <p class="empty">No tickets<%= locals.filtered ? ' match these filters' : '' %>.</p>
 <% } else { %>
   <p class="empty" data-filter-empty hidden>No tickets match your search.</p>
   <div class="table-wrap">
-    <table class="table">
+    <table class="table table-tickets">
       <thead>
         <tr>
-          <th>#</th>
-          <th>Title</th>
-          <% if (locals.showClient) { %><th>Client</th><% } %>
-          <th>Status</th>
-          <th>Created by</th>
-          <th>Updated</th>
-          <th><span class="visually-hidden">Actions</span></th>
+          <% for (const col of controls.columns) { %>
+            <th aria-sort="<%= col.active ? (col.dir === 'asc' ? 'ascending' : 'descending') : 'none' %>">
+              <a href="<%= col.href %>" class="sort-link <%= col.active ? 'is-sorted' : '' %>"><%= col.label %><span class="sort-arrow" aria-hidden="true"><%= col.active ? (col.dir === 'asc' ? '▲' : '▼') : '↕' %></span></a>
+            </th>
+          <% } %>
+          <th><span class="visually-hidden">Delete</span></th>
         </tr>
       </thead>
       <tbody>
         <% for (const t of tickets) { %>
-          <tr data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name || '' %> <%= ticketStatuses[t.status] %> <%= t.created_by || '' %>">
+          <tr class="ticket-row ticket-row-<%= t.priority %>" data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name %> <%= ticketStatuses[t.status] %> <%= ticketPriorities[t.priority] %> <%= t.created_by || '' %> <%= t.updated_by || '' %>">
             <td class="muted"><%= t.id %></td>
             <td><a href="/tickets/<%= t.id %>"><%= t.title %></a></td>
-            <% if (locals.showClient) { %><td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td><% } %>
+            <td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td>
             <td><%- include('status', { status: t.status }) %></td>
-            <td class="nowrap"><%= t.created_by || 'Deleted user' %><div class="muted small"><%= fmtDate(t.created_at) %></div></td>
-            <td class="muted nowrap"><%= fmtDate(t.updated_at) %></td>
+            <td class="nowrap"><%= t.created_by || 'Deleted user' %></td>
+            <td class="nowrap"><%= t.updated_by || '—' %></td>
+            <td class="nowrap muted"><%= fmtDate(t.updated_at) %></td>
+            <td><%- include('priority', { priority: t.priority }) %></td>
             <td class="row-actions">
               <%- include('delete', {
                 action: `/tickets/${t.id}/delete`,
@@ -37,4 +42,5 @@
       </tbody>
     </table>
   </div>
+  <% if (controls.resetSortHref) { %><p class="small"><a href="<%= controls.resetSortHref %>">Back to the default order</a> <span class="muted">(urgent first, then most recently updated)</span></p><% } %>
 <% } %>

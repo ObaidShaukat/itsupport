@@ -12,13 +12,13 @@ router.get('/', async (req, res) => {
   `);
 
   const [recentTickets] = await pool.query(`
-    SELECT t.id, t.title, t.status, t.created_at, t.updated_at, c.id AS client_id, c.name AS client_name,
+    SELECT t.id, t.title, t.status, t.priority, t.created_at, t.updated_at, c.id AS client_id, c.name AS client_name,
            u.username AS created_by
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.created_by
     WHERE t.status <> 'closed'
-    ORDER BY t.updated_at DESC
+    ORDER BY (t.priority = 'urgent') DESC, t.updated_at DESC
     LIMIT 8
   `);
 

@@ -1068,3 +1068,167 @@ html { scroll-behavior: smooth; }
   .btn-primary:hover,
   .stat:hover { transform: none; }
 }
+
+/* ---- Ticket priority (traffic-light colours) ----
+   Low = green, Normal = yellow, High = orange, Urgent = red. Urgent and High pulse
+   continuously so they stand out in lists. */
+
+:root {
+  --p-low: #1D7A46;      --p-low-bg: #E3F5EA;
+  --p-normal: #8A6400;   --p-normal-bg: #FFF4CC;   --p-normal-dot: #F2C200;
+  --p-high: #B45309;     --p-high-bg: #FFE8D1;     --p-high-dot: #F28C28;
+  --p-urgent: #C4281C;   --p-urgent-bg: #FDE3E1;   --p-urgent-dot: #E5372A;
+}
+
+.priority {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.22rem 0.65rem 0.22rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+  position: relative;
+}
+.priority .icon { width: 13px; height: 13px; stroke-width: 2.2; }
+.priority-low { background: var(--p-low-bg); color: var(--p-low); }
+.priority-normal { background: var(--p-normal-bg); color: var(--p-normal); }
+.priority-high { background: var(--p-high-bg); color: var(--p-high); animation: pulse-high 2.4s ease-in-out infinite; }
+.priority-urgent { background: var(--p-urgent); color: #FFFFFF; animation: pulse-urgent 1.4s ease-in-out infinite; }
+.priority-urgent .icon { animation: flag-wave 1.4s ease-in-out infinite; transform-origin: 20% 90%; }
+
+@keyframes pulse-urgent {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 55, 42, 0.55); }
+  50% { box-shadow: 0 0 0 6px rgba(229, 55, 42, 0); }
+}
+@keyframes pulse-high {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242, 140, 40, 0.45); }
+  50% { box-shadow: 0 0 0 5px rgba(242, 140, 40, 0); }
+}
+@keyframes flag-wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-12deg); }
+}
+
+.priority-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 0.35rem; vertical-align: 1px; }
+.priority-dot-low { background: var(--p-low); }
+.priority-dot-normal { background: var(--p-normal-dot); }
+.priority-dot-high { background: var(--p-high-dot); }
+.priority-dot-urgent { background: var(--p-urgent-dot); animation: pulse-urgent 1.4s ease-in-out infinite; }
+
+/* Urgent rows get a moving red highlight down their left edge; high rows a static orange one. */
+.table-tickets td:first-child { position: relative; }
+.ticket-row-urgent td:first-child::before,
+.ticket-row-high td:first-child::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 3px;
+}
+.ticket-row-high td:first-child::before { background: var(--p-high-dot); }
+.ticket-row-urgent td:first-child::before {
+  background: linear-gradient(180deg, var(--p-urgent-dot), #FF8A80, var(--p-urgent-dot));
+  background-size: 100% 200%;
+  animation: urgent-bar 1.6s linear infinite;
+}
+.ticket-row-urgent { background: linear-gradient(90deg, rgba(229, 55, 42, 0.07), transparent 40%); }
+@keyframes urgent-bar {
+  from { background-position: 0 0; }
+  to { background-position: 0 200%; }
+}
+
+/* Ticket list controls. */
+.ticket-filters { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
+.ticket-filters .filters { margin-bottom: 0; }
+.filters-priority a.active.filter-priority-urgent { background: var(--p-urgent); border-color: var(--p-urgent); }
+.filters-priority a.active.filter-priority-high { background: var(--p-high); border-color: var(--p-high); }
+.filters-priority a.active.filter-priority-normal { background: var(--p-normal); border-color: var(--p-normal); }
+.filters-priority a.active.filter-priority-low { background: var(--p-low); border-color: var(--p-low); }
+.filters-priority a.active .priority-dot { background: #FFFFFF; }
+.sort-link { color: inherit; display: inline-flex; align-items: center; gap: 0.3rem; white-space: nowrap; }
+.sort-link:hover { color: var(--purple); text-decoration: none; }
+.sort-link.is-sorted { color: var(--indigo); }
+.sort-arrow { font-size: 0.65rem; opacity: 0.45; }
+.sort-link.is-sorted .sort-arrow { opacity: 1; color: var(--blue); }
+.list-badges { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.priority-options .status-option { padding: 0.45rem 0.75rem; }
+
+/* ---- Brand glow and more motion ---- */
+
+/* "Cleartwo" in the top left glows softly; the logo chip breathes. */
+.sidebar .brand-name {
+  background: linear-gradient(90deg, #FFFFFF 0%, #9FD8FF 25%, #FFFFFF 50%, #C9B6FF 75%, #FFFFFF 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: brand-shimmer 6s linear infinite, brand-glow 3s ease-in-out infinite;
+}
+@keyframes brand-shimmer {
+  to { background-position: 200% center; }
+}
+@keyframes brand-glow {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(3, 144, 215, 0.35)); }
+  50% { filter: drop-shadow(0 0 10px rgba(103, 65, 195, 0.75)); }
+}
+.sidebar .brand-logo { animation: logo-breathe 3.5s ease-in-out infinite; }
+@keyframes logo-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(3, 144, 215, 0), 0 0 8px rgba(3, 144, 215, 0.25); }
+  50% { box-shadow: 0 0 0 3px rgba(103, 65, 195, 0.25), 0 0 18px rgba(103, 65, 195, 0.55); }
+}
+.sidebar .brand-sub { animation: brand-glow 3s ease-in-out infinite; }
+
+/* The active sidebar item has a light sweeping across it. */
+.nav a.active { position: relative; overflow: hidden; }
+.nav a.active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.35) 50%, transparent 65%);
+  transform: translateX(-100%);
+  animation: sheen 4.5s ease-in-out infinite;
+}
+@keyframes sheen {
+  0%, 60% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Dashboard stat icons float gently; the "Log work" button breathes. */
+.stat-icon { animation: float 4s ease-in-out infinite; }
+.stats .stat:nth-child(2) .stat-icon { animation-delay: 0.6s; }
+.stats .stat:nth-child(3) .stat-icon { animation-delay: 1.2s; }
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.topbar .btn-primary { animation: breathe 3.5s ease-in-out infinite; }
+@keyframes breathe {
+  0%, 100% { box-shadow: 0 2px 8px rgba(3, 144, 215, 0.25); }
+  50% { box-shadow: 0 4px 18px rgba(103, 65, 195, 0.4); }
+}
+
+/* Open status badges have a small live dot. */
+.badge-open::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #FFFFFF;
+  margin-right: 0.35rem;
+  vertical-align: 1px;
+  animation: blink 1.8s ease-in-out infinite;
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar .brand-name { color: #FFFFFF; background: none; }
+  .nav a.active::after { display: none; }
+}

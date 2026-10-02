@@ -127,7 +127,9 @@ CREATE TABLE IF NOT EXISTS tickets (
   title VARCHAR(255) NOT NULL,
   description TEXT NULL,
   status ENUM('open', 'customer_waiting', 'closed') NOT NULL DEFAULT 'open',
+  priority ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal',
   created_by INT UNSIGNED NULL,
+  updated_by INT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -156,13 +158,17 @@ CREATE TABLE IF NOT EXISTS ticket_comments (
     REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Status changes. old_status is NULL for the entry recorded when a ticket is created.
+-- Status and priority changes. A status row has old_status/new_status (old_status is
+-- NULL for the entry recorded when a ticket is created); a priority row has
+-- old_priority/new_priority and no status.
 CREATE TABLE IF NOT EXISTS ticket_history (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   ticket_id INT UNSIGNED NOT NULL,
   user_id INT UNSIGNED NULL,
   old_status ENUM('open', 'customer_waiting', 'closed') NULL,
-  new_status ENUM('open', 'customer_waiting', 'closed') NOT NULL,
+  new_status ENUM('open', 'customer_waiting', 'closed') NULL,
+  old_priority ENUM('low', 'normal', 'high', 'urgent') NULL,
+  new_priority ENUM('low', 'normal', 'high', 'urgent') NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_ticket_history_ticket (ticket_id, created_at),
@@ -292,6 +298,10 @@ CREATE TABLE IF NOT EXISTS report_issues (
 
 -- Upgrades for databases created before a column/value was added (safe to re-run).
 -- Missing columns are added by scripts/migrate.js (MySQL has no ADD COLUMN IF NOT EXISTS).
+-- Priority rows in ticket_history have no status.
+ALTER TABLE ticket_history
+  MODIFY new_status ENUM('open', 'customer_waiting', 'closed') NULL;
+
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                           'kb_article', 'tutorial', 'client', 'user', 'setting', 'manual') NOT NULL;
