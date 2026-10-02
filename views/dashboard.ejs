@@ -41,7 +41,7 @@
           <li>
             <div>
               <a href="/tickets/<%= t.id %>"><%= t.title %></a>
-              <div class="muted small"><%= t.client_name %> · <%= fmtDate(t.updated_at) %></div>
+              <div class="muted small"><%= t.client_name %> · created by <%= t.created_by || 'Deleted user' %> · updated <%= fmtDate(t.updated_at) %></div>
             </div>
             <%- include('partials/status', { status: t.status }) %>
           </li>
@@ -64,7 +64,7 @@
           <li>
             <div>
               <a href="/clients/<%= cs.client_id %>#cs-<%= cs.id %>"><%= cs.service_name %></a>
-              <div class="muted small"><%= cs.client_name %></div>
+              <div class="muted small"><%= cs.client_name %> · started by <%= cs.assigned_by || 'Deleted user' %> on <%= fmtDate(cs.created_at) %></div>
             </div>
             <% if (total) { %>
               <div class="mini-progress" title="<%= done %> of <%= total %> steps done">

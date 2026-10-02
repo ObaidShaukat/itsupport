@@ -10,16 +10,18 @@
           <th>Title</th>
           <% if (locals.showClient) { %><th>Client</th><% } %>
           <th>Status</th>
+          <th>Created by</th>
           <th>Updated</th>
         </tr>
       </thead>
       <tbody>
         <% for (const t of tickets) { %>
-          <tr data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name || '' %> <%= ticketStatuses[t.status] %>">
+          <tr data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name || '' %> <%= ticketStatuses[t.status] %> <%= t.created_by || '' %>">
             <td class="muted"><%= t.id %></td>
             <td><a href="/tickets/<%= t.id %>"><%= t.title %></a></td>
             <% if (locals.showClient) { %><td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td><% } %>
             <td><%- include('status', { status: t.status }) %></td>
+            <td class="nowrap"><%= t.created_by || 'Deleted user' %><div class="muted small"><%= fmtDate(t.created_at) %></div></td>
             <td class="muted nowrap"><%= fmtDate(t.updated_at) %></td>
           </tr>
         <% } %>
