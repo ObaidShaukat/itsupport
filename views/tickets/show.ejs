@@ -7,6 +7,11 @@
   </div>
   <div class="actions">
     <%- include('../partials/status', { status: ticket.status }) %>
+    <%- include('../partials/delete', {
+      action: `/tickets/${ticket.id}/delete`,
+      confirm: `Delete ticket #${ticket.id} "${ticket.title}" with its comments and history? This cannot be undone.`,
+      text: 'Delete',
+    }) %>
   </div>
 </header>
 

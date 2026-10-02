@@ -165,4 +165,15 @@ router.post('/:id/comments', async (req, res) => {
   res.redirect(`/tickets/${id}#comments`);
 });
 
+// Deletes the ticket with its comments and status history. The activity log keeps
+// its entries (with the title snapshot), so past reports are unchanged.
+router.post('/:id/delete', async (req, res) => {
+  const id = requireId(req.params.id);
+  const ticket = await ticketContext(pool, id);
+  await logActivity(null, req.user, ticketEntry(ticket, 'ticket', 'deleted', `Deleted ticket #${id}: ${ticket.title}`));
+  await pool.query('DELETE FROM tickets WHERE id = ?', [id]);
+  flash(req, 'success', `Ticket #${id} deleted.`);
+  res.redirect(`/clients/${ticket.client_id}#tickets`);
+});
+
 module.exports = router;
