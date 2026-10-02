@@ -1085,9 +1085,10 @@ html { scroll-behavior: smooth; }
 .priority-high, .priority-dot-high, .ticket-row-high { --led: var(--led-high); }
 .priority-urgent, .priority-dot-urgent, .ticket-row-urgent { --led: var(--led-urgent); }
 
+/* Kept low-key: a soft glow that breathes a little, not a strong flash. */
 @keyframes led-pulse {
-  0%, 100% { box-shadow: 0 0 3px var(--led), 0 0 8px var(--led); filter: brightness(1); }
-  50% { box-shadow: 0 0 6px var(--led), 0 0 18px var(--led), 0 0 28px var(--led); filter: brightness(1.12); }
+  0%, 100% { box-shadow: 0 0 2px var(--led), 0 0 4px var(--led); }
+  50% { box-shadow: 0 0 3px var(--led), 0 0 8px var(--led); }
 }
 
 .priority {
@@ -1101,7 +1102,7 @@ html { scroll-behavior: smooth; }
   white-space: nowrap;
   background: var(--led);
   color: #0B0B0F; /* dark text stays readable on the bright LED colours */
-  box-shadow: 0 0 3px var(--led), 0 0 8px var(--led);
+  box-shadow: 0 0 2px var(--led), 0 0 4px var(--led);
   animation: led-pulse var(--led-pulse) ease-in-out infinite;
 }
 .priority .icon { width: 13px; height: 13px; stroke-width: 2.4; }
@@ -1131,7 +1132,7 @@ html { scroll-behavior: smooth; }
   background: var(--led);
   animation: led-pulse var(--led-pulse) ease-in-out infinite;
 }
-.ticket-row-urgent { background: linear-gradient(90deg, rgba(255, 23, 68, 0.08), transparent 45%); }
+.ticket-row-urgent { background: linear-gradient(90deg, rgba(255, 23, 68, 0.05), transparent 45%); }
 
 /* Ticket list controls. */
 .ticket-filters { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
