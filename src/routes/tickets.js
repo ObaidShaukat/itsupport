@@ -3,6 +3,7 @@ const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound, safePath } = require('../lib/http');
 const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } = require('../lib/tickets');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
+const { linkedTasks } = require('../lib/tasks');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
 const ticketEntry = (ticket, type, action, summary) => ({
@@ -109,7 +110,8 @@ router.get('/:id', async (req, res) => {
   `, [id]);
   const activity = await historyFor(['ticket', 'ticket_comment'], [id]);
   const meta = recordMeta(activity, 'ticket', { createdBy: ticket.created_by_name, createdAt: ticket.created_at });
-  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta });
+  const tasks = await linkedTasks('ticket_id', id);
+  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta, tasks });
 });
 
 router.post('/:id/status', async (req, res) => {

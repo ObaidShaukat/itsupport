@@ -250,10 +250,10 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_id INT UNSIGNED NULL,
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
-                   'kb_article', 'tutorial', 'client', 'user', 'setting', 'manual') NOT NULL,
+                   'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
-              'reopened', 'deleted', 'uploaded') NOT NULL,
+              'reopened', 'deleted', 'uploaded', 'completed') NOT NULL,
   subject VARCHAR(255) NULL,
   summary TEXT NOT NULL,
   changes VARCHAR(255) NULL,
@@ -271,6 +271,57 @@ CREATE TABLE IF NOT EXISTS activity_log (
     REFERENCES users (id) ON DELETE SET NULL,
   CONSTRAINT fk_activity_log_client FOREIGN KEY (client_id)
     REFERENCES clients (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Tasks (like Microsoft To Do). due_at / remind_at are chosen in UK time and stored
+-- in UTC. reminder_sent_at is set once the reminder has become a notification.
+CREATE TABLE IF NOT EXISTS tasks (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  title VARCHAR(255) NOT NULL,
+  notes TEXT NULL,
+  assigned_to INT UNSIGNED NULL,
+  due_at DATETIME NULL,
+  remind_at DATETIME NULL,
+  reminder_sent_at DATETIME NULL,
+  status ENUM('todo', 'done') NOT NULL DEFAULT 'todo',
+  important TINYINT(1) NOT NULL DEFAULT 0,
+  client_id INT UNSIGNED NULL,
+  ticket_id INT UNSIGNED NULL,
+  created_by INT UNSIGNED NULL,
+  updated_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  completed_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_tasks_assignee (assigned_to, status, due_at),
+  KEY idx_tasks_reminder (status, remind_at, reminder_sent_at),
+  KEY idx_tasks_client (client_id),
+  KEY idx_tasks_ticket (ticket_id),
+  CONSTRAINT fk_tasks_assignee FOREIGN KEY (assigned_to) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_tasks_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL,
+  CONSTRAINT fk_tasks_ticket FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE SET NULL,
+  CONSTRAINT fk_tasks_creator FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_tasks_editor FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Notifications. Only the 'portal' channel (bell + toast) is delivered today;
+-- 'email' and 'teams' are reserved for later. delivered_at is when the toast was shown.
+CREATE TABLE IF NOT EXISTS notifications (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NOT NULL,
+  channel ENUM('portal', 'email', 'teams') NOT NULL DEFAULT 'portal',
+  type VARCHAR(50) NOT NULL,
+  title VARCHAR(255) NOT NULL,
+  body VARCHAR(500) NULL,
+  link VARCHAR(500) NULL,
+  task_id INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  delivered_at DATETIME NULL,
+  read_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_notifications_user (user_id, read_at, created_at),
+  CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_notifications_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Daily Report wording, edited on the Settings page.
@@ -304,4 +355,8 @@ ALTER TABLE ticket_history
 
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
-                          'kb_article', 'tutorial', 'client', 'user', 'setting', 'manual') NOT NULL;
+                          'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'manual') NOT NULL;
+
+ALTER TABLE activity_log
+  MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
+              'reopened', 'deleted', 'uploaded', 'completed') NOT NULL;

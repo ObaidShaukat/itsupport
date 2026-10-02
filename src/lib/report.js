@@ -81,7 +81,8 @@ const forClient = (text, client) => (client && !mentions(text, client) ? `${text
 // ---- Bullets ----
 
 // One user's day: one bullet per entry, in this order: client services, tickets,
-// log work, knowledge base, then always "Other IT related tasks.".
+// tasks, log work, knowledge base, then always "Other IT related tasks.".
+//   Task completed:   "Completed task: {title} for {client}."  (no client: "Completed task: {title}.")
 //   Log work:         "{text} for {client}."  (no client: "{text}.")
 //   Ticket comment:   "Provided IT support to {client} regarding {comment}."  (empty comment: the ticket title)
 //   Ticket created / status changed without a comment from this user:
@@ -97,7 +98,7 @@ const forClient = (text, client) => (client && !mentions(text, client) ? `${text
 // changes are left out (they are listed on /activity).
 function userLines(rows) {
   const section = () => ({ items: [], byKey: new Map() });
-  const sections = { services: section(), tickets: section(), logwork: section(), kb: section() };
+  const sections = { services: section(), tickets: section(), tasks: section(), logwork: section(), kb: section() };
   const commentedTickets = new Set();
 
   // Adds an item once per key; later rows for the same key update it in place.
@@ -155,6 +156,12 @@ function userLines(rows) {
         if (step && !steps.steps.some((x) => x.toLowerCase() === step.toLowerCase())) steps.steps.push(step);
         break;
       }
+      case 'task':
+        // Only completions are reported; other task changes are on /activity.
+        if (row.action === 'completed' && subject) {
+          item(sections.tasks, `task:${row.entity_id}`, () => ({ text: sentence(forClient(`Completed task: ${subject}`, client)) }));
+        }
+        break;
       case 'kb_article': {
         const a = item(sections.kb, `kb:${row.entity_id}`, () => ({ kb: true, created: false }));
         a.title = subject;
@@ -184,7 +191,7 @@ function userLines(rows) {
 
   const seen = new Set();
   const lines = [];
-  for (const sec of [sections.services, sections.tickets, sections.logwork, sections.kb]) {
+  for (const sec of [sections.services, sections.tickets, sections.tasks, sections.logwork, sections.kb]) {
     for (const entry of sec.items) {
       const line = render(entry);
       if (line && !seen.has(line.toLowerCase())) {

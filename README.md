@@ -101,7 +101,16 @@ pm2 restart itsupport
 
 ## Tickets
 
-Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as coloured flags: green, yellow, orange and red, with urgent and high pulsing. Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time).
+Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as glowing LED flags (Low green, Normal cyan, High amber, Urgent red) that all pulse together. Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time).
+
+## Tasks and reminders
+
+The Tasks page works like Microsoft To Do. Its views are My Day (due today), Upcoming, Overdue, Important, All and Completed. You can filter by assignee, client and ticket, and search.
+
+- **Adding tasks:** type in the quick-add box and press Enter. In My Day the task is due today at 17:00, and in Important it is starred. Click a task to edit everything in the side panel: due date, reminder, assignee, client, ticket and notes.
+- **Ticket and client pages:** each has a Tasks panel with an Add task form pre-filled with that ticket or client.
+- **Reminders:** in the portal only for now. The bell in the top bar checks every 60 seconds. When a task's reminder time passes, the person it is assigned to (or its creator if it is unassigned) gets a notification in the bell and a toast, with Mark read and Snooze (10 minutes, 1 hour, tomorrow 09:00). Reminders are created when that person next has the portal open; there is no background job. The `notifications` table has a `channel` column so email or Teams can be added later.
+- **Daily Report:** completed tasks appear as "Completed task: {title} for {client}." Every task action is in the activity log.
 
 ## Activity log and Daily Report
 

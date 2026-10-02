@@ -2,6 +2,7 @@ const express = require('express');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
+const { linkedTasks } = require('../lib/tasks');
 const { logActivity, historyFor, clientHistory, recordMeta } = require('../lib/activity');
 
 const router = express.Router();
@@ -141,8 +142,9 @@ router.get('/clients/:id', async (req, res) => {
     group.services.push(s);
   }
 
+  const tasks = await linkedTasks('client_id', id);
   res.render('clients/show', {
-    title: client.name, client, clientMeta, activity, clientServices, tickets, ticketState, ticketControls, serviceGroups,
+    title: client.name, client, clientMeta, activity, clientServices, tickets, ticketState, ticketControls, serviceGroups, tasks,
   });
 });
 

@@ -46,6 +46,19 @@
   </aside>
   <main class="main">
     <div class="topbar">
+      <div class="bell" data-bell>
+        <button type="button" class="icon-btn bell-button" aria-haspopup="true" aria-expanded="false" aria-label="Notifications" title="Notifications" data-bell-toggle>
+          <%- icon('bell') %><span class="bell-count" data-bell-count hidden>0</span>
+        </button>
+        <div class="bell-panel card" data-bell-panel hidden>
+          <div class="bell-head">
+            <strong>Notifications</strong>
+            <button type="button" class="btn btn-ghost btn-small" data-bell-read-all>Mark all read</button>
+          </div>
+          <ul class="bell-list" data-bell-list><li class="empty small">Loading…</li></ul>
+          <a href="/tasks" class="link-more">Open Tasks <%- icon('arrow-right') %></a>
+        </div>
+      </div>
       <a href="/report" class="topbar-link"><%- icon('calendar') %><span>Today's report</span></a>
       <a href="/log-work?back=<%= encodeURIComponent(locals.currentPath || '/') %>" class="btn btn-primary" data-log-work><%- icon('pen') %><span>Log work</span></a>
     </div>

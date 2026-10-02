@@ -167,6 +167,12 @@
   </div>
 </section>
 
+<section class="section" id="tasks">
+  <div class="card">
+    <%- include('../partials/tasks-panel', { tasks, link: { client_id: client.id } }) %>
+  </div>
+</section>
+
 <section class="section" id="activity">
   <div class="card">
     <%- include('../partials/history', { entries: activity, label: 'Client activity', showSubject: true }) %>

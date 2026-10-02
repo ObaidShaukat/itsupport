@@ -354,3 +354,141 @@ document.querySelectorAll('.stat-value').forEach((el) => {
   el.textContent = '0';
   requestAnimationFrame(step);
 });
+
+// ---- Notifications bell (in-portal reminders) ----
+// Polls /notifications/poll on load and every 60 seconds. Each poll also turns due
+// task reminders into notifications on the server. New ones pop up as a toast.
+const bell = document.querySelector('[data-bell]');
+if (bell) {
+  const bellToggle = bell.querySelector('[data-bell-toggle]');
+  const bellPanel = bell.querySelector('[data-bell-panel]');
+  const bellList = bell.querySelector('[data-bell-list]');
+  const bellCount = bell.querySelector('[data-bell-count]');
+  const toastBox = document.querySelector('[data-toasts]');
+  const bellToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+
+  const post = (url, data = {}) => fetch(url, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: bellToken, ...data }),
+    credentials: 'same-origin',
+  }).then((r) => r.json().catch(() => ({ ok: false })));
+
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+
+  // Read / snooze buttons for one notification (used in the bell list and in toasts).
+  function actionButtons(n, after) {
+    const box = el('div', 'notice-actions');
+    const add = (label, fn) => {
+      const b = el('button', 'btn btn-small btn-ghost', label);
+      b.type = 'button';
+      b.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await fn();
+        after();
+        poll();
+      });
+      box.appendChild(b);
+    };
+    if (!n.read) add('Mark read', () => post(`/notifications/${n.id}/read`));
+    if (n.taskId) {
+      add('Snooze 10 min', () => post(`/notifications/${n.id}/snooze`, { until: '10m' }));
+      add('1 hour', () => post(`/notifications/${n.id}/snooze`, { until: '1h' }));
+      add('Tomorrow', () => post(`/notifications/${n.id}/snooze`, { until: 'tomorrow' }));
+    }
+    return box;
+  }
+
+  function noticeBody(n) {
+    const wrap = el('div', 'notice-body');
+    const title = el(n.link ? 'a' : 'strong', 'notice-title', n.title);
+    if (n.link) title.href = n.link;
+    wrap.appendChild(title);
+    if (n.body) wrap.appendChild(el('div', 'muted small', n.body));
+    wrap.appendChild(el('div', 'muted small', n.time));
+    return wrap;
+  }
+
+  function render(data) {
+    const unread = Number(data.unread) || 0;
+    bellCount.textContent = unread > 99 ? '99+' : String(unread);
+    bellCount.hidden = unread === 0;
+    bell.classList.toggle('has-unread', unread > 0);
+    bellList.replaceChildren();
+    if (!data.items.length) bellList.appendChild(el('li', 'empty small', 'No notifications yet.'));
+    for (const n of data.items) {
+      const li = el('li', `notice ${n.read ? 'is-read' : ''}`);
+      li.appendChild(noticeBody(n));
+      li.appendChild(actionButtons(n, () => {}));
+      bellList.appendChild(li);
+    }
+  }
+
+  function toast(n) {
+    if (!toastBox) return;
+    const box = el('div', 'toast');
+    box.setAttribute('role', 'status');
+    const close = el('button', 'icon-btn toast-close', '×');
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Dismiss');
+    const dismiss = () => {
+      box.classList.add('is-leaving');
+      setTimeout(() => box.remove(), 250);
+    };
+    close.addEventListener('click', dismiss);
+    box.appendChild(el('span', 'toast-icon', '🔔'));
+    box.appendChild(noticeBody(n));
+    box.appendChild(close);
+    box.appendChild(actionButtons(n, dismiss));
+    toastBox.appendChild(box);
+    setTimeout(dismiss, 20000);
+  }
+
+  async function poll() {
+    try {
+      const res = await fetch('/notifications/poll', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.ok) return;
+      render(data);
+      data.toasts.forEach(toast);
+    } catch (err) {
+      // Offline or signed out: try again on the next tick.
+    }
+  }
+
+  bellToggle.addEventListener('click', () => {
+    const show = bellPanel.hidden;
+    bellPanel.hidden = !show;
+    bellToggle.setAttribute('aria-expanded', String(show));
+    if (show) poll();
+  });
+  document.addEventListener('click', (e) => {
+    if (!bellPanel.hidden && !bell.contains(e.target)) {
+      bellPanel.hidden = true;
+      bellToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+  bell.querySelector('[data-bell-read-all]').addEventListener('click', async () => {
+    await post('/notifications/read-all');
+    poll();
+  });
+
+  poll();
+  setInterval(poll, 60000);
+}
+
+// Task side panel: Esc closes it (back to the list).
+const taskPanel = document.querySelector('[data-task-panel]');
+if (taskPanel) {
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || document.querySelector('dialog[open], details.edit[open]')) return;
+    const close = taskPanel.querySelector('[data-panel-close]');
+    if (close) window.location.href = close.href;
+  });
+}

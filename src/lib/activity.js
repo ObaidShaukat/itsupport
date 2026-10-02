@@ -9,6 +9,7 @@
 //   client                             -> client id
 //   user                               -> user id (Users page changes)
 //   setting                            -> (no longer written) old report action/issue changes
+//   task                               -> task id
 //   manual                             -> null
 // client_name and subject (ticket title, service name, ...) are snapshots, so the
 // log still reads correctly after the record is renamed or deleted. changes lists
@@ -18,8 +19,8 @@
 // activity_date is the UK date of the action (or the date picked for manual work).
 const { pool } = require('../db');
 
-const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'manual'];
-const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded'];
+const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'manual'];
+const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed'];
 
 const ACTION_LABELS = {
   created: 'Created',
@@ -31,6 +32,7 @@ const ACTION_LABELS = {
   reopened: 'Reopened',
   deleted: 'Deleted',
   uploaded: 'Uploaded',
+  completed: 'Completed',
 };
 
 // Today's date in the UK as YYYY-MM-DD. Report days follow UK time.
@@ -56,6 +58,29 @@ function londonDayStart(date) {
   const midnightUtc = new Date(`${date}T00:00:00Z`).getTime();
   const first = midnightUtc - londonOffsetMs(new Date(midnightUtc));
   return new Date(midnightUtc - londonOffsetMs(new Date(first)));
+}
+
+// UK wall-clock time from a form ("YYYY-MM-DDTHH:MM", e.g. a datetime-local input) as
+// a UTC Date, or null. User-chosen times like task due dates and reminders are the
+// only times set from JavaScript; "now" timestamps always come from MySQL.
+function londonLocalToUtc(value) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || '').trim());
+  if (!m) return null;
+  const asUtc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), Number(m[4]), Number(m[5]));
+  if (Number.isNaN(asUtc)) return null;
+  const first = asUtc - londonOffsetMs(new Date(asUtc));
+  return new Date(asUtc - londonOffsetMs(new Date(first)));
+}
+
+// A Date as UK wall-clock "YYYY-MM-DDTHH:MM" for a datetime-local input.
+function toLondonInput(date) {
+  if (!date) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(date));
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
 // Writes one log entry. A logging failure is reported but never breaks the
@@ -142,6 +167,8 @@ module.exports = {
   ACTION_LABELS,
   londonDate,
   londonDayStart,
+  londonLocalToUtc,
+  toLondonInput,
   logActivity,
   historyFor,
   clientHistory,
