@@ -908,34 +908,6 @@ input[type="date"]:focus { outline: none; border-color: var(--blue); box-shadow:
 .table-log td { vertical-align: top; font-size: 0.88rem; }
 .table-log .log-summary { min-width: 220px; max-width: 420px; white-space: pre-line; overflow-wrap: anywhere; }
 
-/* ---- Daily Report fields on forms ---- */
-
-.report-fields {
-  border: 1px dashed #D1D1D6;
-  border-radius: var(--radius-sm);
-  padding: 0.75rem 0.9rem 0.9rem;
-  margin: 0;
-  display: grid;
-  gap: 0.75rem;
-  background: var(--surface-soft);
-}
-.report-fields legend { font-size: 0.8rem; font-weight: 700; color: var(--purple); padding: 0 0.35rem; }
-.report-fields-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.report-toggle > summary {
-  cursor: pointer;
-  list-style: none;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--purple);
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-.report-toggle > summary::-webkit-details-marker { display: none; }
-.report-toggle[open] > summary { margin-bottom: 0.6rem; }
-.report-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.35rem; }
-.report-tags-label { font-size: 0.75rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-
 /* ---- Editable report preview ---- */
 
 .report-preview-head .icon { width: 14px; height: 14px; }
@@ -954,16 +926,6 @@ input[type="date"]:focus { outline: none; border-color: var(--blue); box-shadow:
 .report-preview .report-day-title { font-family: Calibri, Arial, sans-serif; font-size: 12pt; color: var(--indigo); text-decoration: underline; }
 .report-preview .report-user + .report-user { margin-top: 1rem; }
 
-/* ---- Settings ---- */
-
-.settings-add { margin-bottom: 1rem; }
-.settings-add form { max-width: 640px; }
-.term-preview { margin: 0; font-size: 0.88rem; color: var(--muted); }
-.term-preview [data-preview-output] { color: var(--text); font-style: italic; }
-.table-terms code { white-space: normal; }
-.table-terms td.row-actions { white-space: nowrap; }
-
 @media (max-width: 860px) {
-  .report-fields-row { grid-template-columns: 1fr; }
   .report-preview { padding: 1rem; }
 }

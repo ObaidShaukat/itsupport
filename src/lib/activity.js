@@ -8,7 +8,7 @@
 //   kb_article                         -> article id
 //   client                             -> client id
 //   user                               -> user id (Users page changes)
-//   setting                            -> report action/issue id (Settings page changes)
+//   setting                            -> (no longer written) old report action/issue changes
 //   manual                             -> null
 // client_name and subject (ticket title, service name, ...) are snapshots, so the
 // log still reads correctly after the record is renamed or deleted. changes lists
@@ -67,9 +67,8 @@ async function logActivity(db, user, entry) {
   try {
     await (db || pool).query(`
       INSERT INTO activity_log
-        (user_id, client_id, client_name, entity_type, entity_id, action, subject, summary, changes,
-         action_id, issue_id, report_detail, activity_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, client_id, client_name, entity_type, entity_id, action, subject, summary, changes, activity_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       user ? user.id : null,
       entry.clientId || null,
@@ -80,10 +79,6 @@ async function logActivity(db, user, entry) {
       entry.subject ? String(entry.subject).slice(0, 255) : null,
       String(entry.summary || '').slice(0, 5000),
       entry.changes && entry.changes.length ? entry.changes.join(',').slice(0, 255) : null,
-      // Daily Report action / issue / detail picked on the form (see report-terms.js).
-      entry.report ? entry.report.actionId : null,
-      entry.report ? entry.report.issueId : null,
-      entry.report && entry.report.detail ? String(entry.report.detail).slice(0, 255) : null,
       entry.date || londonDate(),
     ]);
   } catch (err) {

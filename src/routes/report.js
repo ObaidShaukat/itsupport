@@ -25,13 +25,10 @@ router.get('/', async (req, res) => {
 
   // Your own manual entries in this period, for editing.
   const [manual] = await pool.query(`
-    SELECT l.id, l.client_name, l.summary, l.activity_date, l.action_id, l.report_detail,
-           ra.name AS action_name, ri.name AS issue_name
-    FROM activity_log l
-    LEFT JOIN report_actions ra ON ra.id = l.action_id
-    LEFT JOIN report_issues ri ON ri.id = l.issue_id
-    WHERE l.entity_type = 'manual' AND l.user_id = ? AND l.activity_date BETWEEN ? AND ?
-    ORDER BY l.activity_date, l.created_at, l.id
+    SELECT id, client_name, summary, activity_date
+    FROM activity_log
+    WHERE entity_type = 'manual' AND user_id = ? AND activity_date BETWEEN ? AND ?
+    ORDER BY activity_date, created_at, id
   `, [req.user.id, from, to]);
 
   const link = (range) => {

@@ -18,10 +18,8 @@
     </label>
     <label class="field">
       <span>What did you do?</span>
-      <textarea name="description" rows="5" maxlength="2000"><%= entry.description %></textarea>
-      <small class="muted">Shown in the report as written, unless you pick an action or issue below.</small>
+      <textarea name="description" rows="5" required maxlength="2000"><%= entry.description %></textarea>
     </label>
-    <%- include('../partials/report-fields', { values: entry }) %>
     <label class="field">
       <span>Date</span>
       <input type="date" name="date" value="<%= entry.date %>" required>

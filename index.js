@@ -14,7 +14,6 @@ const multipart = require('./src/middleware/multipart');
 const { detectFonts } = require('./src/lib/fonts');
 const { TICKET_STATUSES } = require('./src/lib/tickets');
 const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
-const { loadTerms } = require('./src/lib/report-terms');
 
 if (!config.sessionSecret) {
   console.error('SESSION_SECRET is not set in .env');
@@ -60,7 +59,6 @@ app.locals.navItems = [
   { key: 'kb', href: '/kb', label: 'General IT Support', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
-  { key: 'settings', href: '/settings', label: 'Settings', icon: 'sliders' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 app.locals.fmtDate = (value) => (value
@@ -127,7 +125,6 @@ const NAV_PREFIXES = [
   ['/users', 'users'],
   ['/kb', 'kb'],
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
-  ['/settings', 'settings'],
 ];
 app.use((req, res, next) => {
   const hit = NAV_PREFIXES.find(([prefix]) => req.path === prefix || req.path.startsWith(`${prefix}/`));
@@ -140,18 +137,14 @@ app.use((req, res, next) => {
 app.use(require('./src/routes/auth'));
 app.use(requireAuth);
 
-// Data for the "Log work" dialog and the report fields (action / issue) on forms.
+// Data for the "Log work" dialog in the top bar of every page.
 app.use(async (req, res, next) => {
   res.locals.today = londonDate();
   res.locals.currentPath = req.originalUrl;
-  // Only pages need it (including forms re-shown after an error), not file
-  // downloads or fetch() calls.
-  if (!req.path.startsWith('/files/') && req.accepts(['html', 'json']) === 'html') {
+  // Only full pages need it, not file downloads or fetch() calls.
+  if (req.method === 'GET' && !req.path.startsWith('/files/') && req.accepts(['html', 'json']) === 'html') {
     const [clients] = await pool.query('SELECT name FROM clients ORDER BY name');
     res.locals.logWorkClients = clients.map((c) => c.name);
-    const { actions, issues } = await loadTerms();
-    res.locals.reportActions = actions;
-    res.locals.reportIssues = issues;
   }
   next();
 });
@@ -166,7 +159,6 @@ app.use('/files', require('./src/routes/files'));
 app.use('/log-work', require('./src/routes/activity'));
 app.use('/report', require('./src/routes/report'));
 app.use('/activity', require('./src/routes/activity-log'));
-app.use('/settings', require('./src/routes/settings'));
 
 // ---- Errors ----
 

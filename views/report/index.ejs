@@ -100,7 +100,6 @@
                     <span>Description</span>
                     <textarea name="description" rows="3" maxlength="2000"><%= m.summary %></textarea>
                   </label>
-                  <%- include('../partials/report-fields', { values: { report_action: m.action_id, report_issue: m.issue_name, report_detail: m.report_detail } }) %>
                   <label class="field">
                     <span>Date</span>
                     <input type="date" name="date" value="<%= m.activity_date %>" required>

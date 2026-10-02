@@ -1,15 +1,14 @@
 // Daily report: built only from activity_log. A UK date (or range) is turned into a
 // UTC start/end and automatic entries are matched on created_at (when the action
 // happened). Manual "Log work" entries are matched on the date the user picked.
-// Each user gets a "<User>'s Work:" list built from fixed templates (no AI): actions
-// and issues picked on forms are grouped per client, see userLines() below.
+// Each user gets a "<User>'s Work:" list with one bullet per entry, built from what
+// was typed (Log work text, comment text, note text), see userLines() below.
 const { pool } = require('../db');
 const { londonDate, londonDayStart } = require('./activity');
-const { DEFAULT_TEMPLATE, joinAnd, fillTemplate } = require('./report-terms');
 
 const MAX_RANGE_DAYS = 62;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const SNIPPET_LENGTH = 150;
+const SNIPPET_LENGTH = 200;
 
 function isDate(value) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
@@ -62,43 +61,44 @@ const snippet = (text) => {
   const t = withoutStop(withoutPrefix(text));
   return t.length > SNIPPET_LENGTH ? `${t.slice(0, SNIPPET_LENGTH - 1).trimEnd()}…` : t;
 };
-// Capital first letter, exactly one full stop at the end, no semicolons.
+// Cleans a bullet: trimmed, no semicolons, "setup"/"set-up" at the start becomes
+// "Set up", first letter capitalised, exactly one full stop at the end.
 const sentence = (text) => {
-  const t = clean(text).replace(/;/g, ',').replace(/[.\s]+$/, '');
+  let t = clean(text).replace(/;/g, ',').replace(/[.\s]+$/, '');
   if (!t) return '';
-  const capitalised = t.charAt(0).toUpperCase() + t.slice(1);
-  return /[!?]$/.test(capitalised) ? capitalised : `${capitalised}.`;
+  t = t.replace(/^set[\s-]?up\b/i, 'Set up');
+  t = t.charAt(0).toUpperCase() + t.slice(1);
+  return /[!?]$/.test(t) ? t : `${t}.`;
 };
 
-// Subject used when an action is picked with no issue and nothing else to go on.
-const FALLBACK_SUBJECT = 'general IT';
+// "British" list: "A", "A and B", "A, B and C".
+const joinAnd = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+
+const mentions = (text, client) => Boolean(client) && text.toLowerCase().includes(client.toLowerCase());
+// Adds " for {client}" unless there is no client or the text already names it.
+const forClient = (text, client) => (client && !mentions(text, client) ? `${text} for ${client}` : text);
 
 // ---- Bullets ----
 
-// One user's day as bullets, in this order: client services, tickets, log work,
-// knowledge base, then always "Other IT related tasks.". Duplicate lines are removed.
-//
-// Comments, notes and Log work with an action and/or issue are grouped per client +
-// action, their subjects joined "A, B and C" into the action's template, with any
-// report details in brackets:
-//   "Resolved Remote Desktop access and Outlook connectivity and mailbox issues for ASL Solicitors (rebuilt user profile)."
-//   Issue only -> "Provided IT support to {client} regarding {problem phrase} issues."
-//   Action only -> the ticket title (or Log work text) is the subject.
-//   Log work with no client -> "internal staff".
-// Without an action or issue:
-//   Tickets (created, status changes, plain comments) -> "Provided IT support to {client} regarding {titles}."
-//   Notes -> "Continued {service} for {client} ({detail})."
-//   Log work -> as written.
-// Client services: "Commenced {service} for {client}.", "Completed {steps} as part of
-// {service} for {client}.", "Completed {service} for {client}." ({service} is the
-// service's report phrase, or its name).
-// Knowledge base: "Documented a solution for '{title}' in the knowledge base." /
-// "Updated the knowledge base article '{title}'."
-// Deletes, unticked steps, reopenings, client/user/settings/catalogue changes are left out.
+// One user's day: one bullet per entry, in this order: client services, tickets,
+// log work, knowledge base, then always "Other IT related tasks.".
+//   Log work:         "{text} for {client}."  (no client: "{text}.")
+//   Ticket comment:   "Provided IT support to {client} regarding {comment}."  (empty comment: the ticket title)
+//   Ticket created / status changed without a comment from this user:
+//                     "Provided IT support to {client} regarding {title}."
+//   Note:             "{note} for {client} ({service})."
+//   Client services:  "Commenced {service} for {client}." / "Completed {steps} as part of
+//                     {service} for {client}." / "Completed {service} for {client}."
+//                     ({service} is the service's report phrase, or its name)
+//   Knowledge base:   "Documented a solution for '{title}' in the knowledge base." /
+//                     "Updated the knowledge base article '{title}'."
+// "for {client}" is left out when the text already names the client. Exact duplicate
+// lines are removed. Deletes, unticked steps, reopenings and client/user/catalogue
+// changes are left out (they are listed on /activity).
 function userLines(rows) {
   const section = () => ({ items: [], byKey: new Map() });
   const sections = { services: section(), tickets: section(), logwork: section(), kb: section() };
-  const groupedTickets = new Set();
+  const commentedTickets = new Set();
 
   // Adds an item once per key; later rows for the same key update it in place.
   const item = (sec, key, create) => {
@@ -109,25 +109,7 @@ function userLines(rows) {
     }
     return sec.byKey.get(key);
   };
-  const addUnique = (list, value) => {
-    const v = withoutStop(value);
-    if (v && !list.some((x) => x.toLowerCase() === v.toLowerCase())) list.push(v);
-  };
-
-  // Grouped "action + issue" line for one client.
-  const addGrouped = (sec, client, row, fallbackSubject) => {
-    const action = row.action_template ? { id: row.action_ref, template: row.action_template, type: row.phrase_type } : null;
-    const issuePhrase = row.issue_name
-      ? (action && action.type === 'config' ? row.config_phrase : row.problem_phrase) || row.issue_name
-      : null;
-    const bucket = item(sec, `group:${client.toLowerCase()}:${action ? action.id : 'default'}`, () => ({
-      grouped: true, client, template: action ? action.template : DEFAULT_TEMPLATE, subjects: [], details: [],
-    }));
-    addUnique(bucket.subjects, issuePhrase || fallbackSubject || FALLBACK_SUBJECT);
-    addUnique(bucket.details, row.report_detail);
-  };
-
-  const hasTerms = (row) => Boolean(row.action_template || row.issue_name);
+  const push = (sec, text) => sec.items.push({ text: sentence(text) });
 
   for (const row of rows) {
     if (row.action === 'deleted') continue;
@@ -136,34 +118,28 @@ function userLines(rows) {
     const servicePhrase = withoutStop(row.service_phrase) || subject;
 
     switch (row.entity_type) {
-      case 'manual':
-        if (hasTerms(row)) addGrouped(sections.logwork, client || 'internal staff', row, snippet(row.summary));
-        else if (clean(row.summary)) sections.logwork.items.push({ text: sentence(row.summary) });
-        break;
-      case 'ticket_comment':
-        if (!client) break;
-        if (hasTerms(row)) {
-          addGrouped(sections.tickets, client, row, subject);
-          groupedTickets.add(row.entity_id);
-          break;
-        }
-      // A plain comment counts like any other work on the ticket.
-      // falls through
-      case 'ticket': {
-        if (!client) break;
-        const titles = item(sections.tickets, `titles:${client.toLowerCase()}`, () => ({ client, titles: new Map() }));
-        if (!titles.titles.has(row.entity_id)) titles.titles.set(row.entity_id, subject);
+      case 'manual': {
+        const text = withoutStop(row.summary);
+        if (text) push(sections.logwork, forClient(text, client));
         break;
       }
-      case 'note':
+      case 'ticket_comment': {
         if (!client) break;
-        if (hasTerms(row)) {
-          addGrouped(sections.services, client, row, servicePhrase);
-        } else {
-          const detail = withoutStop(row.report_detail);
-          sections.services.items.push({ text: sentence(`Continued ${servicePhrase} for ${client}${detail ? ` (${detail})` : ''}`) });
-        }
+        commentedTickets.add(row.entity_id);
+        const regarding = snippet(row.summary) || subject;
+        if (regarding) push(sections.tickets, `Provided IT support to ${client} regarding ${regarding}`);
         break;
+      }
+      case 'ticket':
+        if (!client || !subject) break;
+        item(sections.tickets, `ticket:${row.entity_id}`, () => ({ ticketId: row.entity_id, client, title: subject }));
+        break;
+      case 'note': {
+        if (!client) break;
+        const text = snippet(row.summary);
+        if (text) push(sections.services, `${forClient(text, client)}${subject ? ` (${subject})` : ''}`);
+        break;
+      }
       case 'client_service':
         if (!client) break;
         if (row.action === 'created') {
@@ -175,7 +151,8 @@ function userLines(rows) {
       case 'step': {
         if (!client || row.action !== 'step_done') break;
         const steps = item(sections.services, `steps:${row.entity_id}`, () => ({ client, phrase: servicePhrase, steps: [] }));
-        addUnique(steps.steps, withoutPrefix(row.summary));
+        const step = withoutStop(withoutPrefix(row.summary));
+        if (step && !steps.steps.some((x) => x.toLowerCase() === step.toLowerCase())) steps.steps.push(step);
         break;
       }
       case 'kb_article': {
@@ -190,13 +167,9 @@ function userLines(rows) {
   }
 
   const render = (entry) => {
-    if (entry.grouped) {
-      const text = withoutStop(fillTemplate(entry.template, entry.client, entry.subjects));
-      return sentence(entry.details.length ? `${text} (${entry.details.join(', ')})` : text);
-    }
-    if (entry.titles) {
-      const titles = [...entry.titles].filter(([id]) => !groupedTickets.has(id)).map(([, title]) => title).filter(Boolean);
-      return titles.length ? sentence(`Provided IT support to ${entry.client} regarding ${joinAnd(titles)}`) : null;
+    if (entry.ticketId !== undefined) {
+      // Comment bullets already cover tickets this user commented on.
+      return commentedTickets.has(entry.ticketId) ? null : sentence(`Provided IT support to ${entry.client} regarding ${entry.title}`);
     }
     if (entry.steps) {
       return entry.steps.length ? sentence(`Completed ${joinAnd(entry.steps)} as part of ${entry.phrase} for ${entry.client}`) : null;
@@ -232,14 +205,11 @@ async function buildReport({ from, to, userId }) {
   const [rows] = await pool.query(`
     SELECT l.user_id, u.username, l.client_id, COALESCE(c.name, l.client_name) AS client_name,
            l.entity_type, l.entity_id, l.action, l.subject, l.summary, l.changes,
-           l.report_detail, ra.id AS action_ref, ra.template AS action_template, ra.phrase_type,
-           ri.name AS issue_name, ri.problem_phrase, ri.config_phrase, s.report_phrase AS service_phrase,
+           s.report_phrase AS service_phrase,
            l.activity_date, l.created_at, l.id
     FROM activity_log l
     LEFT JOIN users u ON u.id = l.user_id
     LEFT JOIN clients c ON c.id = l.client_id
-    LEFT JOIN report_actions ra ON ra.id = l.action_id
-    LEFT JOIN report_issues ri ON ri.id = l.issue_id
     LEFT JOIN client_services cs ON cs.id = l.entity_id AND l.entity_type IN ('client_service', 'step', 'note')
     LEFT JOIN services s ON s.id = cs.service_id
     WHERE ${range.sql} ${userId ? 'AND l.user_id = ?' : ''}

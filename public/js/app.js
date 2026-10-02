@@ -310,35 +310,3 @@ document.querySelectorAll('[data-copy]').forEach((button) => {
     }
   });
 });
-
-// Settings: live preview of action templates and issue phrases.
-// Each form has data-term-preview="action" or "issue" and an [data-preview-output].
-const SAMPLE_CLIENT = 'ASL Solicitors';
-const SAMPLE_ISSUE = { problem: 'Outlook connectivity and mailbox', config: 'Outlook profiles and mailboxes' };
-const fillSample = (template, subjects) => {
-  const text = template.replace(/\{client\}/g, SAMPLE_CLIENT).replace(/\{subjects\}/g, subjects).replace(/[.\s]+$/, '').trim();
-  return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}.` : '';
-};
-
-function updateTermPreview(form) {
-  const output = form.querySelector('[data-preview-output]');
-  if (!output) return;
-  const value = (name) => (form.elements[name] ? form.elements[name].value.trim() : '');
-  if (form.dataset.termPreview === 'action') {
-    const type = value('phrase_type') === 'config' ? 'config' : 'problem';
-    output.textContent = fillSample(value('template'), SAMPLE_ISSUE[type]) || '—';
-  } else {
-    const name = value('name');
-    output.textContent = [
-      fillSample('Resolved {subjects} issues for {client}.', value('problem_phrase') || name),
-      fillSample('Configured {subjects} for {client}.', value('config_phrase') || name),
-    ].filter(Boolean).join('  /  ') || '—';
-  }
-}
-
-document.querySelectorAll('form[data-term-preview]').forEach((form) => {
-  form.addEventListener('input', () => updateTermPreview(form));
-  form.addEventListener('change', () => updateTermPreview(form));
-  form.addEventListener('reset', () => setTimeout(() => updateTermPreview(form)));
-  updateTermPreview(form);
-});
