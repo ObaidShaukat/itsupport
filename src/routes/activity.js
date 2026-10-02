@@ -2,14 +2,13 @@
 // and delete only their own entries.
 const express = require('express');
 const { pool } = require('../db');
-const { str, requireId, flash, notFound } = require('../lib/http');
+const { str, requireId, flash, notFound, safePath } = require('../lib/http');
 const { londonDate } = require('../lib/activity');
 const { isDate } = require('../lib/report');
 
 const router = express.Router();
 
-// Only same-site paths are allowed as a return address.
-const safeBack = (value) => (typeof value === 'string' && /^\/(?!\/)\S*$/.test(value) ? value.slice(0, 500) : '/report');
+const safeBack = (value) => safePath(value, '/report');
 
 function readEntry(body) {
   return {

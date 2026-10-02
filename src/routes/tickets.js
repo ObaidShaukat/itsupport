@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool, transaction } = require('../db');
-const { str, requireId, toId, flash, notFound } = require('../lib/http');
+const { str, requireId, toId, flash, notFound, safePath } = require('../lib/http');
 const { TICKET_STATUSES, isTicketStatus } = require('../lib/tickets');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
@@ -165,15 +165,16 @@ router.post('/:id/comments', async (req, res) => {
   res.redirect(`/tickets/${id}#comments`);
 });
 
-// Deletes the ticket with its comments and status history. The activity log keeps
-// its entries (with the title snapshot), so past reports are unchanged.
+// Deletes the ticket with its comments and status history (ON DELETE CASCADE).
+// The activity log keeps its entries (with the title snapshot), so past reports are
+// unchanged. Returns to the list it was deleted from (back), or the client's tickets.
 router.post('/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   const ticket = await ticketContext(pool, id);
   await logActivity(null, req.user, ticketEntry(ticket, 'ticket', 'deleted', `Deleted ticket #${id}: ${ticket.title}`));
   await pool.query('DELETE FROM tickets WHERE id = ?', [id]);
-  flash(req, 'success', `Ticket #${id} deleted.`);
-  res.redirect(`/clients/${ticket.client_id}#tickets`);
+  flash(req, 'success', `Ticket #${id} "${ticket.title}" deleted.`);
+  res.redirect(safePath(req.body.back, `/clients/${ticket.client_id}#tickets`));
 });
 
 module.exports = router;

@@ -32,4 +32,8 @@ function flash(req, type, message) {
   req.session.flash = { type, message };
 }
 
-module.exports = { HttpError, notFound, str, toId, requireId, flash };
+// A same-site path ("/tickets?status=open") to return to, or the fallback.
+// Rejects absolute URLs and "//host" so it cannot redirect off-site.
+const safePath = (value, fallback) => (typeof value === 'string' && /^\/(?!\/)\S*$/.test(value) ? value.slice(0, 500) : fallback);
+
+module.exports = { HttpError, notFound, str, toId, requireId, flash, safePath };

@@ -1,8 +1,9 @@
 <form method="post" action="<%= action %>" class="inline" data-confirm="<%= confirm %>">
   <%- csrfField %>
+  <% if (locals.back) { %><input type="hidden" name="back" value="<%= back %>"><% } %>
   <% if (locals.text) { %>
     <button type="submit" class="btn btn-danger"><%- icon('trash') %><span><%= text %></span></button>
   <% } else { %>
-    <button type="submit" class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete"><%- icon('trash') %></button>
+    <button type="submit" class="icon-btn icon-btn-danger" title="<%= locals.label || 'Delete' %>" aria-label="<%= locals.label || 'Delete' %>"><%- icon('trash') %></button>
   <% } %>
 </form>

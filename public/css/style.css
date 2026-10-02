@@ -929,3 +929,12 @@ input[type="date"]:focus { outline: none; border-color: var(--blue); box-shadow:
 @media (max-width: 860px) {
   .report-preview { padding: 1rem; }
 }
+
+/* ---- Delete confirmation popup ---- */
+
+.dialog-confirm { width: min(440px, calc(100vw - 2rem)); }
+.confirm-message { font-size: 1rem; font-weight: 500; margin: 0 0 1.25rem; overflow-wrap: anywhere; }
+.dialog-confirm .form-actions { justify-content: flex-end; }
+.btn-danger-solid { background: var(--red); border-color: var(--red); color: #FFFFFF; }
+.btn-danger-solid:hover { background: #A11F15; border-color: #A11F15; color: #FFFFFF; }
+.table td.row-actions { width: 1%; white-space: nowrap; text-align: right; }

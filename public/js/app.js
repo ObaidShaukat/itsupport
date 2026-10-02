@@ -1,11 +1,39 @@
 // Small progressive enhancements. Everything works without JavaScript except
 // the delete confirmations and the flowchart.
 
-// Ask before submitting forms marked with data-confirm (deletes).
+// Ask before submitting forms marked with data-confirm (deletes), in a popup with
+// Cancel and Delete. Falls back to the browser's confirm() without <dialog> support.
+const confirmDialog = document.getElementById('confirm-dialog');
+let pendingForm = null;
+
 document.addEventListener('submit', (event) => {
-  const message = event.target.dataset && event.target.dataset.confirm;
-  if (message && !window.confirm(message)) event.preventDefault();
+  const form = event.target;
+  const message = form.dataset && form.dataset.confirm;
+  if (!message) return;
+  if (!confirmDialog || typeof confirmDialog.showModal !== 'function') {
+    if (!window.confirm(message)) event.preventDefault();
+    return;
+  }
+  event.preventDefault();
+  pendingForm = form;
+  confirmDialog.querySelector('.confirm-message').textContent = message;
+  confirmDialog.showModal();
+  confirmDialog.querySelector('[data-confirm-cancel]').focus();
 });
+
+if (confirmDialog) {
+  confirmDialog.addEventListener('click', (event) => {
+    if (event.target.closest('[data-confirm-ok]') && pendingForm) {
+      const form = pendingForm;
+      pendingForm = null;
+      confirmDialog.close();
+      form.submit(); // submit() does not fire the submit event again.
+    } else if (event.target === confirmDialog || event.target.closest('[data-confirm-cancel]')) {
+      confirmDialog.close();
+    }
+  });
+  confirmDialog.addEventListener('close', () => { pendingForm = null; });
+}
 
 // Inline edit popovers (<details class="edit">). Only one is open at a time.
 // Cancel, Esc or a click outside closes it, and closing discards unsaved changes.

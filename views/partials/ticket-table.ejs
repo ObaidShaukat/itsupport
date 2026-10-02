@@ -12,6 +12,7 @@
           <th>Status</th>
           <th>Created by</th>
           <th>Updated</th>
+          <th><span class="visually-hidden">Actions</span></th>
         </tr>
       </thead>
       <tbody>
@@ -23,6 +24,14 @@
             <td><%- include('status', { status: t.status }) %></td>
             <td class="nowrap"><%= t.created_by || 'Deleted user' %><div class="muted small"><%= fmtDate(t.created_at) %></div></td>
             <td class="muted nowrap"><%= fmtDate(t.updated_at) %></td>
+            <td class="row-actions">
+              <%- include('delete', {
+                action: `/tickets/${t.id}/delete`,
+                confirm: `Delete ticket '${t.title}'? This cannot be undone.`,
+                back: locals.currentPath,
+                label: `Delete ticket #${t.id}`,
+              }) %>
+            </td>
           </tr>
         <% } %>
       </tbody>
