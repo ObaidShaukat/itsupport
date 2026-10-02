@@ -3,6 +3,7 @@ const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
 const { TICKET_STATUSES, isTicketStatus } = require('../lib/tickets');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
+const { readReportFields, resolveReportFields } = require('../lib/report-terms');
 
 const ticketEntry = (ticket, type, action, summary) => ({
   type, id: ticket.id, action, summary, clientId: ticket.client_id, clientName: ticket.client_name, subject: ticket.title,
@@ -105,9 +106,12 @@ router.get('/:id', async (req, res) => {
   `, [id]);
   if (!ticket) throw notFound();
   const [comments] = await pool.query(`
-    SELECT tc.id, tc.body, tc.created_at, u.username
+    SELECT tc.id, tc.body, tc.created_at, tc.report_detail, u.username,
+           ra.name AS action_name, ri.name AS issue_name
     FROM ticket_comments tc
     LEFT JOIN users u ON u.id = tc.user_id
+    LEFT JOIN report_actions ra ON ra.id = tc.action_id
+    LEFT JOIN report_issues ri ON ri.id = tc.issue_id
     WHERE tc.ticket_id = ?
     ORDER BY tc.created_at, tc.id
   `, [id]);
@@ -152,14 +156,22 @@ router.post('/:id/status', async (req, res) => {
 router.post('/:id/comments', async (req, res) => {
   const id = requireId(req.params.id);
   const body = str(req.body.body, 10000);
-  if (!body) {
-    flash(req, 'error', 'Comment cannot be empty.');
+  const fields = readReportFields(req.body);
+  if (!body && !fields.actionId && !fields.issueName && !fields.detail) {
+    flash(req, 'error', 'Write a comment or fill in the report fields.');
     return res.redirect(`/tickets/${id}#comments`);
   }
   await transaction(async (conn) => {
     const ticket = await ticketContext(conn, id, true);
-    await conn.query('INSERT INTO ticket_comments (ticket_id, user_id, body) VALUES (?, ?, ?)', [id, req.user.id, body]);
-    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', body));
+    const report = await resolveReportFields(conn, req.user, fields);
+    await conn.query(
+      'INSERT INTO ticket_comments (ticket_id, user_id, body, action_id, issue_id, report_detail) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, req.user.id, body, report.actionId, report.issueId, report.detail]
+    );
+    await logActivity(conn, req.user, {
+      ...ticketEntry(ticket, 'ticket_comment', 'commented', body || report.detail || 'Report details added'),
+      report,
+    });
     await conn.query('UPDATE tickets SET updated_at = NOW() WHERE id = ?', [id]);
   });
   res.redirect(`/tickets/${id}#comments`);

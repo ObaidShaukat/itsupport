@@ -1,9 +1,11 @@
 // Daily report: built only from activity_log. A UK date (or range) is turned into a
 // UTC start/end and automatic entries are matched on created_at (when the action
 // happened). Manual "Log work" entries are matched on the date the user picked.
-// Each user gets a "<User>'s Work:" list, one bullet per item, grouped by client.
+// Each user gets a "<User>'s Work:" list built from fixed templates (no AI): actions
+// and issues picked on forms are grouped per client, see userLines() below.
 const { pool } = require('../db');
 const { londonDate, londonDayStart } = require('./activity');
+const { DEFAULT_TEMPLATE, joinAnd, fillTemplate } = require('./report-terms');
 
 const MAX_RANGE_DAYS = 62;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -60,135 +62,126 @@ const snippet = (text) => {
   const t = withoutStop(withoutPrefix(text));
   return t.length > SNIPPET_LENGTH ? `${t.slice(0, SNIPPET_LENGTH - 1).trimEnd()}…` : t;
 };
-// Capital first letter, full stop at the end, no semicolons.
+// Capital first letter, exactly one full stop at the end, no semicolons.
 const sentence = (text) => {
-  const t = clean(text).replace(/;/g, ',');
+  const t = clean(text).replace(/;/g, ',').replace(/[.\s]+$/, '');
   if (!t) return '';
   const capitalised = t.charAt(0).toUpperCase() + t.slice(1);
-  return /[.!?…]$/.test(capitalised) ? capitalised : `${capitalised}.`;
+  return /[!?]$/.test(capitalised) ? capitalised : `${capitalised}.`;
 };
-const joinAnd = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
-const KB_FIELD_LABELS = {
-  title: 'title',
-  category: 'category',
-  tags: 'tags',
-  issue: 'issue description',
-  solution: 'solution',
-  attachments: 'attachments',
-};
-const KB_FIELD_ORDER = Object.keys(KB_FIELD_LABELS);
+// Subject used when an action is picked with no issue and nothing else to go on.
+const FALLBACK_SUBJECT = 'general IT';
 
 // ---- Bullets ----
 
-// One user's day as bullets, one per item, grouped by client in the order the
-// work happened, then work with no client, then "Other IT related tasks.".
-//   Ticket:            Provided IT support to {client} regarding {title}.
-//   Comment:           Provided IT support to {client} regarding {title}: {comment}.
-//   Service assigned:  Started {service} for {client}.
-//   Service closed:    Completed {service} for {client}.
-//   Step ticked:       Completed {step} as part of {service} for {client}.
-//   Note:              Carried out {service} for {client}: {note}.
-//   Client:            Added {client} as a new client. / Updated the client details for {client}.
-//   KB created:        Documented a solution for '{title}' in the General IT Support knowledge base.
-//   KB edited:         Updated the knowledge base article '{title}': revised the {fields}.
-//   Service catalogue: Added/Updated the {service} service process.
-//   Manual entry:      as written (under its client if it has one).
-// Deletes, unticked steps, reopenings and user-admin changes are left out (see /activity).
+// One user's day as bullets, in this order: client services, tickets, log work,
+// knowledge base, then always "Other IT related tasks.". Duplicate lines are removed.
+//
+// Comments, notes and Log work with an action and/or issue are grouped per client +
+// action, their subjects joined "A, B and C" into the action's template, with any
+// report details in brackets:
+//   "Resolved Remote Desktop access and Outlook connectivity and mailbox issues for ASL Solicitors (rebuilt user profile)."
+//   Issue only -> "Provided IT support to {client} regarding {problem phrase} issues."
+//   Action only -> the ticket title (or Log work text) is the subject.
+//   Log work with no client -> "internal staff".
+// Without an action or issue:
+//   Tickets (created, status changes, plain comments) -> "Provided IT support to {client} regarding {titles}."
+//   Notes -> "Continued {service} for {client} ({detail})."
+//   Log work -> as written.
+// Client services: "Commenced {service} for {client}.", "Completed {steps} as part of
+// {service} for {client}.", "Completed {service} for {client}." ({service} is the
+// service's report phrase, or its name).
+// Knowledge base: "Documented a solution for '{title}' in the knowledge base." /
+// "Updated the knowledge base article '{title}'."
+// Deletes, unticked steps, reopenings, client/user/settings/catalogue changes are left out.
 function userLines(rows) {
-  const groups = new Map();
-  const general = { items: [], byKey: new Map() };
+  const section = () => ({ items: [], byKey: new Map() });
+  const sections = { services: section(), tickets: section(), logwork: section(), kb: section() };
+  const groupedTickets = new Set();
 
-  const groupFor = (row) => {
-    const key = row.client_id ? `id:${row.client_id}` : `name:${row.client_name}`;
-    if (!groups.has(key)) groups.set(key, { items: [], byKey: new Map() });
-    return groups.get(key);
-  };
   // Adds an item once per key; later rows for the same key update it in place.
-  const item = (group, key, create) => {
-    if (!group.byKey.has(key)) {
+  const item = (sec, key, create) => {
+    if (!sec.byKey.has(key)) {
       const created = create();
-      group.byKey.set(key, created);
-      group.items.push(created);
+      sec.byKey.set(key, created);
+      sec.items.push(created);
     }
-    return group.byKey.get(key);
+    return sec.byKey.get(key);
   };
-  const push = (group, text) => group.items.push({ text });
+  const addUnique = (list, value) => {
+    const v = withoutStop(value);
+    if (v && !list.some((x) => x.toLowerCase() === v.toLowerCase())) list.push(v);
+  };
+
+  // Grouped "action + issue" line for one client.
+  const addGrouped = (sec, client, row, fallbackSubject) => {
+    const action = row.action_template ? { id: row.action_ref, template: row.action_template, type: row.phrase_type } : null;
+    const issuePhrase = row.issue_name
+      ? (action && action.type === 'config' ? row.config_phrase : row.problem_phrase) || row.issue_name
+      : null;
+    const bucket = item(sec, `group:${client.toLowerCase()}:${action ? action.id : 'default'}`, () => ({
+      grouped: true, client, template: action ? action.template : DEFAULT_TEMPLATE, subjects: [], details: [],
+    }));
+    addUnique(bucket.subjects, issuePhrase || fallbackSubject || FALLBACK_SUBJECT);
+    addUnique(bucket.details, row.report_detail);
+  };
+
+  const hasTerms = (row) => Boolean(row.action_template || row.issue_name);
 
   for (const row of rows) {
+    if (row.action === 'deleted') continue;
     const client = clean(row.client_name);
     const subject = withoutStop(row.subject);
-
-    if (row.entity_type === 'manual') {
-      push(client ? groupFor(row) : general, sentence(row.summary));
-      continue;
-    }
-    if (row.action === 'deleted') continue;
+    const servicePhrase = withoutStop(row.service_phrase) || subject;
 
     switch (row.entity_type) {
+      case 'manual':
+        if (hasTerms(row)) addGrouped(sections.logwork, client || 'internal staff', row, snippet(row.summary));
+        else if (clean(row.summary)) sections.logwork.items.push({ text: sentence(row.summary) });
+        break;
+      case 'ticket_comment':
+        if (!client) break;
+        if (hasTerms(row)) {
+          addGrouped(sections.tickets, client, row, subject);
+          groupedTickets.add(row.entity_id);
+          break;
+        }
+      // A plain comment counts like any other work on the ticket.
+      // falls through
       case 'ticket': {
         if (!client) break;
-        // One bullet per ticket, unless the user commented: then each comment is a bullet.
-        const t = item(groupFor(row), `ticket:${row.entity_id}`, () => ({ text: null }));
-        if (!t.commented) t.text = sentence(`Provided IT support to ${client} regarding ${subject}`);
-        break;
-      }
-      case 'ticket_comment': {
-        if (!client) break;
-        const group = groupFor(row);
-        const t = item(group, `ticket:${row.entity_id}`, () => ({ text: null }));
-        t.commented = true;
-        t.text = null;
-        push(group, sentence(`Provided IT support to ${client} regarding ${subject}: ${snippet(row.summary)}`));
-        break;
-      }
-      case 'client_service': {
-        if (!client) break;
-        if (row.action === 'created') {
-          item(groupFor(row), `cs-start:${row.entity_id}`, () => ({ text: sentence(`Started ${subject} for ${client}`) }));
-        } else if (row.action === 'closed') {
-          item(groupFor(row), `cs-done:${row.entity_id}`, () => ({ text: sentence(`Completed ${subject} for ${client}`) }));
-        }
-        break;
-      }
-      case 'step': {
-        if (!client || row.action !== 'step_done') break;
-        const step = withoutStop(withoutPrefix(row.summary));
-        if (!step) break;
-        item(groupFor(row), `step:${row.entity_id}:${step.toLowerCase()}`, () => ({
-          text: sentence(`Completed ${step} as part of ${subject} for ${client}`),
-        }));
+        const titles = item(sections.tickets, `titles:${client.toLowerCase()}`, () => ({ client, titles: new Map() }));
+        if (!titles.titles.has(row.entity_id)) titles.titles.set(row.entity_id, subject);
         break;
       }
       case 'note':
         if (!client) break;
-        push(groupFor(row), sentence(`Carried out ${subject} for ${client}: ${snippet(row.summary)}`));
+        if (hasTerms(row)) {
+          addGrouped(sections.services, client, row, servicePhrase);
+        } else {
+          const detail = withoutStop(row.report_detail);
+          sections.services.items.push({ text: sentence(`Continued ${servicePhrase} for ${client}${detail ? ` (${detail})` : ''}`) });
+        }
         break;
-      case 'client':
+      case 'client_service':
         if (!client) break;
         if (row.action === 'created') {
-          item(groupFor(row), 'client:created', () => ({ text: sentence(`Added ${client} as a new client`) }));
-        } else {
-          item(groupFor(row), 'client:updated', () => ({ text: sentence(`Updated the client details for ${client}`) }));
+          item(sections.services, `start:${row.entity_id}`, () => ({ text: sentence(`Commenced ${servicePhrase} for ${client}`) }));
+        } else if (row.action === 'closed') {
+          item(sections.services, `done:${row.entity_id}`, () => ({ text: sentence(`Completed ${servicePhrase} for ${client}`) }));
         }
         break;
-      case 'kb_article': {
-        const a = item(general, `kb:${row.entity_id}`, () => ({ kb: true, created: false, changes: new Set() }));
-        a.title = subject;
-        if (row.action === 'created') a.created = true;
-        for (const c of String(row.changes || '').split(',')) if (KB_FIELD_LABELS[c]) a.changes.add(c);
-        if (row.action === 'uploaded') a.changes.add('attachments');
+      case 'step': {
+        if (!client || row.action !== 'step_done') break;
+        const steps = item(sections.services, `steps:${row.entity_id}`, () => ({ client, phrase: servicePhrase, steps: [] }));
+        addUnique(steps.steps, withoutPrefix(row.summary));
         break;
       }
-      case 'service':
-      case 'tutorial': {
-        if (!row.entity_id) {
-          item(general, `category:${subject}`, () => ({ text: sentence(`Updated the ${subject} service category`) }));
-          break;
-        }
-        const svc = item(general, `service:${row.entity_id}`, () => ({ service: true, created: false }));
-        svc.name = subject;
-        if (row.entity_type === 'service' && row.action === 'created') svc.created = true;
+      case 'kb_article': {
+        const a = item(sections.kb, `kb:${row.entity_id}`, () => ({ kb: true, created: false }));
+        a.title = subject;
+        if (row.action === 'created') a.created = true;
         break;
       }
       default:
@@ -197,19 +190,37 @@ function userLines(rows) {
   }
 
   const render = (entry) => {
-    if (entry.kb) {
-      if (entry.created) return sentence(`Documented a solution for '${entry.title}' in the General IT Support knowledge base`);
-      const fields = KB_FIELD_ORDER.filter((c) => entry.changes.has(c)).map((c) => KB_FIELD_LABELS[c]);
-      return sentence(`Updated the knowledge base article '${entry.title}'${fields.length ? `: revised the ${joinAnd(fields)}` : ''}`);
+    if (entry.grouped) {
+      const text = withoutStop(fillTemplate(entry.template, entry.client, entry.subjects));
+      return sentence(entry.details.length ? `${text} (${entry.details.join(', ')})` : text);
     }
-    if (entry.service) return sentence(`${entry.created ? 'Added' : 'Updated'} the ${entry.name} service process`);
+    if (entry.titles) {
+      const titles = [...entry.titles].filter(([id]) => !groupedTickets.has(id)).map(([, title]) => title).filter(Boolean);
+      return titles.length ? sentence(`Provided IT support to ${entry.client} regarding ${joinAnd(titles)}`) : null;
+    }
+    if (entry.steps) {
+      return entry.steps.length ? sentence(`Completed ${joinAnd(entry.steps)} as part of ${entry.phrase} for ${entry.client}`) : null;
+    }
+    if (entry.kb) {
+      return entry.created
+        ? sentence(`Documented a solution for '${entry.title}' in the knowledge base`)
+        : sentence(`Updated the knowledge base article '${entry.title}'`);
+    }
     return entry.text || null;
   };
 
-  return [...groups.values(), general]
-    .flatMap((group) => group.items.map(render))
-    .filter(Boolean)
-    .concat('Other IT related tasks.');
+  const seen = new Set();
+  const lines = [];
+  for (const sec of [sections.services, sections.tickets, sections.logwork, sections.kb]) {
+    for (const entry of sec.items) {
+      const line = render(entry);
+      if (line && !seen.has(line.toLowerCase())) {
+        seen.add(line.toLowerCase());
+        lines.push(line);
+      }
+    }
+  }
+  return lines.concat('Other IT related tasks.');
 }
 
 // Report for from..to (inclusive UK dates), optionally one user.
@@ -221,10 +232,16 @@ async function buildReport({ from, to, userId }) {
   const [rows] = await pool.query(`
     SELECT l.user_id, u.username, l.client_id, COALESCE(c.name, l.client_name) AS client_name,
            l.entity_type, l.entity_id, l.action, l.subject, l.summary, l.changes,
+           l.report_detail, ra.id AS action_ref, ra.template AS action_template, ra.phrase_type,
+           ri.name AS issue_name, ri.problem_phrase, ri.config_phrase, s.report_phrase AS service_phrase,
            l.activity_date, l.created_at, l.id
     FROM activity_log l
     LEFT JOIN users u ON u.id = l.user_id
     LEFT JOIN clients c ON c.id = l.client_id
+    LEFT JOIN report_actions ra ON ra.id = l.action_id
+    LEFT JOIN report_issues ri ON ri.id = l.issue_id
+    LEFT JOIN client_services cs ON cs.id = l.entity_id AND l.entity_type IN ('client_service', 'step', 'note')
+    LEFT JOIN services s ON s.id = cs.service_id
     WHERE ${range.sql} ${userId ? 'AND l.user_id = ?' : ''}
     ORDER BY l.created_at, l.id
   `, params);
@@ -250,7 +267,7 @@ async function buildReport({ from, to, userId }) {
 
   const multiDay = from !== to;
   const text = days.map((day) => {
-    const blocks = day.users.map((u) => [u.heading, ...u.lines.map((l) => `• ${l}`)].join('\n'));
+    const blocks = day.users.map((u) => [u.heading, ...u.lines.map((l) => `- ${l}`)].join('\n'));
     return (multiDay ? `${day.label}\n\n` : '') + blocks.join('\n\n');
   }).join('\n\n\n');
 

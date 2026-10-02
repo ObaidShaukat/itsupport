@@ -28,6 +28,11 @@
             <span>Description</span>
             <textarea name="description" rows="3" maxlength="5000"><%= service.description || '' %></textarea>
           </label>
+          <label class="field">
+            <span>Wording in the Daily Report <span class="muted">(optional)</span></span>
+            <input type="text" name="report_phrase" value="<%= service.report_phrase || '' %>" maxlength="255" placeholder="<%= service.name %>">
+            <small class="muted">e.g. "the Microsoft 365 email setup" gives "Commenced the Microsoft 365 email setup for ASL Solicitors." Blank uses the service name.</small>
+          </label>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">Save</button>
             <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>

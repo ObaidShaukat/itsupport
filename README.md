@@ -96,6 +96,7 @@ The repository's `pm2.config.cjs` is deliberately minimal (app name `itsupport`,
 git pull
 npm install
 npm run migrate
+npm run seed
 pm2 restart itsupport
 ```
 
@@ -105,7 +106,9 @@ Every create, update and delete (tickets, comments, client services, steps, note
 
 - **Log work:** the button in the top bar of every page records manual work: an optional client, a description and a date (default today). Each user can edit or delete their own entries from the Daily Report page.
 - **Daily Report** (`/report`): pick a day (default today), step back and forward, or choose a date range (up to 62 days, grouped by day). Filter to one user or show everyone. The report is built only from the activity log. The chosen UK date (or range) is converted to a UTC start and end and matched against when each action happened, so an old ticket or article edited today shows up today. Manual Log work entries use the date that was picked. Each user's work is one bullet per item, grouped by client, for example "Provided IT support to Abel regarding Test: replaced the toner.", "Completed Create new tenant as part of Emails setup for Abel." or "Updated the knowledge base article 'Outlook not syncing': revised the issue description.", and ends with "Other IT related tasks." Deletes, unticked steps and user-admin changes are left out of the report but listed on `/activity`.
-- **Copy buttons:** "Copy report" gives plain text. "Copy as formatted" gives bullets that paste into Outlook. Browsers only allow full clipboard access over HTTPS. Over plain http a fallback is used that works in current browsers.
+- **Report wording (no AI):** comment, note and Log work forms have optional *Action*, *Issue* and *Detail for report* fields. The comment or note text itself stays internal. Entries with an action or issue are grouped per client and action, with the issues joined into the action's template, e.g. "Resolved Remote Desktop access and Outlook connectivity and mailbox issues for ASL Solicitors (rebuilt user profile)." Client services read "Commenced / Completed … for {client}", using the service's optional *Wording in the Daily Report*. Lines are ordered client services, tickets, log work, knowledge base, then "Other IT related tasks."
+- **Settings** (`/settings`): edit the actions (templates with `{client}` and `{subjects}`) and issues (problem and configuration phrases) with a live preview. `npm run seed` adds the default 16 actions and 32 issues. Run it once after updating, because it is safe to run again.
+- **Copy buttons:** the report is shown in an editable preview. "Copy for email" copies what you see as Calibri 11pt with bold names and real bullets for Outlook, falling back to plain text. "Copy plain text" gives "- " bullets. Browsers only allow full clipboard access over HTTPS. Over plain http a fallback is used that works in current browsers.
 - **Activity log page** (`/activity`, linked from the report): the raw log for one day, filterable by user and type, to check what was recorded.
 - **Times:** every timestamp is set by MySQL (`NOW()` / `CURRENT_TIMESTAMP`) on connections running at time_zone +00:00, so they are stored in UTC. They are always shown in UK time (Europe/London), and report and `/activity` dates are UK days converted to UTC ranges. Timestamps saved before the UTC change were in the server's local time and were left as they are, so some older ones may show up to an hour out.
 - **KB edits** record which fields changed (title, category, tags, issue, solution, attachments) in `activity_log.changes`. `npm run migrate` adds that column to existing databases.

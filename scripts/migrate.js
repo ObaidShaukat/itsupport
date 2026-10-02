@@ -9,6 +9,13 @@ const config = require('../src/config');
 // MySQL has no "ADD COLUMN IF NOT EXISTS", so each is checked first.
 const ADDED_COLUMNS = [
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
+  ['services', 'report_phrase', 'VARCHAR(255) NULL AFTER description'],
+  // Daily Report action / issue / detail on comments, notes and log entries.
+  ...['ticket_comments', 'client_service_notes', 'activity_log'].flatMap((table) => [
+    [table, 'action_id', 'INT UNSIGNED NULL'],
+    [table, 'issue_id', 'INT UNSIGNED NULL'],
+    [table, 'report_detail', 'VARCHAR(255) NULL'],
+  ]),
 ];
 
 async function main() {

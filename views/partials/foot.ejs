@@ -1,6 +1,9 @@
   </main>
 </div>
 <% if (locals.currentUser) { %>
+<datalist id="report-issues">
+  <% for (const issue of (locals.reportIssues || [])) { %><option value="<%= issue.name %>"><% } %>
+</datalist>
 <datalist id="log-work-clients">
   <% for (const name of (locals.logWorkClients || [])) { %><option value="<%= name %>"><% } %>
 </datalist>
@@ -18,8 +21,10 @@
     </label>
     <label class="field">
       <span>What did you do?</span>
-      <textarea name="description" rows="4" required maxlength="2000" placeholder="e.g. Replaced the office printer toner and tested printing."></textarea>
+      <textarea name="description" rows="3" maxlength="2000" placeholder="e.g. Replaced the office printer toner and tested printing."></textarea>
+      <small class="muted">Shown in the report as written, unless you pick an action or issue below.</small>
     </label>
+    <%- include('report-fields', { values: {} }) %>
     <label class="field">
       <span>Date</span>
       <input type="date" name="date" value="<%= locals.today %>" required>

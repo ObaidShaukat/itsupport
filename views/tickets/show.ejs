@@ -30,7 +30,8 @@
           <% for (const c of comments) { %>
             <li class="comment">
               <div class="comment-meta"><strong><%= c.username || 'Deleted user' %></strong> <span class="muted small"><%= fmtDate(c.created_at) %></span></div>
-              <p class="pre-line"><%= c.body %></p>
+              <% if (c.body) { %><p class="pre-line"><%= c.body %></p><% } %>
+              <%- include('../partials/report-tags', { item: c }) %>
             </li>
           <% } %>
         </ul>
@@ -38,10 +39,11 @@
       <form method="post" action="/tickets/<%= ticket.id %>/comments" class="form">
         <%- csrfField %>
         <label class="field">
-          <span>Add a comment</span>
-          <textarea name="body" rows="4" required maxlength="10000"></textarea>
+          <span>Add a comment <span class="muted">(internal notes, not used in the report)</span></span>
+          <textarea name="body" rows="4" maxlength="10000"></textarea>
         </label>
-        <button type="submit" class="btn btn-primary">Post comment</button>
+        <%- include('../partials/report-fields', { values: {} }) %>
+        <div><button type="submit" class="btn btn-primary">Post comment</button></div>
       </form>
     </section>
   </div>

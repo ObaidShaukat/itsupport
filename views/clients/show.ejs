@@ -94,9 +94,13 @@
           <form method="post" action="/client-services/<%= cs.id %>/notes" class="form note-form">
             <%- csrfField %>
             <label class="field">
-              <span class="visually-hidden">New note</span>
-              <textarea name="body" rows="2" required maxlength="10000" placeholder="e.g. Laptop for Kay, serial ABC123"></textarea>
+              <span class="visually-hidden">New note (internal)</span>
+              <textarea name="body" rows="2" maxlength="10000" placeholder="Internal note, e.g. Laptop for Kay, serial ABC123"></textarea>
             </label>
+            <details class="report-toggle">
+              <summary>Add Daily Report details</summary>
+              <%- include('../partials/report-fields', { values: {} }) %>
+            </details>
             <div><button type="submit" class="btn"><%- icon('plus') %><span>Add note</span></button></div>
           </form>
           <% if (cs.notes.length) { %>
@@ -115,9 +119,10 @@
                           <form method="post" action="/client-service-notes/<%= note.id %>" class="form">
                             <%- csrfField %>
                             <label class="field">
-                              <span>Note</span>
-                              <textarea name="body" rows="4" required maxlength="10000"><%= note.body %></textarea>
+                              <span>Note <span class="muted">(internal)</span></span>
+                              <textarea name="body" rows="4" maxlength="10000"><%= note.body %></textarea>
                             </label>
+                            <%- include('../partials/report-fields', { values: { report_action: note.action_id, report_issue: note.issue_name, report_detail: note.report_detail } }) %>
                             <div class="form-actions">
                               <button type="submit" class="btn btn-primary">Save</button>
                               <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -128,7 +133,8 @@
                       <%- include('../partials/delete', { action: `/client-service-notes/${note.id}/delete`, confirm: 'Delete this note?' }) %>
                     </div>
                   </div>
-                  <p class="pre-line"><%= note.body %></p>
+                  <% if (note.body) { %><p class="pre-line"><%= note.body %></p><% } %>
+                  <%- include('../partials/report-tags', { item: note }) %>
                 </li>
               <% } %>
             </ul>

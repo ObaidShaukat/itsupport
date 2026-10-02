@@ -204,8 +204,43 @@ if (logWorkDialog && typeof logWorkDialog.showModal === 'function') {
   });
 }
 
-// Daily Report copy buttons: plain text, or HTML bullets that paste into Outlook.
+// Daily Report: the preview is editable, and both copy buttons read what is shown
+// (including edits). "Copy for email" puts rich HTML (bold names, real bullets,
+// Calibri 11pt) on the clipboard with plain text as the fallback.
 // navigator.clipboard needs HTTPS; over plain http the older execCommand route is used.
+const lineText = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function readPreview(preview) {
+  return [...preview.querySelectorAll('[data-report-day]')].map((day) => ({
+    title: day.querySelector('[data-report-day-title]') ? lineText(day.querySelector('[data-report-day-title]')) : '',
+    users: [...day.querySelectorAll('[data-report-user]')].map((user) => ({
+      heading: lineText(user.querySelector('[data-report-heading]') || user),
+      lines: [...user.querySelectorAll('li')].map(lineText).filter(Boolean),
+    })).filter((u) => u.heading || u.lines.length),
+  }));
+}
+
+function previewToText(days) {
+  return days.map((day) => {
+    const blocks = day.users.map((u) => [u.heading, ...u.lines.map((l) => `- ${l}`)].join('\n')).join('\n\n');
+    return (day.title ? `${day.title}\n\n` : '') + blocks;
+  }).join('\n\n\n');
+}
+
+function previewToHtml(days) {
+  const font = 'font-family: Calibri, Arial, sans-serif; font-size: 11pt;';
+  const parts = days.map((day) => {
+    const title = day.title ? `<p style="${font} margin: 12pt 0 6pt;"><b><u>${escapeHtml(day.title)}</u></b></p>` : '';
+    const users = day.users.map((u) => `<p style="${font} margin: 0 0 4pt;"><b>${escapeHtml(u.heading)}</b></p>`
+      + `<ul style="${font} margin: 0 0 12pt; padding-left: 18pt;">`
+      + u.lines.map((l) => `<li style="${font} margin: 0 0 2pt;">${escapeHtml(l)}</li>`).join('')
+      + '</ul>').join('');
+    return title + users;
+  });
+  return `<div style="${font}">${parts.join('')}</div>`;
+}
+
 function copyWithSelection(node) {
   node.style.position = 'fixed';
   node.style.left = '-9999px';
@@ -229,7 +264,7 @@ async function copyPlain(text) {
   copyWithSelection(area);
 }
 
-async function copyFormatted(html, text) {
+async function copyRich(html, text) {
   if (navigator.clipboard && window.isSecureContext && window.ClipboardItem) {
     return navigator.clipboard.write([new ClipboardItem({
       'text/html': new Blob([html], { type: 'text/html' }),
@@ -241,28 +276,69 @@ async function copyFormatted(html, text) {
   copyWithSelection(holder);
 }
 
-const reportText = document.querySelector('[data-report-text]');
-const reportHtml = document.querySelector('template[data-report-html]');
+const reportPreview = document.querySelector('[data-report-preview]');
 const copyStatus = document.querySelector('[data-copy-status]');
 document.querySelectorAll('[data-copy]').forEach((button) => {
   button.addEventListener('click', async () => {
-    const text = reportText ? reportText.value : '';
+    if (!reportPreview) return;
+    const days = readPreview(reportPreview);
+    const text = previewToText(days);
+    let message = '';
+    let failed = false;
     try {
-      if (button.dataset.copy === 'html') await copyFormatted(reportHtml.innerHTML.trim(), text);
-      else await copyPlain(text);
-      if (copyStatus) {
-        copyStatus.textContent = button.dataset.copy === 'html' ? 'Copied with formatting. Paste it into your email.' : 'Copied as plain text.';
-        copyStatus.classList.remove('is-error');
+      if (button.dataset.copy === 'html') {
+        try {
+          await copyRich(previewToHtml(days), text);
+          message = 'Copied for email. Paste it into Outlook.';
+        } catch (err) {
+          await copyPlain(text);
+          message = 'Copied as plain text (formatted copy is not available in this browser).';
+        }
+      } else {
+        await copyPlain(text);
+        message = 'Copied as plain text.';
       }
     } catch (err) {
-      if (copyStatus) {
-        copyStatus.textContent = 'Could not copy automatically. Select the report and copy it by hand.';
-        copyStatus.classList.add('is-error');
-      }
+      failed = true;
+      message = 'Could not copy automatically. Select the report and copy it by hand.';
     }
     if (copyStatus) {
+      copyStatus.textContent = message;
+      copyStatus.classList.toggle('is-error', failed);
       copyStatus.hidden = false;
       setTimeout(() => { copyStatus.hidden = true; }, 4000);
     }
   });
+});
+
+// Settings: live preview of action templates and issue phrases.
+// Each form has data-term-preview="action" or "issue" and an [data-preview-output].
+const SAMPLE_CLIENT = 'ASL Solicitors';
+const SAMPLE_ISSUE = { problem: 'Outlook connectivity and mailbox', config: 'Outlook profiles and mailboxes' };
+const fillSample = (template, subjects) => {
+  const text = template.replace(/\{client\}/g, SAMPLE_CLIENT).replace(/\{subjects\}/g, subjects).replace(/[.\s]+$/, '').trim();
+  return text ? `${text.charAt(0).toUpperCase()}${text.slice(1)}.` : '';
+};
+
+function updateTermPreview(form) {
+  const output = form.querySelector('[data-preview-output]');
+  if (!output) return;
+  const value = (name) => (form.elements[name] ? form.elements[name].value.trim() : '');
+  if (form.dataset.termPreview === 'action') {
+    const type = value('phrase_type') === 'config' ? 'config' : 'problem';
+    output.textContent = fillSample(value('template'), SAMPLE_ISSUE[type]) || '—';
+  } else {
+    const name = value('name');
+    output.textContent = [
+      fillSample('Resolved {subjects} issues for {client}.', value('problem_phrase') || name),
+      fillSample('Configured {subjects} for {client}.', value('config_phrase') || name),
+    ].filter(Boolean).join('  /  ') || '—';
+  }
+}
+
+document.querySelectorAll('form[data-term-preview]').forEach((form) => {
+  form.addEventListener('input', () => updateTermPreview(form));
+  form.addEventListener('change', () => updateTermPreview(form));
+  form.addEventListener('reset', () => setTimeout(() => updateTermPreview(form)));
+  updateTermPreview(form);
 });

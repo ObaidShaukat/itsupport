@@ -6,8 +6,8 @@
   </div>
   <div class="actions">
     <a href="/activity?date=<%= from %><%= userId ? `&user=${userId}` : '' %>" class="btn btn-ghost"><%- icon('clock') %><span>Activity log</span></a>
-    <button type="button" class="btn" data-copy="text" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy report</span></button>
-    <button type="button" class="btn btn-primary" data-copy="html" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy as formatted</span></button>
+    <button type="button" class="btn" data-copy="text" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy plain text</span></button>
+    <button type="button" class="btn btn-primary" data-copy="html" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy for email</span></button>
   </div>
 </header>
 
@@ -44,23 +44,28 @@
   <% if (notice) { %><p class="muted small"><%= notice %></p><% } %>
 </section>
 
-<section class="card report" aria-live="polite">
+<section class="card report">
   <% if (!report.days.length) { %>
     <p class="empty">No activity recorded <%= from === to ? 'on this day' : 'in this period' %>.</p>
   <% } else { %>
-    <% for (const day of report.days) { %>
-      <div class="report-day">
-        <% if (report.multiDay) { %><h2 class="report-day-title"><%= day.label %></h2><% } %>
-        <% for (const u of day.users) { %>
-          <div class="report-user">
-            <h3><%= u.heading %></h3>
-            <ul>
-              <% for (const line of u.lines) { %><li><%= line %></li><% } %>
-            </ul>
-          </div>
-        <% } %>
-      </div>
-    <% } %>
+    <div class="report-preview-head">
+      <p class="muted small"><%- icon('edit') %> Preview. Click any line to edit it before copying. Edits are not saved; reload to start again.</p>
+    </div>
+    <div class="report-preview" contenteditable="true" spellcheck="true" data-report-preview>
+      <% for (const day of report.days) { %>
+        <div class="report-day" data-report-day>
+          <% if (report.multiDay) { %><h2 class="report-day-title" data-report-day-title><%= day.label %></h2><% } %>
+          <% for (const u of day.users) { %>
+            <div class="report-user" data-report-user>
+              <h3 data-report-heading><%= u.heading %></h3>
+              <ul>
+                <% for (const line of u.lines) { %><li><%= line %></li><% } %>
+              </ul>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+    </div>
   <% } %>
   <p class="copy-status small" data-copy-status role="status" hidden></p>
 </section>
@@ -93,8 +98,9 @@
                   </label>
                   <label class="field">
                     <span>Description</span>
-                    <textarea name="description" rows="3" required maxlength="2000"><%= m.summary %></textarea>
+                    <textarea name="description" rows="3" maxlength="2000"><%= m.summary %></textarea>
                   </label>
+                  <%- include('../partials/report-fields', { values: { report_action: m.action_id, report_issue: m.issue_name, report_detail: m.report_detail } }) %>
                   <label class="field">
                     <span>Date</span>
                     <input type="date" name="date" value="<%= m.activity_date %>" required>
@@ -118,19 +124,4 @@
   <% } %>
 </section>
 
-<%# Copy sources: plain text, and simple HTML that pastes into Outlook as bullets. %>
-<textarea data-report-text hidden><%= report.text %></textarea>
-<template data-report-html>
-  <div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt;">
-    <% for (const day of report.days) { %>
-      <% if (report.multiDay) { %><p style="margin: 12pt 0 6pt;"><strong><u><%= day.label %></u></strong></p><% } %>
-      <% for (const u of day.users) { %>
-        <p style="margin: 6pt 0 2pt;"><strong><%= u.heading %></strong></p>
-        <ul style="margin-top: 0;">
-          <% for (const line of u.lines) { %><li><%= line %></li><% } %>
-        </ul>
-      <% } %>
-    <% } %>
-  </div>
-</template>
 <%- include('../partials/foot') %>

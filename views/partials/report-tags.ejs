@@ -1,0 +1,8 @@
+<% if (item.action_name || item.issue_name || item.report_detail) { %>
+  <div class="report-tags">
+    <span class="report-tags-label">Report:</span>
+    <% if (item.action_name) { %><span class="chip chip-category"><%= item.action_name %></span><% } %>
+    <% if (item.issue_name) { %><span class="chip"><%= item.issue_name %></span><% } %>
+    <% if (item.report_detail) { %><span class="muted small">(<%= item.report_detail %>)</span><% } %>
+  </div>
+<% } %>

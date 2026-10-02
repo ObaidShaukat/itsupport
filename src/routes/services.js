@@ -145,7 +145,7 @@ router.post('/categories/:id/services', async (req, res) => {
 router.get('/services/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const [[service]] = await pool.query(`
-    SELECT s.id, s.name, s.description, s.category_id, c.name AS category_name
+    SELECT s.id, s.name, s.description, s.report_phrase, s.category_id, c.name AS category_name
     FROM services s
     JOIN service_categories c ON c.id = s.category_id
     WHERE s.id = ?
@@ -184,6 +184,8 @@ router.post('/services/:id', async (req, res) => {
   const name = str(req.body.name, 200);
   const description = str(req.body.description, 5000) || null;
   const categoryId = toId(req.body.category_id);
+  // Wording used in the Daily Report; blank means the service name is used.
+  const reportPhrase = str(req.body.report_phrase, 255) || null;
   if (!name) {
     flash(req, 'error', 'Service name is required.');
     return res.redirect(`/services/${id}`);
@@ -200,8 +202,8 @@ router.post('/services/:id', async (req, res) => {
         if (category) newCategory = category.id;
       }
       await conn.query(
-        'UPDATE services SET name = ?, description = ?, category_id = ? WHERE id = ?',
-        [name, description, newCategory, id]
+        'UPDATE services SET name = ?, description = ?, report_phrase = ?, category_id = ? WHERE id = ?',
+        [name, description, reportPhrase, newCategory, id]
       );
     });
   } catch (err) {

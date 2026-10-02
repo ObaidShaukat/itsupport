@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS services (
   category_id INT UNSIGNED NOT NULL,
   name VARCHAR(200) NOT NULL,
   description TEXT NULL,
+  report_phrase VARCHAR(255) NULL,
   position INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -104,6 +105,9 @@ CREATE TABLE IF NOT EXISTS client_service_notes (
   client_service_id INT UNSIGNED NOT NULL,
   user_id INT UNSIGNED NULL,
   body TEXT NOT NULL,
+  action_id INT UNSIGNED NULL,
+  issue_id INT UNSIGNED NULL,
+  report_detail VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_by INT UNSIGNED NULL,
   updated_at DATETIME NULL,
@@ -140,6 +144,9 @@ CREATE TABLE IF NOT EXISTS ticket_comments (
   ticket_id INT UNSIGNED NOT NULL,
   user_id INT UNSIGNED NULL,
   body TEXT NOT NULL,
+  action_id INT UNSIGNED NULL,
+  issue_id INT UNSIGNED NULL,
+  report_detail VARCHAR(255) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_ticket_comments_ticket (ticket_id, created_at),
@@ -237,13 +244,16 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_id INT UNSIGNED NULL,
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
-                   'kb_article', 'tutorial', 'client', 'user', 'manual') NOT NULL,
+                   'kb_article', 'tutorial', 'client', 'user', 'setting', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
               'reopened', 'deleted', 'uploaded') NOT NULL,
   subject VARCHAR(255) NULL,
   summary TEXT NOT NULL,
   changes VARCHAR(255) NULL,
+  action_id INT UNSIGNED NULL,
+  issue_id INT UNSIGNED NULL,
+  report_detail VARCHAR(255) NULL,
   activity_date DATE NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
@@ -257,8 +267,31 @@ CREATE TABLE IF NOT EXISTS activity_log (
     REFERENCES clients (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Daily Report wording, edited on the Settings page.
+-- Actions: template uses {client} and {subjects}; phrase_type picks which issue phrase fills {subjects}.
+CREATE TABLE IF NOT EXISTS report_actions (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  template VARCHAR(255) NOT NULL,
+  phrase_type ENUM('problem', 'config') NOT NULL DEFAULT 'problem',
+  sort_order INT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_report_actions_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Issues: problem_phrase for problem actions ("Outlook connectivity and mailbox"),
+-- config_phrase for config actions ("Outlook profiles and mailboxes").
+CREATE TABLE IF NOT EXISTS report_issues (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(100) NOT NULL,
+  problem_phrase VARCHAR(255) NOT NULL,
+  config_phrase VARCHAR(255) NOT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_report_issues_name (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Upgrades for databases created before a column/value was added (safe to re-run).
 -- Missing columns are added by scripts/migrate.js (MySQL has no ADD COLUMN IF NOT EXISTS).
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
-                          'kb_article', 'tutorial', 'client', 'user', 'manual') NOT NULL;
+                          'kb_article', 'tutorial', 'client', 'user', 'setting', 'manual') NOT NULL;

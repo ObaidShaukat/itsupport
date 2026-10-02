@@ -3,6 +3,9 @@ const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
 const { isTicketStatus } = require('../lib/tickets');
 const { logActivity, historyFor, clientHistory, recordMeta } = require('../lib/activity');
+const { readReportFields, resolveReportFields } = require('../lib/report-terms');
+
+const hasReportFields = (f) => Boolean(f.actionId || f.issueName || f.detail);
 
 const router = express.Router();
 
@@ -102,11 +105,14 @@ router.get('/clients/:id', async (req, res) => {
   `, [id]);
   const [notes] = await pool.query(`
     SELECT n.id, n.client_service_id, n.body, n.created_at, n.updated_at,
+           n.action_id, n.report_detail, ra.name AS action_name, ri.name AS issue_name,
            u.username AS author, e.username AS editor
     FROM client_service_notes n
     JOIN client_services cs ON cs.id = n.client_service_id
     LEFT JOIN users u ON u.id = n.user_id
     LEFT JOIN users e ON e.id = n.updated_by
+    LEFT JOIN report_actions ra ON ra.id = n.action_id
+    LEFT JOIN report_issues ri ON ri.id = n.issue_id
     WHERE cs.client_id = ?
     ORDER BY n.created_at DESC, n.id DESC
   `, [id]);
@@ -310,14 +316,18 @@ router.post('/client-services/:id/notes', async (req, res) => {
   const csId = requireId(req.params.id);
   const cs = await csContext(pool, csId);
   const body = str(req.body.body, 10000);
-  if (!body) {
-    flash(req, 'error', 'Note cannot be empty.');
+  const fields = readReportFields(req.body);
+  if (!body && !hasReportFields(fields)) {
+    flash(req, 'error', 'Write a note or fill in the report fields.');
   } else {
-    await pool.query(
-      'INSERT INTO client_service_notes (client_service_id, user_id, body) VALUES (?, ?, ?)',
-      [csId, req.user.id, body]
-    );
-    await logActivity(null, req.user, csEntry(cs, 'note', 'created', body));
+    await transaction(async (conn) => {
+      const report = await resolveReportFields(conn, req.user, fields);
+      await conn.query(
+        'INSERT INTO client_service_notes (client_service_id, user_id, body, action_id, issue_id, report_detail) VALUES (?, ?, ?, ?, ?, ?)',
+        [csId, req.user.id, body, report.actionId, report.issueId, report.detail]
+      );
+      await logActivity(conn, req.user, { ...csEntry(cs, 'note', 'created', body || report.detail || 'Report details added'), report });
+    });
   }
   res.redirect(`/clients/${cs.client_id}#cs-${csId}`);
 });
@@ -337,14 +347,21 @@ async function noteContext(noteId) {
 router.post('/client-service-notes/:id', async (req, res) => {
   const note = await noteContext(requireId(req.params.id));
   const body = str(req.body.body, 10000);
-  if (!body) {
-    flash(req, 'error', 'Note cannot be empty.');
+  const fields = readReportFields(req.body);
+  if (!body && !hasReportFields(fields)) {
+    flash(req, 'error', 'Write a note or fill in the report fields.');
   } else {
-    await pool.query(
-      'UPDATE client_service_notes SET body = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
-      [body, req.user.id, note.id]
-    );
-    await logActivity(null, req.user, csEntry({ ...note, id: note.client_service_id }, 'note', 'updated', body));
+    await transaction(async (conn) => {
+      const report = await resolveReportFields(conn, req.user, fields);
+      await conn.query(
+        'UPDATE client_service_notes SET body = ?, action_id = ?, issue_id = ?, report_detail = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
+        [body, report.actionId, report.issueId, report.detail, req.user.id, note.id]
+      );
+      await logActivity(conn, req.user, {
+        ...csEntry({ ...note, id: note.client_service_id }, 'note', 'updated', body || report.detail || 'Report details updated'),
+        report,
+      });
+    });
     flash(req, 'success', 'Note updated.');
   }
   res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);
