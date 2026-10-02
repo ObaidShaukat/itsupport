@@ -1,9 +1,10 @@
-// Raw activity_log for one UK date: a check page for what was logged.
+// Raw activity_log for one UK date: a check page for what was logged. Uses the same
+// UK-day-to-UTC range as the Daily Report, so both always show the same entries.
 const express = require('express');
 const { pool } = require('../db');
 const { toId } = require('../lib/http');
 const { ENTITY_TYPES, londonDate } = require('../lib/activity');
-const { isDate, addDays, dayLabel } = require('../lib/report');
+const { isDate, addDays, dayLabel, rangeCondition } = require('../lib/report');
 
 const router = express.Router();
 
@@ -13,8 +14,9 @@ router.get('/', async (req, res) => {
   const userId = users.some((u) => u.id === toId(req.query.user)) ? toId(req.query.user) : null;
   const type = ENTITY_TYPES.includes(req.query.type) ? req.query.type : '';
 
-  const where = ['l.activity_date = ?'];
-  const params = [date];
+  const range = rangeCondition(date, date);
+  const where = [range.sql];
+  const params = [...range.params];
   if (userId) {
     where.push('l.user_id = ?');
     params.push(userId);
@@ -25,7 +27,7 @@ router.get('/', async (req, res) => {
   }
   const [entries] = await pool.query(`
     SELECT l.id, l.created_at, l.updated_at, l.activity_date, u.username, l.action, l.entity_type, l.entity_id,
-           l.client_id, l.client_name, l.subject, l.summary
+           l.client_id, l.client_name, l.subject, l.summary, l.changes
     FROM activity_log l
     LEFT JOIN users u ON u.id = l.user_id
     WHERE ${where.join(' AND ')}

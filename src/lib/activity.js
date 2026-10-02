@@ -10,7 +10,11 @@
 //   user                               -> user id (Users page changes)
 //   manual                             -> null
 // client_name and subject (ticket title, service name, ...) are snapshots, so the
-// log still reads correctly after the record is renamed or deleted.
+// log still reads correctly after the record is renamed or deleted. changes lists
+// which fields an edit touched (KB articles: title,category,tags,issue,solution,attachments).
+//
+// Times: created_at is set by MySQL (UTC, see src/db.js) and never from JavaScript.
+// activity_date is the UK date of the action (or the date picked for manual work).
 const { pool } = require('../db');
 
 const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'manual'];
@@ -35,6 +39,24 @@ function londonDate(date = new Date()) {
   }).format(date);
 }
 
+// The UTC instant at which the given UK date (YYYY-MM-DD) starts, as a Date.
+// Handles BST/GMT, so a UK day maps to the right UTC range in queries.
+function londonOffsetMs(instant) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(instant);
+  const get = (type) => Number(parts.find((p) => p.type === type).value);
+  const wallClockAsUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
+  return wallClockAsUtc - Math.floor(instant.getTime() / 1000) * 1000;
+}
+
+function londonDayStart(date) {
+  const midnightUtc = new Date(`${date}T00:00:00Z`).getTime();
+  const first = midnightUtc - londonOffsetMs(new Date(midnightUtc));
+  return new Date(midnightUtc - londonOffsetMs(new Date(first)));
+}
+
 // Writes one log entry. A logging failure is reported but never breaks the
 // action the user just took.
 async function logActivity(db, user, entry) {
@@ -44,8 +66,8 @@ async function logActivity(db, user, entry) {
   try {
     await (db || pool).query(`
       INSERT INTO activity_log
-        (user_id, client_id, client_name, entity_type, entity_id, action, subject, summary, activity_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, client_id, client_name, entity_type, entity_id, action, subject, summary, changes, activity_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       user ? user.id : null,
       entry.clientId || null,
@@ -55,6 +77,7 @@ async function logActivity(db, user, entry) {
       entry.action,
       entry.subject ? String(entry.subject).slice(0, 255) : null,
       String(entry.summary || '').slice(0, 5000),
+      entry.changes && entry.changes.length ? entry.changes.join(',').slice(0, 255) : null,
       entry.date || londonDate(),
     ]);
   } catch (err) {
@@ -64,7 +87,7 @@ async function logActivity(db, user, entry) {
 
 const ENTRY_COLUMNS = `
   l.id, l.user_id, u.username, l.client_id, l.client_name, l.entity_type, l.entity_id,
-  l.action, l.subject, l.summary, l.activity_date, l.created_at
+  l.action, l.subject, l.summary, l.changes, l.activity_date, l.created_at
 `;
 
 // Log entries for records of the given types, oldest first.
@@ -117,6 +140,7 @@ module.exports = {
   ACTIONS,
   ACTION_LABELS,
   londonDate,
+  londonDayStart,
   logActivity,
   historyFor,
   clientHistory,

@@ -6,9 +6,23 @@ const { renderMarkdown } = require('../lib/markdown');
 const { receivedFiles, removeStoredFiles } = require('../lib/uploads');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
-const logArticle = (db, req, id, action, title, summary) => logActivity(db, req.user, {
-  type: 'kb_article', id, action, subject: title, summary,
+const logArticle = (db, req, id, action, title, summary, changes = []) => logActivity(db, req.user, {
+  type: 'kb_article', id, action, subject: title, summary, changes,
 });
+
+// Fields compared on edit, in the order they are reported.
+const ARTICLE_FIELDS = [
+  ['title', 'title'],
+  ['category', 'category'],
+  ['tags', 'tags'],
+  ['issue', 'issue description'],
+  ['solution', 'solution'],
+];
+const FIELD_LABELS = { ...Object.fromEntries(ARTICLE_FIELDS), attachments: 'attachments' };
+
+// "a", "a and b", "a, b and c"
+const joinAnd = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+const describeChanges = (changes) => joinAnd(changes.map((c) => FIELD_LABELS[c]));
 
 const router = express.Router();
 
@@ -183,17 +197,25 @@ router.post('/:id', async (req, res) => {
   }
 
   const added = await transaction(async (conn) => {
-    const [result] = await conn.query(`
+    const [[before]] = await conn.query(
+      'SELECT title, category, tags, issue, solution FROM kb_articles WHERE id = ? FOR UPDATE',
+      [id]
+    );
+    if (!before) throw notFound();
+    await conn.query(`
       UPDATE kb_articles SET title = ?, category = ?, tags = ?, issue = ?, solution = ?, updated_by = ?
       WHERE id = ?
     `, [article.title, article.category, article.tags || null, article.issue || null, article.solution || null, req.user.id, id]);
-    if (!result.affectedRows) throw notFound();
     const files = await saveAttachments(conn, req, id);
-    await logArticle(conn, req, id, 'updated', article.title, `Edited article ${article.title}`);
-    if (files) {
-      await logArticle(conn, req, id, 'uploaded', article.title,
-        `Attached ${files} file${files === 1 ? '' : 's'} to ${article.title}`);
-    }
+
+    const changes = ARTICLE_FIELDS
+      .map(([field]) => field)
+      .filter((field) => (before[field] || '') !== (article[field] || ''));
+    if (files) changes.push('attachments');
+    const summary = changes.length
+      ? `Revised the ${describeChanges(changes)}${files ? ` (${files} file${files === 1 ? '' : 's'} attached)` : ''}`
+      : 'Saved with no changes';
+    await logArticle(conn, req, id, 'updated', article.title, summary, changes);
     return files;
   });
   req.keepUploads = true;
@@ -222,7 +244,9 @@ router.post('/attachments/:id/delete', async (req, res) => {
   `, [id]);
   if (!file) throw notFound();
   await pool.query('DELETE FROM kb_attachments WHERE id = ?', [id]);
-  await logArticle(null, req, file.article_id, 'deleted', file.title, `Removed attachment ${file.original_name}`);
+  // Removing an attachment is an edit of the article, so it is logged as an update.
+  await logArticle(null, req, file.article_id, 'updated', file.title,
+    `Removed attachment ${file.original_name}`, ['attachments']);
   await removeStoredFiles([file.file_name]);
   flash(req, 'success', 'Attachment removed.');
   res.redirect(`/kb/${file.article_id}/edit#attachments`);

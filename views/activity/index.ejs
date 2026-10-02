@@ -71,7 +71,7 @@
               <td class="muted"><%= e.entity_id ? `#${e.entity_id}` : '—' %></td>
               <td><%= e.client_name || '—' %><% if (e.client_id) { %> <span class="muted small">#<%= e.client_id %></span><% } %></td>
               <td><%= e.subject || '—' %></td>
-              <td class="log-summary"><%= e.summary %></td>
+              <td class="log-summary"><%= e.summary %><% if (e.changes) { %><div class="muted small">Changed: <%= e.changes.split(',').join(', ') %></div><% } %></td>
             </tr>
           <% } %>
         </tbody>

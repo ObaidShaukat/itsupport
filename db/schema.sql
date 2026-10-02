@@ -243,6 +243,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
               'reopened', 'deleted', 'uploaded') NOT NULL,
   subject VARCHAR(255) NULL,
   summary TEXT NOT NULL,
+  changes VARCHAR(255) NULL,
   activity_date DATE NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NULL,
@@ -257,6 +258,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Upgrades for databases created before a column/value was added (safe to re-run).
+-- Missing columns are added by scripts/migrate.js (MySQL has no ADD COLUMN IF NOT EXISTS).
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                           'kb_article', 'tutorial', 'client', 'user', 'manual') NOT NULL;
