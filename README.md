@@ -2,7 +2,7 @@
 
 Cleartwo IT support portal: clients, service checklists with flowcharts and tutorials, tickets, a General IT Support knowledge base, an activity log and a Daily Report.
 
-Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads) and marked (Markdown). It runs under PM2.
+Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads), marked (Markdown) and exceljs (inventory import). It runs under PM2.
 
 ## Server setup
 
@@ -102,6 +102,21 @@ pm2 restart itsupport
 ## Tickets
 
 Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as glowing LED flags (Low green, Normal cyan, High amber, Urgent red) that all pulse together. Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time).
+
+## Inventory (internal)
+
+Cleartwo's own people, equipment and accounts, not linked to clients. The Inventory section has these tabs: People, Former Employees, Assets, Stock, Access, Reports, Import, and Lists & fields.
+
+- **No credentials, ever:** passwords, PINs and keys are never stored. Accounts only record that they exist, with a "Credentials stored in 1Password" flag and an optional 1Password item link. Custom fields whose label contains "password", "pass" or "PIN" are refused.
+- **People:** name, email, company, team, role, phone, start date and notes. Each person's page shows their assets, stock items, accounts, asset history and a full timeline.
+- **Leaving:** "Mark as left" asks for the leaving date and builds an offboarding checklist from what the person holds. Ticking an item applies it: returned assets become Spare, returned stock goes back to available, and revoked accounts become Removed with the date. Left people move to Former Employees with all history kept, and can be reactivated.
+- **Assets:** one record per item, with an automatic tag (C2-0001, …), status (In use, Spare, Repair, Damaged, Sold, Disposed), assign / unassign / reassign, and assignment history.
+- **Stock:** counted items. Available = total − assigned − damaged, calculated automatically.
+- **Categories** are marked Asset or Stock. They, plus companies, teams and apps, are editable under Lists & fields, and `npm run seed` adds the defaults.
+- **Custom fields:** add, edit, reorder (drag and drop), hide or delete fields for People, Assets, Stock, Access and Shared accounts, without code. They appear on forms, detail pages and lists, can be filtered and searched, and are included in CSV exports.
+- **Reports:** counts by category, model and status, spare and broken assets, low stock, people with no laptop, and CSV exports.
+- **Import (one-time):** upload the inventory `.xlsx`, check the preview and its warnings, then confirm. Columns whose header contains "Password", "Pass" or "PIN" are skipped before any value in them is read. The uploaded file is deleted straight after it is read. People are matched by name and assets by serial number. `*.xlsx` is git-ignored.
+- Every inventory action is logged in the activity log. Inventory is internal admin and does not appear in the Daily Report.
 
 ## Tasks and reminders
 

@@ -14,6 +14,7 @@ const multipart = require('./src/middleware/multipart');
 const { detectFonts } = require('./src/lib/fonts');
 const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./src/lib/tickets');
 const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
+const { ASSET_STATUSES, CONNECTIONS } = require('./src/lib/inventory');
 
 if (!config.sessionSecret) {
   console.error('SESSION_SECRET is not set in .env');
@@ -52,6 +53,8 @@ app.locals.fonts = fonts;
 app.locals.ticketStatuses = TICKET_STATUSES;
 app.locals.ticketPriorities = TICKET_PRIORITIES;
 app.locals.activityLabels = ACTION_LABELS;
+app.locals.invAssetStatuses = ASSET_STATUSES;
+app.locals.invConnections = CONNECTIONS;
 app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },
   { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
@@ -60,6 +63,7 @@ app.locals.navItems = [
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
   { key: 'kb', href: '/kb', label: 'General IT Support', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
+  { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard' },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -128,6 +132,7 @@ const NAV_PREFIXES = [
   ['/kb', 'kb'],
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
   ['/tasks', 'tasks'],
+  ['/inventory', 'inventory'],
 ];
 app.use((req, res, next) => {
   const hit = NAV_PREFIXES.find(([prefix]) => req.path === prefix || req.path.startsWith(`${prefix}/`));
@@ -164,6 +169,7 @@ app.use('/report', require('./src/routes/report'));
 app.use('/activity', require('./src/routes/activity-log'));
 app.use('/tasks', require('./src/routes/tasks'));
 app.use('/notifications', require('./src/routes/notifications'));
+app.use('/inventory', require('./src/routes/inventory'));
 
 // ---- Errors ----
 

@@ -1,0 +1,5 @@
+<nav class="tabs inv-tabs" aria-label="Inventory sections">
+  <% for (const t of invTabs) { %>
+    <a href="<%= t.href %>" class="<%= t.key === invTab ? 'active' : '' %>" <%- t.key === invTab ? 'aria-current="page"' : '' %>><%= t.label %></a>
+  <% } %>
+</nav>

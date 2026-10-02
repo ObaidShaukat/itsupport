@@ -1,0 +1,127 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div><h1>Inventory</h1><p class="muted">Counts and lists across all equipment.</p></div>
+  <div class="actions">
+    <a href="/inventory/export/people" class="btn btn-small"><%- icon('download') %><span>People CSV</span></a>
+    <a href="/inventory/export/assets" class="btn btn-small"><%- icon('download') %><span>Assets CSV</span></a>
+    <a href="/inventory/export/stock" class="btn btn-small"><%- icon('download') %><span>Stock CSV</span></a>
+    <a href="/inventory/export/access" class="btn btn-small"><%- icon('download') %><span>Access CSV</span></a>
+  </div>
+</header>
+<%- include('_tabs') %>
+
+<section class="stats">
+  <a href="/inventory/assets?status=in_use" class="card stat"><span class="stat-icon"><%- icon('monitor') %></span><span class="stat-value"><%= byStatus.in_use || 0 %></span><span class="stat-label">Assets in use</span></a>
+  <a href="/inventory/assets?status=spare" class="card stat"><span class="stat-icon"><%- icon('box') %></span><span class="stat-value"><%= byStatus.spare || 0 %></span><span class="stat-label">Spare</span></a>
+  <a href="#broken" class="card stat"><span class="stat-icon"><%- icon('tool') %></span><span class="stat-value"><%= (byStatus.repair || 0) + (byStatus.damaged || 0) %></span><span class="stat-label">In repair or damaged</span></a>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>By category</h2>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th>Kind</th><th class="num">Assets</th><th class="num">Stock units</th></tr></thead>
+        <tbody>
+          <% for (const c of byCategory) { %>
+            <tr><td><%= c.category %></td><td class="muted small"><%= c.kind === 'stock' ? 'Stock' : 'Asset' %></td><td class="num"><%= Number(c.assets) || '' %></td><td class="num"><%= Number(c.stock) || '' %></td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+  <section class="card">
+    <h2>By status</h2>
+    <ul class="rows rows-compact">
+      <% for (const [k, label] of Object.entries(invAssetStatuses)) { %>
+        <li class="row"><div class="row-main"><a href="/inventory/assets?status=<%= k %>"><%- include('_status', { status: k }) %></a><strong><%= byStatus[k] || 0 %></strong></div></li>
+      <% } %>
+    </ul>
+  </section>
+</div>
+
+<section class="card">
+  <h2>Assets by model</h2>
+  <%- include('../partials/search', { target: '#models', placeholder: 'Search models or people' }) %>
+  <div class="table-wrap" id="models">
+    <p class="empty" data-filter-empty hidden>Nothing matches your search.</p>
+    <table class="table">
+      <thead><tr><th>Category</th><th>Model</th><th class="num">Count</th><th>Status</th><th>Used by</th></tr></thead>
+      <tbody>
+        <% for (const g of assetGroups) { %>
+          <tr data-filter-item data-search="<%= g.category %> <%= g.model %> <%= g.people.join(' ') %>">
+            <td><%= g.category %></td>
+            <td><strong><%= g.model %></strong></td>
+            <td class="num"><%= g.total %></td>
+            <td class="small"><%= Object.entries(g.statuses).map(([k, n]) => `${invAssetStatuses[k]} ${n}`).join(', ') %></td>
+            <td class="small"><%= g.people.join(', ') %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>Stock by model</h2>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Category</th><th>Model</th><th class="num">Total</th><th class="num">Available</th><th>Used by</th></tr></thead>
+      <tbody>
+        <% for (const s of stock) { %>
+          <tr>
+            <td><%= s.category_name || '' %></td>
+            <td><a href="/inventory/stock/<%= s.id %>"><strong><%= [s.brand, s.model].filter(Boolean).join(' ') %></strong></a></td>
+            <td class="num"><%= s.total_qty %></td>
+            <td class="num"><span class="<%= s.available_qty <= lowStockLimit ? 'stock-low' : 'stock-ok' %>"><%= s.available_qty %></span></td>
+            <td class="small"><%= s.holders.join(', ') %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Spare assets <span class="muted small">(<%= spare.length %>)</span></h2>
+    <% if (!spare.length) { %><p class="empty">No spare assets.</p><% } else { %>
+      <ul class="rows rows-compact">
+        <% for (const a of spare) { %>
+          <li class="row"><div class="row-main"><a href="/inventory/assets/<%= a.id %>"><%= a.asset_tag %> · <%= [a.brand, a.model].filter(Boolean).join(' ') || a.category_name %></a><span class="muted small"><%= a.category_name %><%= a.serial_number ? ` · ${a.serial_number}` : '' %><%= a.location ? ` · ${a.location}` : '' %></span></div></li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+  <section class="card" id="broken">
+    <h2>In repair or damaged <span class="muted small">(<%= broken.length %>)</span></h2>
+    <% if (!broken.length) { %><p class="empty">Nothing in repair or damaged.</p><% } else { %>
+      <ul class="rows rows-compact">
+        <% for (const a of broken) { %>
+          <li class="row"><div class="row-main"><a href="/inventory/assets/<%= a.id %>"><%= a.asset_tag %> · <%= [a.brand, a.model].filter(Boolean).join(' ') || a.category_name %></a><span><%- include('_status', { status: a.status }) %></span></div></li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+  <section class="card">
+    <h2>Low stock <span class="muted small">(<%= lowStockLimit %> or fewer available)</span></h2>
+    <% if (!lowStock.length) { %><p class="empty">Everything is well stocked.</p><% } else { %>
+      <ul class="rows rows-compact">
+        <% for (const s of lowStock) { %>
+          <li class="row"><div class="row-main"><a href="/inventory/stock/<%= s.id %>"><%= s.category_name %> · <%= [s.brand, s.model].filter(Boolean).join(' ') %></a><span class="stock-low"><%= s.available_qty %> left</span></div></li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+  <section class="card">
+    <h2>People with no laptop <span class="muted small">(<%= noLaptop.length %>)</span></h2>
+    <% if (!noLaptop.length) { %><p class="empty">Everyone has a laptop, desktop or workstation.</p><% } else { %>
+      <ul class="rows rows-compact">
+        <% for (const p of noLaptop) { %>
+          <li class="row"><div class="row-main"><a href="/inventory/people/<%= p.id %>"><%= p.name %></a><span class="muted small"><%= p.team_name || '' %></span></div></li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+<%- include('../partials/foot') %>

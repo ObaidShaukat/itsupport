@@ -1,4 +1,5 @@
-// Seeds the default service categories, services and steps. Usage: npm run seed
+// Seeds the default service categories, services and steps, and the inventory lists
+// (categories, apps, companies, teams). Usage: npm run seed
 // Safe to run more than once: existing categories and services are left alone, and
 // steps are only added to services that have none.
 const { pool, transaction } = require('../src/db');
@@ -46,6 +47,21 @@ const STEPS = {
   ],
 };
 
+// Inventory categories: 'asset' = tracked one by one, 'stock' = counted by quantity.
+const INV_CATEGORIES = [
+  ['Laptop', 'asset'], ['Desktop', 'asset'], ['Workstation', 'asset'], ['Monitor', 'asset'],
+  ['Keyboard', 'stock'], ['Mouse', 'stock'], ['Keyboard & Mouse Combo', 'stock'], ['Headset', 'stock'],
+  ['Docking Station', 'stock'], ['USB Hub', 'stock'], ['Cables', 'stock'], ['Networking Equipment', 'asset'],
+  ['Printer', 'asset'], ['Barcode Scanner', 'asset'], ['Phone / VoIP Phone', 'asset'], ['Tablet', 'asset'],
+  ['Mobile Device', 'asset'], ['Android Box', 'asset'], ['Raspberry Pi', 'asset'], ['Payment Device', 'asset'],
+  ['Smart Switch', 'asset'], ['Batteries', 'stock'], ['Mouse Pad', 'stock'], ['Back Support / Pillow', 'stock'],
+  ['Other', 'stock'],
+];
+const INV_APPS = ['Microsoft 365', 'Google Workspace', 'Gmail', 'Outlook', '1Password', 'Claude', 'ChatGPT', 'Canva',
+  'Apple ID', 'Mac local user', 'Duo', 'VPN', 'Other'];
+const INV_COMPANIES = ['Cleartwo', 'My Digital People'];
+const INV_TEAMS = ['PK Team', 'Writers'];
+
 async function main() {
   const added = { categories: 0, services: 0, steps: 0 };
 
@@ -88,7 +104,19 @@ async function main() {
     }
   });
 
-  console.log(`Seed complete: ${added.categories} categories, ${added.services} services, ${added.steps} steps added.`);
+  let lists = 0;
+  await transaction(async (conn) => {
+    for (const [name, kind] of INV_CATEGORIES) {
+      const [r] = await conn.query('INSERT IGNORE INTO inv_categories (name, kind) VALUES (?, ?)', [name, kind]);
+      lists += r.affectedRows;
+    }
+    for (const name of INV_APPS) lists += (await conn.query('INSERT IGNORE INTO inv_apps (name) VALUES (?)', [name]))[0].affectedRows;
+    for (const name of INV_COMPANIES) lists += (await conn.query('INSERT IGNORE INTO inv_companies (name) VALUES (?)', [name]))[0].affectedRows;
+    for (const name of INV_TEAMS) lists += (await conn.query('INSERT IGNORE INTO inv_teams (name) VALUES (?)', [name]))[0].affectedRows;
+  });
+
+  console.log(`Seed complete: ${added.categories} categories, ${added.services} services, ${added.steps} steps, `
+    + `${lists} inventory list entries added.`);
 }
 
 main()

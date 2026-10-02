@@ -10,6 +10,9 @@
 //   user                               -> user id (Users page changes)
 //   setting                            -> (no longer written) old report action/issue changes
 //   task                               -> task id
+//   inv_person / inv_asset / inv_stock / inv_access / inv_shared -> that inventory record
+//   inv_setting                        -> lists, categories and custom fields
+// related_person_id ties an inventory entry to the person it concerns (their timeline).
 //   manual                             -> null
 // client_name and subject (ticket title, service name, ...) are snapshots, so the
 // log still reads correctly after the record is renamed or deleted. changes lists
@@ -19,7 +22,8 @@
 // activity_date is the UK date of the action (or the date picked for manual work).
 const { pool } = require('../db');
 
-const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'manual'];
+const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task',
+  'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting', 'manual'];
 const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed'];
 
 const ACTION_LABELS = {
@@ -92,8 +96,9 @@ async function logActivity(db, user, entry) {
   try {
     await (db || pool).query(`
       INSERT INTO activity_log
-        (user_id, client_id, client_name, entity_type, entity_id, action, subject, summary, changes, activity_date)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        (user_id, client_id, client_name, entity_type, entity_id, action, subject, summary, changes,
+         related_person_id, activity_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       user ? user.id : null,
       entry.clientId || null,
@@ -104,6 +109,7 @@ async function logActivity(db, user, entry) {
       entry.subject ? String(entry.subject).slice(0, 255) : null,
       String(entry.summary || '').slice(0, 5000),
       entry.changes && entry.changes.length ? entry.changes.join(',').slice(0, 255) : null,
+      entry.personId || null,
       entry.date || londonDate(),
     ]);
   } catch (err) {
@@ -113,7 +119,7 @@ async function logActivity(db, user, entry) {
 
 const ENTRY_COLUMNS = `
   l.id, l.user_id, u.username, l.client_id, l.client_name, l.entity_type, l.entity_id,
-  l.action, l.subject, l.summary, l.changes, l.activity_date, l.created_at
+  l.action, l.subject, l.summary, l.changes, l.related_person_id, l.activity_date, l.created_at
 `;
 
 // Log entries for records of the given types, oldest first.

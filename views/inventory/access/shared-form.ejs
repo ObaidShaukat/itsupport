@@ -1,0 +1,54 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/access#shared">Shared accounts</a></p>
+    <h1><%= item.id ? 'Edit shared account' : 'Add shared account' %></h1>
+    <p class="muted small">An account used by several people or by a system, e.g. a shared mailbox or a service login.</p>
+  </div>
+</header>
+<%- include('../_tabs') %>
+
+<section class="card card-narrow">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="<%= item.id ? `/inventory/access/shared/${item.id}` : '/inventory/access/shared' %>" class="form">
+    <%- csrfField %>
+    <div class="form-row">
+      <label class="field"><span>Name *</span><input type="text" name="name" value="<%= item.name || '' %>" required maxlength="150" placeholder="e.g. Accounts mailbox"></label>
+      <label class="field">
+        <span>Account / app</span>
+        <input type="text" name="app" value="<%= item.app || '' %>" list="inv-apps" maxlength="100">
+        <datalist id="inv-apps"><% for (const ap of lists.apps) { %><option value="<%= ap.name %>"><% } %></datalist>
+      </label>
+    </div>
+    <div class="form-row">
+      <label class="field"><span>Login / account</span><input type="text" name="account" value="<%= item.account || '' %>" maxlength="254" autocomplete="off"></label>
+      <label class="field"><span>Purpose</span><input type="text" name="purpose" value="<%= item.purpose || '' %>" maxlength="255"></label>
+    </div>
+    <div class="form-row">
+      <label class="field">
+        <span>Owner</span>
+        <select name="owner_person_id">
+          <option value="">No owner</option>
+          <% for (const p of people) { %><option value="<%= p.id %>" <%= item.owner_person_id === p.id ? 'selected' : '' %>><%= p.name %></option><% } %>
+        </select>
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select name="status">
+          <option value="active" <%= item.status !== 'removed' ? 'selected' : '' %>>Active</option>
+          <option value="removed" <%= item.status === 'removed' ? 'selected' : '' %>>Removed</option>
+        </select>
+      </label>
+    </div>
+    <label class="checkbox-field"><input type="checkbox" name="in_1password" value="1" <%= item.in_1password ? 'checked' : '' %>><span>Credentials stored in 1Password</span></label>
+    <label class="field"><span>1Password item link <span class="muted">(optional)</span></span><input type="url" name="onepassword_link" value="<%= item.onepassword_link || '' %>" maxlength="500"></label>
+    <%- include('../_cf-inputs', { fields, values }) %>
+    <label class="field"><span>Notes</span><textarea name="notes" rows="3" maxlength="5000"><%= item.notes || '' %></textarea></label>
+    <p class="muted small"><%- icon('lock') %> Never type a password here.</p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="/inventory/access#shared" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

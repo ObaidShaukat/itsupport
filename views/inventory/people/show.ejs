@@ -1,0 +1,231 @@
+<%- include('../../partials/head') %>
+<% const left = person.status === 'left'; const here = `/inventory/people/${person.id}`; %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="<%= left ? '/inventory/former' : '/inventory/people' %>"><%= left ? 'Former Employees' : 'People' %></a></p>
+    <h1><%= person.name %> <span class="chip <%= left ? 'chip-warn' : 'chip-category' %>"><%= left ? `Left ${person.leaving_date || ''}` : 'Active' %></span></h1>
+    <p class="muted small"><%= [person.role, person.team_name, person.company_name].filter(Boolean).join(' · ') %></p>
+  </div>
+  <div class="actions">
+    <% if (left) { %>
+      <form method="post" action="<%= here %>/reactivate" class="inline" data-confirm="Make <%= person.name %> active again?">
+        <%- csrfField %><button type="submit" class="btn">Reactivate</button>
+      </form>
+    <% } else { %>
+      <a href="<%= here %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
+      <details class="edit edit-right" id="leave">
+        <summary class="btn btn-danger"><span>Mark as left</span></summary>
+        <div class="edit-panel">
+          <form method="post" action="<%= here %>/leave" class="form">
+            <%- csrfField %>
+            <p class="small">This builds an offboarding checklist: return <%= held.assets.length %> asset<%= held.assets.length === 1 ? '' : 's' %>, <%= held.stock.length %> stock item<%= held.stock.length === 1 ? '' : 's' %>, and revoke <%= held.access.filter((a) => a.status === 'active').length %> active account<%= held.access.filter((a) => a.status === 'active').length === 1 ? '' : 's' %>.</p>
+            <label class="field"><span>Leaving date</span><input type="date" name="leaving_date" value="<%= today %>" required></label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-danger-solid">Mark as left</button>
+              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+            </div>
+          </form>
+        </div>
+      </details>
+    <% } %>
+  </div>
+</header>
+<%- include('../_tabs') %>
+
+<section class="card">
+  <dl class="details">
+    <div><dt>Email</dt><dd><%= person.email || '—' %></dd></div>
+    <div><dt>Phone</dt><dd><%= person.phone || '—' %></dd></div>
+    <div><dt>Start date</dt><dd><%= person.start_date || '—' %></dd></div>
+    <% if (left) { %><div><dt>Leaving date</dt><dd><%= person.leaving_date || '—' %></dd></div><% } %>
+  </dl>
+  <%- include('../_cf-values', { fields, values }) %>
+  <% if (person.notes) { %><p class="pre-line"><%= person.notes %></p><% } %>
+</section>
+
+<% if (offboarding.length) { %>
+  <section class="card" id="offboarding">
+    <div class="card-head">
+      <h2>Offboarding checklist</h2>
+      <span class="muted small"><%= offboarding.filter((o) => o.done).length %> of <%= offboarding.length %> done</span>
+    </div>
+    <ul class="checklist checklist-live">
+      <% for (const o of offboarding) { %>
+        <li class="<%= o.done ? 'is-done' : '' %>">
+          <form method="post" action="/inventory/offboarding/<%= o.id %>/done">
+            <%- csrfField %>
+            <button type="submit" class="check-btn" <%= o.done ? 'disabled' : '' %> aria-pressed="<%= o.done ? 'true' : 'false' %>">
+              <span class="check-icon"><%- icon(o.done ? 'box-check' : 'box') %></span>
+              <span class="check-text"><%= o.label %>
+                <% if (o.done) { %><span class="muted small check-meta"><%= o.done_by_name || 'Deleted user' %> · <%= fmtDate(o.done_at) %></span><% } %>
+              </span>
+            </button>
+          </form>
+        </li>
+      <% } %>
+    </ul>
+    <p class="muted small">Returned assets become Spare, returned stock goes back to available, revoked accounts become Removed with today's date.</p>
+  </section>
+<% } %>
+
+<div class="grid-2">
+  <section class="card" id="assets">
+    <h2>Assets <span class="muted small">(<%= held.assets.length %>)</span></h2>
+    <% if (!held.assets.length) { %><p class="empty">No assets assigned.</p><% } else { %>
+      <ul class="rows">
+        <% for (const a of held.assets) { %>
+          <li class="row">
+            <div class="row-main">
+              <a href="/inventory/assets/<%= a.id %>"><strong><%= [a.brand, a.model].filter(Boolean).join(' ') || a.category_name %></strong></a>
+              <div class="muted small"><%= a.asset_tag %> · <%= a.category_name || 'Uncategorised' %><%= a.serial_number ? ` · SN ${a.serial_number}` : '' %></div>
+            </div>
+            <% if (!left) { %>
+              <form method="post" action="/inventory/assets/<%= a.id %>/unassign" class="inline" data-confirm="Unassign <%= a.asset_tag %> from <%= person.name %>? It becomes Spare.">
+                <%- csrfField %><input type="hidden" name="back" value="<%= here %>#assets">
+                <button type="submit" class="btn btn-small btn-ghost">Unassign</button>
+              </form>
+            <% } %>
+          </li>
+        <% } %>
+      </ul>
+    <% } %>
+    <% if (!left) { %>
+      <form method="post" action="<%= here %>/assign-asset" class="inline-form add-step">
+        <%- csrfField %>
+        <input type="hidden" name="person_id" value="<%= person.id %>">
+        <input type="hidden" name="back" value="<%= here %>#assets">
+        <label class="field field-grow">
+          <span>Assign a spare asset</span>
+          <select name="asset" required>
+            <option value="">Choose…</option>
+            <% for (const a of spareAssets) { %><option value="<%= a.id %>"><%= a.asset_tag %> · <%= a.category_name || '' %> · <%= [a.brand, a.model].filter(Boolean).join(' ') %><%= a.serial_number ? ` (${a.serial_number})` : '' %></option><% } %>
+          </select>
+        </label>
+        <button type="submit" class="btn btn-primary">Assign</button>
+      </form>
+    <% } %>
+  </section>
+
+  <section class="card" id="stock">
+    <h2>Stock items <span class="muted small">(<%= held.stock.reduce((n, s) => n + s.quantity, 0) %>)</span></h2>
+    <% if (!held.stock.length) { %><p class="empty">No stock items.</p><% } else { %>
+      <ul class="rows">
+        <% for (const s of held.stock) { %>
+          <li class="row">
+            <div class="row-main">
+              <a href="/inventory/stock/<%= s.stock_id %>"><strong><%= s.quantity %> × <%= [s.brand, s.model].filter(Boolean).join(' ') %></strong></a>
+              <div class="muted small"><%= s.category_name || '' %><%= s.notes && s.notes !== 'Imported' ? ` · ${s.notes}` : '' %></div>
+            </div>
+            <% if (!left) { %>
+              <form method="post" action="/inventory/stock/assignments/<%= s.id %>/return" class="inline">
+                <%- csrfField %><input type="hidden" name="back" value="<%= here %>#stock">
+                <button type="submit" class="btn btn-small btn-ghost">Returned</button>
+              </form>
+            <% } %>
+          </li>
+        <% } %>
+      </ul>
+    <% } %>
+    <% if (!left) { %>
+      <form method="post" action="<%= here %>/give-stock" class="inline-form add-step">
+        <%- csrfField %>
+        <input type="hidden" name="person_id" value="<%= person.id %>">
+        <input type="hidden" name="back" value="<%= here %>#stock">
+        <label class="field field-grow">
+          <span>Give stock</span>
+          <select name="stock" required>
+            <option value="">Choose…</option>
+            <% for (const s of stock) { %><option value="<%= s.id %>"><%= s.category_name || '' %> · <%= [s.brand, s.model].filter(Boolean).join(' ') %> (<%= s.available_qty %> available)</option><% } %>
+          </select>
+        </label>
+        <label class="field"><span>Qty</span><input type="number" name="quantity" value="1" min="1" max="1000" class="qty-input"></label>
+        <button type="submit" class="btn btn-primary">Give</button>
+      </form>
+    <% } %>
+  </section>
+</div>
+
+<section class="card section" id="access">
+  <h2>Accounts &amp; access</h2>
+  <% if (!held.access.length) { %><p class="empty">No accounts recorded.</p><% } else { %>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Account</th><th>Username / email</th><th>Status</th><th>Granted</th><th>1Password</th><th></th></tr></thead>
+        <tbody>
+          <% for (const a of held.access) { %>
+            <tr>
+              <td><strong><%= a.app_name || 'Other' %></strong></td>
+              <td><%= a.username || '—' %></td>
+              <td><span class="chip <%= a.status === 'active' ? 'chip-category' : '' %>"><%= a.status === 'active' ? 'Active' : `Removed ${a.removed_date || ''}` %></span></td>
+              <td class="nowrap small"><%= a.granted_date || '' %><%= a.granted_by ? ` by ${a.granted_by}` : '' %></td>
+              <td><% if (a.in_1password) { %><%- icon('lock') %> Yes<% if (a.onepassword_link) { %> · <a href="<%= a.onepassword_link %>" target="_blank" rel="noopener noreferrer">Open</a><% } %><% } else { %><span class="muted">No</span><% } %></td>
+              <td class="row-actions">
+                <a href="/inventory/access/<%= a.id %>/edit" class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></a>
+                <% if (a.status === 'active') { %>
+                  <form method="post" action="/inventory/access/<%= a.id %>/remove" class="inline" data-confirm="Mark <%= a.app_name || 'this account' %> as removed for <%= person.name %>?">
+                    <%- csrfField %><input type="hidden" name="back" value="<%= here %>#access">
+                    <button type="submit" class="btn btn-small btn-ghost">Remove</button>
+                  </form>
+                <% } %>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+  <% if (!left) { %>
+    <details class="report-toggle">
+      <summary><%- icon('plus') %> Add account</summary>
+      <form method="post" action="/inventory/access" class="form">
+        <%- csrfField %>
+        <input type="hidden" name="person_id" value="<%= person.id %>">
+        <input type="hidden" name="back" value="<%= here %>#access">
+        <div class="form-row">
+          <label class="field">
+            <span>Account / app</span>
+            <input type="text" name="app" list="inv-apps" required maxlength="100" placeholder="e.g. Microsoft 365">
+            <datalist id="inv-apps"><% for (const ap of lists.apps) { %><option value="<%= ap.name %>"><% } %></datalist>
+          </label>
+          <label class="field"><span>Username / email</span><input type="text" name="username" maxlength="254" autocomplete="off"></label>
+        </div>
+        <div class="form-row">
+          <label class="field"><span>Granted</span><input type="date" name="granted_date" value="<%= today %>"></label>
+          <label class="field"><span>Granted by</span><input type="text" name="granted_by" value="<%= currentUser.username %>" maxlength="150"></label>
+        </div>
+        <label class="checkbox-field"><input type="checkbox" name="in_1password" value="1"><span>Credentials stored in 1Password</span></label>
+        <label class="field"><span>1Password item link <span class="muted">(optional)</span></span><input type="url" name="onepassword_link" maxlength="500" placeholder="https://start.1password.com/…"></label>
+        <%- include('../_cf-inputs', { fields: accessFields, values: {} }) %>
+        <p class="muted small"><%- icon('lock') %> Never type a password here. Only record that the account exists.</p>
+        <div><button type="submit" class="btn btn-primary">Add account</button></div>
+      </form>
+    </details>
+  <% } %>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <h2>Asset history</h2>
+    <% if (!assetHistory.length) { %><p class="empty">No assets assigned so far.</p><% } else { %>
+      <ul class="rows rows-compact">
+        <% for (const h of assetHistory) { %>
+          <li class="row"><div class="row-main">
+            <a href="/inventory/assets/<%= h.asset_id %>"><%= [h.brand, h.model].filter(Boolean).join(' ') || h.category_name %> (<%= h.asset_tag %>)</a>
+            <span class="muted small"><%= h.assigned_from || '?' %> → <%= h.assigned_until || 'now' %></span>
+          </div></li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+  <section class="card">
+    <h2>Timeline</h2>
+    <% if (!timeline.length) { %><p class="empty">Nothing logged yet.</p><% } else { %>
+      <ol class="timeline">
+        <% for (const t of timeline) { %>
+          <li><div><%= t.summary %></div><div class="muted small"><%= t.username || 'Deleted user' %> · <%= fmtDate(t.created_at) %></div></li>
+        <% } %>
+      </ol>
+    <% } %>
+  </section>
+</div>
+<%- include('../../partials/foot') %>

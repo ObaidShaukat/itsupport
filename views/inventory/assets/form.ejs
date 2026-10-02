@@ -1,0 +1,63 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/assets">Assets</a><% if (asset.id) { %> / <a href="/inventory/assets/<%= asset.id %>"><%= asset.asset_tag %></a><% } %></p>
+    <h1><%= asset.id ? `Edit ${asset.asset_tag}` : 'Add asset' %></h1>
+    <% if (!asset.id) { %><p class="muted small">The asset tag (C2-0001, …) is given automatically when you save.</p><% } %>
+  </div>
+</header>
+<%- include('../_tabs') %>
+
+<section class="card card-narrow">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="<%= asset.id ? `/inventory/assets/${asset.id}` : '/inventory/assets' %>" class="form" data-cf-scope>
+    <%- csrfField %>
+    <div class="form-row">
+      <label class="field">
+        <span>Category</span>
+        <select name="category_id" data-cf-category-select>
+          <option value="">Choose…</option>
+          <% for (const c of assetCategories) { %><option value="<%= c.id %>" <%= asset.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+        </select>
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select name="status" data-sold-toggle>
+          <% for (const [k, label] of Object.entries(invAssetStatuses)) { %>
+            <% if (k === 'in_use' && !asset.person_id) continue; %>
+            <option value="<%= k %>" <%= asset.status === k ? 'selected' : '' %>><%= label %></option>
+          <% } %>
+        </select>
+        <% if (asset.person_id) { %><small class="muted">Assigned to <%= asset.person_name %>. Choosing another status unassigns it.</small><% } %>
+      </label>
+    </div>
+    <div class="form-row">
+      <label class="field"><span>Brand</span><input type="text" name="brand" value="<%= asset.brand || '' %>" maxlength="100"></label>
+      <label class="field"><span>Model</span><input type="text" name="model" value="<%= asset.model || '' %>" maxlength="255"></label>
+    </div>
+    <div class="form-row">
+      <label class="field"><span>Serial number</span><input type="text" name="serial_number" value="<%= asset.serial_number || '' %>" maxlength="150"></label>
+      <label class="field"><span>Device name</span><input type="text" name="device_name" value="<%= asset.device_name || '' %>" maxlength="150"></label>
+    </div>
+    <div class="form-row">
+      <label class="field"><span>Wi-Fi MAC</span><input type="text" name="wifi_mac" value="<%= asset.wifi_mac || '' %>" maxlength="50"></label>
+      <label class="field"><span>Ethernet MAC</span><input type="text" name="ethernet_mac" value="<%= asset.ethernet_mac || '' %>" maxlength="50"></label>
+    </div>
+    <label class="field"><span>Specifications</span><textarea name="specifications" rows="2" maxlength="5000"><%= asset.specifications || '' %></textarea></label>
+    <div class="form-row">
+      <label class="field"><span>Purchase date</span><input type="date" name="purchase_date" value="<%= asset.purchase_date || '' %>"></label>
+      <label class="field"><span>Location</span><input type="text" name="location" value="<%= asset.location || '' %>" maxlength="150" placeholder="e.g. Office"></label>
+    </div>
+    <div class="form-row" data-sold-fields>
+      <label class="field"><span>Sold to</span><input type="text" name="sold_to" value="<%= asset.sold_to || '' %>" maxlength="150"></label>
+      <label class="field"><span>Sold date</span><input type="date" name="sold_date" value="<%= asset.sold_date || '' %>"></label>
+    </div>
+    <%- include('../_cf-inputs', { fields, values }) %>
+    <label class="field"><span>Notes</span><textarea name="notes" rows="3" maxlength="5000"><%= asset.notes || '' %></textarea></label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary"><%= asset.id ? 'Save' : 'Add asset' %></button>
+      <a href="<%= asset.id ? `/inventory/assets/${asset.id}` : '/inventory/assets' %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

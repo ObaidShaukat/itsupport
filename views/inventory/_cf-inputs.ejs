@@ -1,0 +1,27 @@
+<%#
+  Custom field inputs. fields: definitions; values: { fieldId: value }.
+  Fields limited to a category carry data-cf-category; app.js shows them only when
+  the form's category select matches.
+%>
+<% for (const f of fields) { %>
+  <% const v = values[f.id] ?? ''; const name = `cf_${f.id}`; %>
+  <label class="field cf-field" <% if (f.category_id) { %>data-cf-category="<%= f.category_id %>"<% } %>>
+    <span><%= f.label %><% if (f.required) { %> <span class="req" title="Required">*</span><% } %><% if (f.category_name) { %> <span class="muted small">(<%= f.category_name %> only)</span><% } %></span>
+    <% if (f.field_type === 'longtext') { %>
+      <textarea name="<%= name %>" rows="3" maxlength="10000"><%= v %></textarea>
+    <% } else if (f.field_type === 'select') { %>
+      <select name="<%= name %>">
+        <option value="">—</option>
+        <% for (const o of f.optionList) { %><option value="<%= o %>" <%= o === v ? 'selected' : '' %>><%= o %></option><% } %>
+      </select>
+    <% } else if (f.field_type === 'boolean') { %>
+      <select name="<%= name %>">
+        <option value="">—</option>
+        <option value="yes" <%= v === 'yes' ? 'selected' : '' %>>Yes</option>
+        <option value="no" <%= v === 'no' ? 'selected' : '' %>>No</option>
+      </select>
+    <% } else { %>
+      <input type="<%= { number: 'number', date: 'date', link: 'url' }[f.field_type] || 'text' %>" name="<%= name %>" value="<%= v %>" <%= f.field_type === 'number' ? 'step=any' : '' %> maxlength="1000">
+    <% } %>
+  </label>
+<% } %>

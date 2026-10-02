@@ -1,0 +1,47 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/stock">Stock</a></p>
+    <h1><%= item.id ? 'Edit stock item' : 'Add stock item' %></h1>
+  </div>
+</header>
+<%- include('../_tabs') %>
+
+<section class="card card-narrow">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="<%= item.id ? `/inventory/stock/${item.id}` : '/inventory/stock' %>" class="form" data-cf-scope>
+    <%- csrfField %>
+    <div class="form-row">
+      <label class="field">
+        <span>Category</span>
+        <select name="category_id" data-cf-category-select>
+          <option value="">Choose…</option>
+          <% for (const c of stockCategories) { %><option value="<%= c.id %>" <%= item.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+        </select>
+      </label>
+      <label class="field">
+        <span>Connection</span>
+        <select name="connection">
+          <% for (const [k, label] of Object.entries(invConnections)) { %><option value="<%= k %>" <%= item.connection === k ? 'selected' : '' %>><%= label %></option><% } %>
+        </select>
+      </label>
+    </div>
+    <div class="form-row">
+      <label class="field"><span>Brand</span><input type="text" name="brand" value="<%= item.brand || '' %>" maxlength="100"></label>
+      <label class="field"><span>Model / description *</span><input type="text" name="model" value="<%= item.model || '' %>" required maxlength="255"></label>
+    </div>
+    <label class="field"><span>Location</span><input type="text" name="location" value="<%= item.location || '' %>" maxlength="150" placeholder="e.g. Office store room"></label>
+    <div class="form-row">
+      <label class="field"><span>Total quantity</span><input type="number" name="total_qty" value="<%= item.total_qty ?? 0 %>" min="0" required></label>
+      <label class="field"><span>Damaged</span><input type="number" name="damaged_qty" value="<%= item.damaged_qty ?? 0 %>" min="0"></label>
+    </div>
+    <% if (item.id) { %><p class="muted small"><%= item.assigned_qty || 0 %> currently assigned to people.</p><% } %>
+    <%- include('../_cf-inputs', { fields, values }) %>
+    <label class="field"><span>Notes</span><textarea name="notes" rows="3" maxlength="5000"><%= item.notes || '' %></textarea></label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary"><%= item.id ? 'Save' : 'Add stock item' %></button>
+      <a href="<%= item.id ? `/inventory/stock/${item.id}` : '/inventory/stock' %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

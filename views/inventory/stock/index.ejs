@@ -1,0 +1,59 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div><h1>Inventory</h1><p class="muted">Accessories counted by quantity. Available = total − assigned − damaged.</p></div>
+  <div class="actions">
+    <a href="/inventory/export/stock" class="btn"><%- icon('download') %><span>Export CSV</span></a>
+    <a href="/inventory/stock/new" class="btn btn-primary"><%- icon('plus') %><span>Add stock item</span></a>
+  </div>
+</header>
+<%- include('../_tabs') %>
+
+<form method="get" class="card inv-filters">
+  <label class="field">
+    <span>Category</span>
+    <select name="category">
+      <option value="">All categories</option>
+      <% for (const c of lists.categories.filter((c) => c.kind === 'stock')) { %><option value="<%= c.id %>" <%= categoryId === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+    </select>
+  </label>
+  <%- include('../_cf-filters', { filterFields, activeFilters }) %>
+  <button type="submit" class="btn">Filter</button>
+</form>
+
+<%- include('../../partials/search', { target: '#stock-list', placeholder: 'Search by category, brand or model' }) %>
+
+<section class="card" id="stock-list">
+  <% if (!stock.length) { %>
+    <p class="empty">No stock items<%= categoryId ? ' in this category' : ' yet' %>.</p>
+  <% } else { %>
+    <p class="empty" data-filter-empty hidden>Nothing matches your search.</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Category</th><th>Brand / model</th><th>Connection</th><th>Location</th>
+            <th class="num">Total</th><th class="num">Assigned</th><th class="num">Damaged</th><th class="num">Available</th>
+            <% for (const f of listFields) { %><th><%= f.label %></th><% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const s of stock) { %>
+            <% const v = values.get(s.id) || {}; %>
+            <tr data-filter-item data-search="<%= [s.category_name, s.brand, s.model, s.location, ...Object.values(v)].filter(Boolean).join(' ') %>">
+              <td><%= s.category_name || '' %></td>
+              <td><a href="/inventory/stock/<%= s.id %>"><strong><%= [s.brand, s.model].filter(Boolean).join(' ') %></strong></a></td>
+              <td><%= invConnections[s.connection] %></td>
+              <td><%= s.location || '' %></td>
+              <td class="num"><%= s.total_qty %></td>
+              <td class="num"><%= s.assigned_qty %></td>
+              <td class="num"><%= s.damaged_qty || '' %></td>
+              <td class="num"><span class="<%= s.available_qty <= lowStock ? 'stock-low' : 'stock-ok' %>"><%= s.available_qty %></span></td>
+              <% for (const f of listFields) { %><td><%= f.field_type === 'boolean' ? (v[f.id] === 'yes' ? 'Yes' : v[f.id] === 'no' ? 'No' : '') : (v[f.id] || '') %></td><% } %>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../../partials/foot') %>

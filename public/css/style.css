@@ -1404,3 +1404,42 @@ html { scroll-behavior: smooth; }
 @keyframes toast-out {
   to { opacity: 0; transform: translateX(24px); }
 }
+
+/* ---- Inventory ---- */
+
+.inv-tabs { margin-top: -0.75rem; }
+.inv-filters { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; padding: 1rem; }
+.inv-filters .field { flex: 1; min-width: 150px; }
+
+.inv-status {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: var(--grey-soft);
+  color: var(--muted);
+}
+.inv-status-in_use { background: var(--blue-soft); color: #035F8F; }
+.inv-status-spare { background: var(--green-soft); color: var(--green); }
+.inv-status-repair { background: #FFF1D6; color: #8A5A00; }
+.inv-status-damaged { background: var(--red-soft); color: var(--red); }
+.inv-status-sold { background: var(--purple-soft); color: var(--purple); }
+.inv-status-disposed { background: var(--grey-soft); color: var(--muted); text-decoration: line-through; }
+
+.chip-warn { background: #FFF1D6; color: #8A5A00; }
+.stock-low { color: var(--red); font-weight: 800; }
+.stock-ok { color: var(--green); font-weight: 700; }
+.qty-input { width: 5.5rem; }
+.cf-details { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.req { color: var(--red); }
+.is-hidden-field { opacity: 0.55; }
+
+.import-stats { grid-template-columns: repeat(4, 1fr); }
+.import-warnings { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.35rem; font-size: 0.9rem; max-height: 420px; overflow-y: auto; }
+.import-actions { position: sticky; bottom: 1rem; z-index: 5; padding: 0.75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-lg); }
+
+@media (max-width: 860px) {
+  .import-stats { grid-template-columns: 1fr 1fr; }
+}

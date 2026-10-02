@@ -492,3 +492,82 @@ if (taskPanel) {
     if (close) window.location.href = close.href;
   });
 }
+
+// ---- Inventory ----
+
+// Generic drag-and-drop ordering: <ul data-sortable-list data-order-url="..."
+// data-order-extra="key=value"> with <li data-id>; saves order=<ids> on drop.
+document.querySelectorAll('[data-sortable-list]').forEach((list) => {
+  if (!window.Sortable) return;
+  const status = list.parentElement.querySelector('[data-reorder-status]');
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const show = (msg, isError) => {
+    if (!status) return;
+    status.textContent = msg;
+    status.classList.toggle('is-error', Boolean(isError));
+    status.hidden = !msg;
+  };
+  window.Sortable.create(list, {
+    handle: '.drag-handle',
+    animation: 160,
+    ghostClass: 'sortable-ghost',
+    chosenClass: 'sortable-chosen',
+    onEnd: async (event) => {
+      if (event.oldIndex === event.newIndex) return;
+      const order = [...list.querySelectorAll(':scope > li[data-id]')].map((li) => li.dataset.id).join(',');
+      const body = new URLSearchParams({ _csrf: token, order, ...Object.fromEntries(new URLSearchParams(list.dataset.orderExtra || '')) });
+      show('Saving order…');
+      try {
+        const res = await fetch(list.dataset.orderUrl, {
+          method: 'POST', body, credentials: 'same-origin',
+          headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || 'The new order could not be saved.');
+        show('Order saved.');
+        setTimeout(() => show(''), 2000);
+      } catch (err) {
+        show(`${err.message} Reloading…`, true);
+        setTimeout(() => window.location.reload(), 1500);
+      }
+    },
+  });
+});
+
+// Custom fields limited to one category show only when that category is chosen.
+document.querySelectorAll('[data-cf-scope]').forEach((form) => {
+  const select = form.querySelector('[data-cf-category-select]');
+  const sync = () => {
+    form.querySelectorAll('[data-cf-category]').forEach((field) => {
+      const show = select && select.value === field.dataset.cfCategory;
+      field.hidden = !show;
+      field.querySelectorAll('input, select, textarea').forEach((input) => { input.disabled = !show; });
+    });
+  };
+  if (select) select.addEventListener('change', sync);
+  sync();
+});
+
+// Asset form: "Sold to / Sold date" only matter when the status is Sold.
+document.querySelectorAll('[data-sold-toggle]').forEach((select) => {
+  const fields = select.form && select.form.querySelector('[data-sold-fields]');
+  if (!fields) return;
+  const sync = () => { fields.hidden = select.value !== 'sold'; };
+  select.addEventListener('change', sync);
+  sync();
+});
+
+// Custom field form: options box only for dropdowns; warn as soon as a label looks
+// like a credential (the server refuses those labels anyway).
+document.querySelectorAll('[data-field-form]').forEach((form) => {
+  const type = form.querySelector('[data-field-type]');
+  const options = form.querySelector('[data-options-field]');
+  const label = form.querySelector('[data-credential-check]');
+  const warning = form.querySelector('[data-credential-warning]');
+  const syncType = () => { if (options) options.hidden = type.value !== 'select'; };
+  const syncLabel = () => { if (warning) warning.hidden = !/pass|\bpin\b/i.test(label.value); };
+  type.addEventListener('change', syncType);
+  label.addEventListener('input', syncLabel);
+  syncType();
+  syncLabel();
+});

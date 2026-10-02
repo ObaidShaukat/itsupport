@@ -1,0 +1,26 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/settings/fields?entity=<%= field.entity_type %>">Custom fields</a></p>
+    <h1>Delete "<%= field.label %>"?</h1>
+  </div>
+</header>
+<%- include('../_tabs') %>
+
+<section class="card card-narrow">
+  <p><strong><%= count %> <%= CF_ENTITIES[field.entity_type].toLowerCase() %> record<%= count === 1 ? ' has' : 's have' %> a value</strong> in this field. Deleting it permanently removes the field and all of those values. This cannot be undone.</p>
+  <p class="muted">To keep the data but stop showing the field, use <strong>Hide</strong> instead.</p>
+  <form method="post" action="/inventory/settings/fields/<%= field.id %>/delete" class="form">
+    <%- csrfField %>
+    <label class="field"><span>Type <strong><%= field.label %></strong> to confirm</span><input type="text" name="confirm" required autocomplete="off"></label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger-solid">Delete field and <%= count %> value<%= count === 1 ? '' : 's' %></button>
+      <a href="/inventory/settings/fields?entity=<%= field.entity_type %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+  <form method="post" action="/inventory/settings/fields/<%= field.id %>/hide" class="inline add-step">
+    <%- csrfField %>
+    <% if (!field.hidden) { %><button type="submit" class="btn">Hide it instead</button><% } %>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

@@ -1,0 +1,11 @@
+<%# Dropdown / yes-no custom fields as list filters (?cf_<id>=value). %>
+<% for (const f of filterFields) { %>
+  <label class="field">
+    <span><%= f.label %></span>
+    <select name="cf_<%= f.id %>">
+      <option value="">Any</option>
+      <% const opts = f.field_type === 'boolean' ? [['yes', 'Yes'], ['no', 'No']] : f.optionList.map((o) => [o, o]); %>
+      <% for (const [val, label] of opts) { %><option value="<%= val %>" <%= activeFilters[f.id] === val ? 'selected' : '' %>><%= label %></option><% } %>
+    </select>
+  </label>
+<% } %>

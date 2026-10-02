@@ -9,6 +9,8 @@ const config = require('../src/config');
 // MySQL has no "ADD COLUMN IF NOT EXISTS", so each is checked first.
 const ADDED_COLUMNS = [
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
+  // Inventory entries also point at the person they concern (person timeline).
+  ['activity_log', 'related_person_id', 'INT UNSIGNED NULL AFTER changes'],
   ['services', 'report_phrase', 'VARCHAR(255) NULL AFTER description'],
   ['tickets', 'priority', "ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal' AFTER status"],
   ['tickets', 'updated_by', 'INT UNSIGNED NULL AFTER created_by'],
