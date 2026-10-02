@@ -260,7 +260,7 @@ router.post('/client-services/:id/steps/:stepId/toggle', async (req, res) => {
       await logActivity(conn, req.user, csEntry(cs, 'step', 'updated', `Unticked step: ${step.title}`));
     } else {
       await conn.query('UPDATE client_service_steps SET done = 1, done_by = ?, done_at = NOW() WHERE id = ?', [req.user.id, stepId]);
-      await logActivity(conn, req.user, csEntry(cs, 'step', 'step_done', `Done: ${step.title}`));
+      await logActivity(conn, req.user, csEntry(cs, 'step', 'step_done', step.title));
     }
 
     const [[totals]] = await conn.query(
@@ -317,7 +317,7 @@ router.post('/client-services/:id/notes', async (req, res) => {
       'INSERT INTO client_service_notes (client_service_id, user_id, body) VALUES (?, ?, ?)',
       [csId, req.user.id, body]
     );
-    await logActivity(null, req.user, csEntry(cs, 'note', 'created', `Note: ${body}`));
+    await logActivity(null, req.user, csEntry(cs, 'note', 'created', body));
   }
   res.redirect(`/clients/${cs.client_id}#cs-${csId}`);
 });
@@ -344,7 +344,7 @@ router.post('/client-service-notes/:id', async (req, res) => {
       'UPDATE client_service_notes SET body = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
       [body, req.user.id, note.id]
     );
-    await logActivity(null, req.user, csEntry({ ...note, id: note.client_service_id }, 'note', 'updated', `Edited note: ${body}`));
+    await logActivity(null, req.user, csEntry({ ...note, id: note.client_service_id }, 'note', 'updated', body));
     flash(req, 'success', 'Note updated.');
   }
   res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);

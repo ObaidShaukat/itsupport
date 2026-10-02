@@ -5,6 +5,7 @@
     <p class="muted"><%= periodLabel %></p>
   </div>
   <div class="actions">
+    <a href="/activity?date=<%= from %><%= userId ? `&user=${userId}` : '' %>" class="btn btn-ghost"><%- icon('clock') %><span>Activity log</span></a>
     <button type="button" class="btn" data-copy="text" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy report</span></button>
     <button type="button" class="btn btn-primary" data-copy="html" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy as formatted</span></button>
   </div>

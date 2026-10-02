@@ -159,7 +159,7 @@ router.post('/:id/comments', async (req, res) => {
   await transaction(async (conn) => {
     const ticket = await ticketContext(conn, id, true);
     await conn.query('INSERT INTO ticket_comments (ticket_id, user_id, body) VALUES (?, ?, ?)', [id, req.user.id, body]);
-    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', `Comment: ${body}`));
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', body));
     await conn.query('UPDATE tickets SET updated_at = NOW() WHERE id = ?', [id]);
   });
   res.redirect(`/tickets/${id}#comments`);

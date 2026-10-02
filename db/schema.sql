@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_id INT UNSIGNED NULL,
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
-                   'kb_article', 'tutorial', 'client', 'manual') NOT NULL,
+                   'kb_article', 'tutorial', 'client', 'user', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
               'reopened', 'deleted', 'uploaded') NOT NULL,
@@ -255,3 +255,8 @@ CREATE TABLE IF NOT EXISTS activity_log (
   CONSTRAINT fk_activity_log_client FOREIGN KEY (client_id)
     REFERENCES clients (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Upgrades for databases created before a column/value was added (safe to re-run).
+ALTER TABLE activity_log
+  MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
+                          'kb_article', 'tutorial', 'client', 'user', 'manual') NOT NULL;

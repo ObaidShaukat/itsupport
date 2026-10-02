@@ -101,12 +101,13 @@ pm2 restart itsupport
 
 ## Activity log and Daily Report
 
-Every create, update and delete (tickets, comments, client services, steps, notes, services, tutorials, KB articles and clients) is written to the `activity_log` table with the signed-in user and time. Records show "Created by … / Last updated by …" and a History panel built from it. Records created before the activity log existed fall back to their own created fields.
+Every create, update and delete (tickets, comments, client services, steps, notes, services, tutorials, KB articles, clients and users) is written to the `activity_log` table with the signed-in user and time. Records show "Created by … / Last updated by …" and a History panel built from it. Records created before the activity log existed fall back to their own created fields.
 
 - **Log work:** the button in the top bar of every page records manual work: an optional client, a description and a date (default today). Each user can edit or delete their own entries from the Daily Report page.
-- **Daily Report** (`/report`): pick a day (default today), step back and forward, or choose a date range (up to 62 days, grouped by day). Filter to one user or show everyone. Each user's work is grouped per client into one line, for example "Provided IT support to ASL Solicitors regarding RDP issues, Outlook issues.", and ends with "Other IT related tasks."
+- **Daily Report** (`/report`): pick a day (default today), step back and forward, or choose a date range (up to 62 days, grouped by day). Filter to one user or show everyone. The report is built only from the activity log for the chosen days, so an old ticket or article edited today shows up today. Each user's work is one bullet per item, grouped by client, for example "Provided IT support to Abel regarding Test.", "Laptops for Abel: new check." or "Updated General IT Support article: Outlook not syncing.", and ends with "Other IT related tasks." Deletes and unticked steps are left out of the report.
 - **Copy buttons:** "Copy report" gives plain text. "Copy as formatted" gives bullets that paste into Outlook. Browsers only allow full clipboard access over HTTPS. Over plain http a fallback is used that works in current browsers.
-- **Report days** use UK time (Europe/London).
+- **Activity log page** (`/activity`, linked from the report): the raw log for one day, filterable by user and type, to check what was recorded.
+- **Times:** stored in UTC (every database connection uses time_zone +00:00) and always shown in UK time. Report days (`activity_date`) are UK dates (Europe/London). Timestamps saved before this change were in the server's local time, so they may show up to an hour out.
 
 ## Uploads
 

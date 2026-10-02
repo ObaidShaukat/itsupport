@@ -2,6 +2,11 @@ const express = require('express');
 const { pool } = require('../db');
 const { str, requireId, flash } = require('../lib/http');
 const { validateUsername, validatePassword, hashPassword } = require('../lib/users');
+const { logActivity } = require('../lib/activity');
+
+const logUser = (req, id, action, username, summary) => logActivity(null, req.user, {
+  type: 'user', id, action, subject: username, summary,
+});
 
 const router = express.Router();
 
@@ -23,7 +28,8 @@ router.post('/', async (req, res) => {
 
   const hash = await hashPassword(pass);
   try {
-    await pool.query('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hash, 'admin']);
+    const [result] = await pool.query('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hash, 'admin']);
+    await logUser(req, result.insertId, 'created', username, `Added user ${username}`);
   } catch (err) {
     if (err.code !== 'ER_DUP_ENTRY') throw err;
     flash(req, 'error', `The username "${username}" is already taken.`);
@@ -42,6 +48,7 @@ router.post('/:id', async (req, res) => {
     return res.redirect('/users');
   }
 
+  const [[before]] = await pool.query('SELECT username FROM users WHERE id = ?', [id]);
   try {
     const [result] = await pool.query('UPDATE users SET username = ? WHERE id = ?', [username, id]);
     if (!result.affectedRows) {
@@ -52,6 +59,9 @@ router.post('/:id', async (req, res) => {
     if (err.code !== 'ER_DUP_ENTRY') throw err;
     flash(req, 'error', `The username "${username}" is already taken.`);
     return res.redirect('/users');
+  }
+  if (before && before.username !== username) {
+    await logUser(req, id, 'updated', username, `Renamed user ${before.username} to ${username}`);
   }
   flash(req, 'success', `User renamed to "${username}".`);
   res.redirect('/users');
@@ -68,6 +78,10 @@ router.post('/:id/password', async (req, res) => {
 
   const hash = await hashPassword(pass);
   const [result] = await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, id]);
+  if (result.affectedRows) {
+    const [[user]] = await pool.query('SELECT username FROM users WHERE id = ?', [id]);
+    await logUser(req, id, 'updated', user.username, `Reset the password for ${user.username}`);
+  }
   flash(req, result.affectedRows ? 'success' : 'error', result.affectedRows ? 'Password reset.' : 'That user no longer exists.');
   res.redirect('/users');
 });
@@ -79,7 +93,9 @@ router.post('/:id/delete', async (req, res) => {
     return res.redirect('/users');
   }
 
+  const [[user]] = await pool.query('SELECT username FROM users WHERE id = ?', [id]);
   const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  if (result.affectedRows) await logUser(req, id, 'deleted', user.username, `Deleted user ${user.username}`);
   flash(req, 'success', result.affectedRows ? 'User deleted.' : 'That user was already deleted.');
   res.redirect('/users');
 });

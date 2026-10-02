@@ -902,3 +902,8 @@ input[type="date"]:focus { outline: none; border-color: var(--blue); box-shadow:
   .report-form { order: 3; flex-basis: 100%; }
   .history-action { min-width: 5.5rem; }
 }
+
+/* ---- Raw activity log page ---- */
+
+.table-log td { vertical-align: top; font-size: 0.88rem; }
+.table-log .log-summary { min-width: 220px; max-width: 420px; white-space: pre-line; overflow-wrap: anywhere; }

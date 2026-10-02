@@ -1,5 +1,6 @@
-// Daily report: turns activity_log entries into "<User>'s Work:" bullet lists,
-// one line per client per user per day.
+// Daily report: built only from activity_log entries whose activity_date (the UK
+// date the action happened) is in the chosen range. Each user gets a "<User>'s Work:"
+// bullet list, one bullet per item, grouped by client.
 const { pool } = require('../db');
 
 const MAX_RANGE_DAYS = 62;
@@ -31,80 +32,150 @@ function heading(username) {
   return `${name}'s Work:`;
 }
 
-const cleanItem = (text) => String(text || '').trim().replace(/[.\s]+$/, '');
-const capitalise = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+const SNIPPET_LENGTH = 150;
 
-function pushUnique(list, value) {
-  const item = cleanItem(value);
-  if (item && !list.includes(item)) list.push(item);
-}
+const clean = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+const withoutStop = (text) => clean(text).replace(/[.\s]+$/, '');
+const snippet = (text) => {
+  const t = withoutStop(text);
+  return t.length > SNIPPET_LENGTH ? `${t.slice(0, SNIPPET_LENGTH - 1).trimEnd()}…` : t;
+};
+// Ends a bullet with a full stop unless it already ends with punctuation.
+const sentence = (text) => {
+  const t = clean(text);
+  return /[.!?…]$/.test(t) ? t : `${t}.`;
+};
 
-// One sentence for everything a user did for one client, e.g.
-// "Provided IT support to ASL Solicitors regarding RDP issues, Outlook issues."
-// "Configured & set up Laptops for Kansas Chicken."
-// "Managed Email setup for VSPG Housing."
-function clientLine(entry) {
-  const managed = entry.managed.filter((name) => !entry.setup.includes(name));
-  const segments = [];
-  let named = false;
-  if (entry.tickets.length) {
-    segments.push(`provided IT support to ${entry.name} regarding ${entry.tickets.join(', ')}`);
-    named = true;
-  }
-  if (entry.setup.length) {
-    segments.push(`configured & set up ${entry.setup.join(', ')}${named ? '' : ` for ${entry.name}`}`);
-    named = true;
-  }
-  if (managed.length) {
-    segments.push(`managed ${managed.join(', ')}${named ? '' : ` for ${entry.name}`}`);
-  }
-  return segments.length ? `${capitalise(segments.join('; '))}.` : null;
-}
-
-// Lines for one user on one day, in the order the work happened.
+// One user's day as bullets, one per item, grouped by client (in the order the
+// work happened), then work with no client, then "Other IT related tasks.".
+//   Ticket:               Provided IT support to Abel regarding Test.
+//   Comment:              Provided IT support to Abel regarding Test: <comment>.
+//   Service assigned/closed: Configured & set up Laptops for Abel.
+//   Steps ticked:         Managed Email setup for Abel: Create new tenant, Add domain.
+//   Note added/edited:    Laptops for Abel: new check.
+//   Client added/edited:  Added new client: Abel. / Updated client details for Abel.
+//   KB article:           Created/Updated General IT Support article: Outlook not syncing.
+//   Service catalogue:    Added/Updated service process: Emails setup.
+//   Manual entry:         as written (under its client if it has one).
+// Deletes, unticked steps and user-admin changes are left out (see /activity).
 function userLines(rows) {
-  const lines = [];
-  const clients = new Map();
+  const groups = new Map();
+  const general = { items: [], byKey: new Map() };
+
+  const groupFor = (row) => {
+    const key = row.client_id ? `id:${row.client_id}` : `name:${row.client_name}`;
+    if (!groups.has(key)) groups.set(key, { items: [], byKey: new Map() });
+    return groups.get(key);
+  };
+  // Adds an item once per key; later rows for the same key update it in place.
+  const item = (group, key, create) => {
+    if (!group.byKey.has(key)) {
+      const created = create();
+      group.byKey.set(key, created);
+      group.items.push(created);
+    }
+    return group.byKey.get(key);
+  };
+  const push = (group, text) => group.items.push({ text });
 
   for (const row of rows) {
+    const client = row.client_name;
+    const subject = withoutStop(row.subject);
+
     if (row.entity_type === 'manual') {
-      lines.push({ order: lines.length, text: row.summary, manual: true });
+      push(client ? groupFor(row) : general, sentence(row.summary));
       continue;
     }
-    // Catalogue and knowledge-base work has no client; it is covered by
-    // the closing "Other IT related tasks." line.
-    if (!row.client_name || row.action === 'deleted') continue;
-
-    const key = row.client_id ? `id:${row.client_id}` : `name:${row.client_name}`;
-    let entry = clients.get(key);
-    if (!entry) {
-      entry = { name: row.client_name, order: lines.length, tickets: [], setup: [], managed: [] };
-      clients.set(key, entry);
-      lines.push(entry);
-    }
+    if (row.action === 'deleted') continue;
 
     switch (row.entity_type) {
-      case 'ticket':
-      case 'ticket_comment':
-        pushUnique(entry.tickets, row.subject);
+      case 'ticket': {
+        if (!client) break;
+        // One bullet per ticket, unless the user commented (each comment is its own bullet).
+        const t = item(groupFor(row), `ticket:${row.entity_id}`, () => ({ ticket: true, text: null }));
+        if (!t.commented) t.text = `Provided IT support to ${client} regarding ${subject}.`;
         break;
-      case 'client_service':
-        if (row.action === 'created' || row.action === 'closed') pushUnique(entry.setup, row.subject);
-        else pushUnique(entry.managed, row.subject);
+      }
+      case 'ticket_comment': {
+        if (!client) break;
+        const group = groupFor(row);
+        const t = group.byKey.get(`ticket:${row.entity_id}`);
+        if (t && !t.commented) {
+          // Replace the plain ticket bullet with the comment bullets.
+          t.text = null;
+          t.commented = true;
+        }
+        if (!t) group.byKey.set(`ticket:${row.entity_id}`, { ticket: true, commented: true, text: null });
+        push(group, sentence(`Provided IT support to ${client} regarding ${subject}: ${snippet(row.summary)}`));
         break;
-      case 'step':
-        if (row.action === 'step_done') pushUnique(entry.managed, row.subject);
+      }
+      case 'client_service': {
+        if (!client) break;
+        const group = groupFor(row);
+        if (row.action === 'created' || row.action === 'closed') {
+          item(group, `setup:${row.entity_id}`, () => ({ text: `Configured & set up ${subject} for ${client}.` }));
+        } else {
+          const m = item(group, `managed:${row.entity_id}`, () => ({ steps: [] }));
+          m.service = subject;
+          m.client = client;
+        }
         break;
+      }
+      case 'step': {
+        if (!client || row.action !== 'step_done') break;
+        const m = item(groupFor(row), `managed:${row.entity_id}`, () => ({ steps: [] }));
+        m.service = subject;
+        m.client = client;
+        const step = withoutStop(row.summary);
+        if (step && !m.steps.includes(step)) m.steps.push(step);
+        break;
+      }
       case 'note':
-        pushUnique(entry.managed, row.subject);
+        if (!client) break;
+        push(groupFor(row), sentence(`${subject} for ${client}: ${snippet(row.summary)}`));
         break;
+      case 'client':
+        if (!client) break;
+        if (row.action === 'created') {
+          item(groupFor(row), 'client:created', () => ({ text: `Added new client: ${client}.` }));
+        } else {
+          item(groupFor(row), 'client:updated', () => ({ text: `Updated client details for ${client}.` }));
+        }
+        break;
+      case 'kb_article': {
+        const a = item(general, `kb:${row.entity_id}`, () => ({ created: false }));
+        if (row.action === 'created') a.created = true;
+        a.text = `${a.created ? 'Created' : 'Updated'} General IT Support article: ${subject}.`;
+        break;
+      }
+      case 'service':
+      case 'tutorial': {
+        if (!row.entity_id) {
+          item(general, `category:${subject}`, () => ({ text: `Updated service category: ${subject}.` }));
+          break;
+        }
+        const svc = item(general, `service:${row.entity_id}`, () => ({ created: false }));
+        if (row.entity_type === 'service' && row.action === 'created') svc.created = true;
+        svc.text = `${svc.created ? 'Added' : 'Updated'} service process: ${subject}.`;
+        break;
+      }
       default:
         break;
     }
   }
 
-  return lines
-    .map((line) => (line.manual ? line.text : clientLine(line)))
+  const render = (entry) => {
+    if (entry.steps) {
+      if (!entry.service) return null;
+      return entry.steps.length
+        ? sentence(`Managed ${entry.service} for ${entry.client}: ${snippet(entry.steps.join(', '))}`)
+        : `Managed ${entry.service} for ${entry.client}.`;
+    }
+    return entry.text || null;
+  };
+
+  return [...groups.values(), general]
+    .flatMap((group) => group.items.map(render))
     .filter(Boolean)
     .concat('Other IT related tasks.');
 }
@@ -116,7 +187,7 @@ async function buildReport({ from, to, userId }) {
   if (userId) params.push(userId);
   const [rows] = await pool.query(`
     SELECT l.user_id, u.username, l.client_id, COALESCE(c.name, l.client_name) AS client_name,
-           l.entity_type, l.action, l.subject, l.summary, l.activity_date, l.created_at, l.id
+           l.entity_type, l.entity_id, l.action, l.subject, l.summary, l.activity_date, l.created_at, l.id
     FROM activity_log l
     LEFT JOIN users u ON u.id = l.user_id
     LEFT JOIN clients c ON c.id = l.client_id

@@ -124,7 +124,7 @@ const NAV_PREFIXES = [
   ['/services', 'services'], ['/categories', 'services'], ['/steps', 'services'],
   ['/users', 'users'],
   ['/kb', 'kb'],
-  ['/report', 'report'], ['/log-work', 'report'],
+  ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
 ];
 app.use((req, res, next) => {
   const hit = NAV_PREFIXES.find(([prefix]) => req.path === prefix || req.path.startsWith(`${prefix}/`));
@@ -158,6 +158,7 @@ app.use('/kb', require('./src/routes/kb'));
 app.use('/files', require('./src/routes/files'));
 app.use('/log-work', require('./src/routes/activity'));
 app.use('/report', require('./src/routes/report'));
+app.use('/activity', require('./src/routes/activity-log'));
 
 // ---- Errors ----
 

@@ -7,12 +7,13 @@
 //   service, tutorial                  -> service id (category changes have no id)
 //   kb_article                         -> article id
 //   client                             -> client id
+//   user                               -> user id (Users page changes)
 //   manual                             -> null
 // client_name and subject (ticket title, service name, ...) are snapshots, so the
 // log still reads correctly after the record is renamed or deleted.
 const { pool } = require('../db');
 
-const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'manual'];
+const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'manual'];
 const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded'];
 
 const ACTION_LABELS = {

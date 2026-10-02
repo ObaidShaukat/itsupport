@@ -1,0 +1,82 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/report">Daily Report</a></p>
+    <h1>Activity log</h1>
+    <p class="muted">Everything logged on <%= dateLabel %> (UK time), exactly as stored. The Daily Report is built from these entries.</p>
+  </div>
+  <div class="actions">
+    <a href="<%= reportHref %>" class="btn"><%- icon('calendar') %><span>Report for this day</span></a>
+  </div>
+</header>
+
+<section class="card report-controls">
+  <div class="report-nav">
+    <a href="<%= prevHref %>" class="icon-btn" title="Previous day" aria-label="Previous day"><%- icon('left') %></a>
+    <form method="get" action="/activity" class="inline-form report-form">
+      <label class="field">
+        <span>Date</span>
+        <input type="date" name="date" value="<%= date %>" required>
+      </label>
+      <label class="field">
+        <span>User</span>
+        <select name="user">
+          <option value="">All users</option>
+          <% for (const u of users) { %>
+            <option value="<%= u.id %>" <%= u.id === userId ? 'selected' : '' %>><%= u.username %></option>
+          <% } %>
+        </select>
+      </label>
+      <label class="field">
+        <span>Type</span>
+        <select name="type">
+          <option value="">All types</option>
+          <% for (const t of types) { %>
+            <option value="<%= t %>" <%= t === type ? 'selected' : '' %>><%= t %></option>
+          <% } %>
+        </select>
+      </label>
+      <button type="submit" class="btn">Show</button>
+    </form>
+    <a href="<%= nextHref %>" class="icon-btn" title="Next day" aria-label="Next day"><%- icon('right') %></a>
+  </div>
+</section>
+
+<section class="card">
+  <p class="muted small"><%= entries.length %> entr<%= entries.length === 1 ? 'y' : 'ies' %></p>
+  <% if (!entries.length) { %>
+    <p class="empty">Nothing was logged for this day<%= userId || type ? ' with these filters' : '' %>.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table table-log">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>User</th>
+            <th>Action</th>
+            <th>Type</th>
+            <th>Record</th>
+            <th>Client</th>
+            <th>Subject</th>
+            <th>Summary</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const e of entries) { %>
+            <tr>
+              <td class="nowrap muted"><%= fmtDate(e.created_at) %><% if (e.updated_at) { %><br><span class="small">edited <%= fmtDate(e.updated_at) %></span><% } %></td>
+              <td><%= e.username || 'Deleted user' %></td>
+              <td><span class="history-action history-<%= e.action %>"><%= activityLabels[e.action] || e.action %></span></td>
+              <td class="nowrap"><code><%= e.entity_type %></code></td>
+              <td class="muted"><%= e.entity_id ? `#${e.entity_id}` : '—' %></td>
+              <td><%= e.client_name || '—' %><% if (e.client_id) { %> <span class="muted small">#<%= e.client_id %></span><% } %></td>
+              <td><%= e.subject || '—' %></td>
+              <td class="log-summary"><%= e.summary %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/foot') %>
