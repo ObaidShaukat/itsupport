@@ -2,6 +2,7 @@ const express = require('express');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
 const { isTicketStatus } = require('../lib/tickets');
+const { logActivity, historyFor, clientHistory, recordMeta } = require('../lib/activity');
 
 const router = express.Router();
 
@@ -27,6 +28,22 @@ function validateClient(client) {
 const clientValues = (c) => [c.name, c.contact_name || null, c.email || null, c.phone || null, c.notes || null];
 
 const emptyClient = { name: '', contact_name: '', email: '', phone: '', notes: '' };
+
+// Client service with its client, for log entries.
+async function csContext(db, csId, lock = false) {
+  const [[cs]] = await db.query(`
+    SELECT cs.id, cs.client_id, cs.service_name, cs.status, c.name AS client_name
+    FROM client_services cs
+    JOIN clients c ON c.id = cs.client_id
+    WHERE cs.id = ? ${lock ? 'FOR UPDATE' : ''}
+  `, [csId]);
+  if (!cs) throw notFound();
+  return cs;
+}
+
+const csEntry = (cs, type, action, summary) => ({
+  type, id: cs.id, action, summary, clientId: cs.client_id, clientName: cs.client_name, subject: cs.service_name,
+});
 
 // ---- Clients ----
 
@@ -55,6 +72,10 @@ router.post('/clients', async (req, res) => {
     'INSERT INTO clients (name, contact_name, email, phone, notes) VALUES (?, ?, ?, ?, ?)',
     clientValues(client)
   );
+  await logActivity(null, req.user, {
+    type: 'client', id: result.insertId, action: 'created', clientId: result.insertId, clientName: client.name,
+    subject: client.name, summary: `Added client ${client.name}`,
+  });
   flash(req, 'success', `Client "${client.name}" added.`);
   res.redirect(`/clients/${result.insertId}`);
 });
@@ -89,11 +110,16 @@ router.get('/clients/:id', async (req, res) => {
     WHERE cs.client_id = ?
     ORDER BY n.created_at DESC, n.id DESC
   `, [id]);
+  const csHistory = await historyFor(['client_service', 'step', 'note'], clientServices.map((cs) => cs.id));
   for (const cs of clientServices) {
     cs.steps = steps.filter((s) => s.client_service_id === cs.id);
     cs.doneCount = cs.steps.filter((s) => s.done).length;
     cs.notes = notes.filter((n) => n.client_service_id === cs.id);
+    cs.history = csHistory.filter((e) => e.entity_id === cs.id);
+    cs.meta = recordMeta(cs.history, 'client_service', { createdBy: cs.assigned_by, createdAt: cs.created_at });
   }
+  const clientMeta = recordMeta(await historyFor(['client'], [id]), 'client', { createdAt: client.created_at });
+  const activity = await clientHistory(id);
 
   const status = isTicketStatus(req.query.status) ? req.query.status : '';
   const [tickets] = await pool.query(`
@@ -120,7 +146,9 @@ router.get('/clients/:id', async (req, res) => {
     group.services.push(s);
   }
 
-  res.render('clients/show', { title: client.name, client, clientServices, tickets, status, serviceGroups });
+  res.render('clients/show', {
+    title: client.name, client, clientMeta, activity, clientServices, tickets, status, serviceGroups,
+  });
 });
 
 router.get('/clients/:id/edit', async (req, res) => {
@@ -144,12 +172,23 @@ router.post('/clients/:id', async (req, res) => {
     [...clientValues(client), id]
   );
   if (!result.affectedRows) throw notFound();
+  await logActivity(null, req.user, {
+    type: 'client', id, action: 'updated', clientId: id, clientName: client.name,
+    subject: client.name, summary: `Updated client details for ${client.name}`,
+  });
   flash(req, 'success', 'Client updated.');
   res.redirect(`/clients/${id}`);
 });
 
 router.post('/clients/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
+  const [[client]] = await pool.query('SELECT name FROM clients WHERE id = ?', [id]);
+  if (!client) return res.redirect('/clients');
+  // Logged first; the entry keeps the client's name after the row is gone.
+  await logActivity(null, req.user, {
+    type: 'client', id, action: 'deleted', clientId: id, clientName: client.name,
+    subject: client.name, summary: `Deleted client ${client.name} with its tickets and services`,
+  });
   await pool.query('DELETE FROM clients WHERE id = ?', [id]);
   flash(req, 'success', 'Client deleted.');
   res.redirect('/clients');
@@ -167,7 +206,7 @@ router.post('/clients/:id/services', async (req, res) => {
   }
 
   const result = await transaction(async (conn) => {
-    const [[client]] = await conn.query('SELECT id FROM clients WHERE id = ?', [clientId]);
+    const [[client]] = await conn.query('SELECT id, name FROM clients WHERE id = ?', [clientId]);
     if (!client) throw notFound();
     const [[service]] = await conn.query('SELECT id, name FROM services WHERE id = ?', [serviceId]);
     if (!service) return null;
@@ -187,6 +226,10 @@ router.post('/clients/:id/services', async (req, res) => {
         [steps.map((s, i) => [csId, s.title, i])]
       );
     }
+    await logActivity(conn, req.user, {
+      type: 'client_service', id: csId, action: 'created', clientId, clientName: client.name,
+      subject: service.name, summary: `Assigned ${service.name} (${steps.length} step${steps.length === 1 ? '' : 's'})`,
+    });
     return { csId, name: service.name };
   });
 
@@ -205,18 +248,19 @@ router.post('/client-services/:id/steps/:stepId/toggle', async (req, res) => {
   const stepId = requireId(req.params.stepId);
 
   const outcome = await transaction(async (conn) => {
-    const [[cs]] = await conn.query('SELECT id, client_id, status FROM client_services WHERE id = ? FOR UPDATE', [csId]);
-    if (!cs) throw notFound();
+    const cs = await csContext(conn, csId, true);
     const [[step]] = await conn.query(
-      'SELECT id, done FROM client_service_steps WHERE id = ? AND client_service_id = ?',
+      'SELECT id, title, done FROM client_service_steps WHERE id = ? AND client_service_id = ?',
       [stepId, csId]
     );
     if (!step) throw notFound();
 
     if (step.done) {
       await conn.query('UPDATE client_service_steps SET done = 0, done_by = NULL, done_at = NULL WHERE id = ?', [stepId]);
+      await logActivity(conn, req.user, csEntry(cs, 'step', 'updated', `Unticked step: ${step.title}`));
     } else {
       await conn.query('UPDATE client_service_steps SET done = 1, done_by = ?, done_at = NOW() WHERE id = ?', [req.user.id, stepId]);
+      await logActivity(conn, req.user, csEntry(cs, 'step', 'step_done', `Done: ${step.title}`));
     }
 
     const [[totals]] = await conn.query(
@@ -228,9 +272,11 @@ router.post('/client-services/:id/steps/:stepId/toggle', async (req, res) => {
     let change = null;
     if (total > 0 && remaining === 0 && cs.status !== 'closed') {
       await conn.query("UPDATE client_services SET status = 'closed', closed_at = NOW() WHERE id = ?", [csId]);
+      await logActivity(conn, req.user, csEntry(cs, 'client_service', 'closed', 'All steps done, service closed'));
       change = 'closed';
     } else if (remaining > 0 && cs.status === 'closed') {
       await conn.query("UPDATE client_services SET status = 'open', closed_at = NULL WHERE id = ?", [csId]);
+      await logActivity(conn, req.user, csEntry(cs, 'client_service', 'reopened', 'Reopened because a step was unticked'));
       change = 'reopened';
     }
     return { clientId: cs.client_id, change };
@@ -243,12 +289,13 @@ router.post('/client-services/:id/steps/:stepId/toggle', async (req, res) => {
 
 async function setClientServiceStatus(req, res, status) {
   const csId = requireId(req.params.id);
-  const [[cs]] = await pool.query('SELECT client_id FROM client_services WHERE id = ?', [csId]);
-  if (!cs) throw notFound();
+  const cs = await csContext(pool, csId);
   if (status === 'closed') {
-    await pool.query("UPDATE client_services SET status = 'closed', closed_at = NOW() WHERE id = ? AND status = 'open'", [csId]);
+    const [result] = await pool.query("UPDATE client_services SET status = 'closed', closed_at = NOW() WHERE id = ? AND status = 'open'", [csId]);
+    if (result.affectedRows) await logActivity(null, req.user, csEntry(cs, 'client_service', 'closed', 'Marked as closed'));
   } else {
-    await pool.query("UPDATE client_services SET status = 'open', closed_at = NULL WHERE id = ?", [csId]);
+    const [result] = await pool.query("UPDATE client_services SET status = 'open', closed_at = NULL WHERE id = ? AND status = 'closed'", [csId]);
+    if (result.affectedRows) await logActivity(null, req.user, csEntry(cs, 'client_service', 'reopened', 'Reopened'));
   }
   flash(req, 'success', status === 'closed' ? 'Service closed.' : 'Service reopened.');
   res.redirect(`/clients/${cs.client_id}#cs-${csId}`);
@@ -261,8 +308,7 @@ router.post('/client-services/:id/close', (req, res) => setClientServiceStatus(r
 
 router.post('/client-services/:id/notes', async (req, res) => {
   const csId = requireId(req.params.id);
-  const [[cs]] = await pool.query('SELECT client_id FROM client_services WHERE id = ?', [csId]);
-  if (!cs) throw notFound();
+  const cs = await csContext(pool, csId);
   const body = str(req.body.body, 10000);
   if (!body) {
     flash(req, 'error', 'Note cannot be empty.');
@@ -271,15 +317,17 @@ router.post('/client-services/:id/notes', async (req, res) => {
       'INSERT INTO client_service_notes (client_service_id, user_id, body) VALUES (?, ?, ?)',
       [csId, req.user.id, body]
     );
+    await logActivity(null, req.user, csEntry(cs, 'note', 'created', `Note: ${body}`));
   }
   res.redirect(`/clients/${cs.client_id}#cs-${csId}`);
 });
 
 async function noteContext(noteId) {
   const [[note]] = await pool.query(`
-    SELECT n.id, n.client_service_id, cs.client_id
+    SELECT n.id, n.client_service_id, cs.client_id, cs.service_name, c.name AS client_name
     FROM client_service_notes n
     JOIN client_services cs ON cs.id = n.client_service_id
+    JOIN clients c ON c.id = cs.client_id
     WHERE n.id = ?
   `, [noteId]);
   if (!note) throw notFound();
@@ -296,6 +344,7 @@ router.post('/client-service-notes/:id', async (req, res) => {
       'UPDATE client_service_notes SET body = ?, updated_by = ?, updated_at = NOW() WHERE id = ?',
       [body, req.user.id, note.id]
     );
+    await logActivity(null, req.user, csEntry({ ...note, id: note.client_service_id }, 'note', 'updated', `Edited note: ${body}`));
     flash(req, 'success', 'Note updated.');
   }
   res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);
@@ -304,15 +353,16 @@ router.post('/client-service-notes/:id', async (req, res) => {
 router.post('/client-service-notes/:id/delete', async (req, res) => {
   const note = await noteContext(requireId(req.params.id));
   await pool.query('DELETE FROM client_service_notes WHERE id = ?', [note.id]);
+  await logActivity(null, req.user, csEntry({ ...note, id: note.client_service_id }, 'note', 'deleted', 'Deleted a note'));
   flash(req, 'success', 'Note deleted.');
   res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);
 });
 
 router.post('/client-services/:id/delete', async (req, res) => {
   const csId = requireId(req.params.id);
-  const [[cs]] = await pool.query('SELECT client_id FROM client_services WHERE id = ?', [csId]);
-  if (!cs) throw notFound();
+  const cs = await csContext(pool, csId);
   await pool.query('DELETE FROM client_services WHERE id = ?', [csId]);
+  await logActivity(null, req.user, csEntry(cs, 'client_service', 'deleted', `Removed ${cs.service_name} from the client`));
   flash(req, 'success', 'Service removed from client.');
   res.redirect(`/clients/${cs.client_id}#services`);
 });

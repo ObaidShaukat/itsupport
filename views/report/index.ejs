@@ -1,0 +1,135 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Daily Report</h1>
+    <p class="muted"><%= periodLabel %></p>
+  </div>
+  <div class="actions">
+    <button type="button" class="btn" data-copy="text" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy report</span></button>
+    <button type="button" class="btn btn-primary" data-copy="html" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy as formatted</span></button>
+  </div>
+</header>
+
+<section class="card report-controls">
+  <div class="report-nav">
+    <a href="<%= prevHref %>" class="icon-btn" title="Previous <%= unit %>" aria-label="Previous <%= unit %>"><%- icon('left') %></a>
+    <form method="get" action="/report" class="inline-form report-form">
+      <label class="field">
+        <span>From</span>
+        <input type="date" name="from" value="<%= from %>" required>
+      </label>
+      <label class="field">
+        <span>To <span class="muted">(for a range)</span></span>
+        <input type="date" name="to" value="<%= to === from ? '' : to %>">
+      </label>
+      <label class="field">
+        <span>User</span>
+        <select name="user">
+          <option value="">All users</option>
+          <% for (const u of users) { %>
+            <option value="<%= u.id %>" <%= u.id === userId ? 'selected' : '' %>><%= u.username %></option>
+          <% } %>
+        </select>
+      </label>
+      <button type="submit" class="btn">Show</button>
+    </form>
+    <a href="<%= nextHref %>" class="icon-btn" title="Next <%= unit %>" aria-label="Next <%= unit %>"><%- icon('right') %></a>
+  </div>
+  <nav class="filters report-presets" aria-label="Quick dates">
+    <% for (const p of presets) { %>
+      <a href="<%= p.href %>" class="<%= p.active ? 'active' : '' %>"><%= p.label %></a>
+    <% } %>
+  </nav>
+  <% if (notice) { %><p class="muted small"><%= notice %></p><% } %>
+</section>
+
+<section class="card report" aria-live="polite">
+  <% if (!report.days.length) { %>
+    <p class="empty">No activity recorded <%= from === to ? 'on this day' : 'in this period' %>.</p>
+  <% } else { %>
+    <% for (const day of report.days) { %>
+      <div class="report-day">
+        <% if (report.multiDay) { %><h2 class="report-day-title"><%= day.label %></h2><% } %>
+        <% for (const u of day.users) { %>
+          <div class="report-user">
+            <h3><%= u.heading %></h3>
+            <ul>
+              <% for (const line of u.lines) { %><li><%= line %></li><% } %>
+            </ul>
+          </div>
+        <% } %>
+      </div>
+    <% } %>
+  <% } %>
+  <p class="copy-status small" data-copy-status role="status" hidden></p>
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Your logged work</h2>
+    <a href="/log-work?back=<%= encodeURIComponent(backPath) %>" class="btn btn-small" data-log-work><%- icon('plus') %><span>Log work</span></a>
+  </div>
+  <% if (!manual.length) { %>
+    <p class="empty">You haven't logged any manual work <%= from === to ? 'for this day' : 'in this period' %>.</p>
+  <% } else { %>
+    <ul class="rows">
+      <% for (const m of manual) { %>
+        <li class="row">
+          <div class="row-main">
+            <div class="pre-line"><%= m.summary %></div>
+            <div class="muted small"><%= m.activity_date %><% if (m.client_name) { %> · <%= m.client_name %><% } %></div>
+          </div>
+          <div class="row-actions">
+            <details class="edit">
+              <summary class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></summary>
+              <div class="edit-panel">
+                <form method="post" action="/log-work/<%= m.id %>" class="form">
+                  <%- csrfField %>
+                  <input type="hidden" name="back" value="<%= backPath %>">
+                  <label class="field">
+                    <span>Client <span class="muted">(optional)</span></span>
+                    <input type="text" name="client" value="<%= m.client_name || '' %>" list="log-work-clients" autocomplete="off" maxlength="200">
+                  </label>
+                  <label class="field">
+                    <span>Description</span>
+                    <textarea name="description" rows="3" required maxlength="2000"><%= m.summary %></textarea>
+                  </label>
+                  <label class="field">
+                    <span>Date</span>
+                    <input type="date" name="date" value="<%= m.activity_date %>" required>
+                  </label>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            <form method="post" action="/log-work/<%= m.id %>/delete" class="inline" data-confirm="Delete this logged work?">
+              <%- csrfField %>
+              <input type="hidden" name="back" value="<%= backPath %>">
+              <button type="submit" class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete"><%- icon('trash') %></button>
+            </form>
+          </div>
+        </li>
+      <% } %>
+    </ul>
+  <% } %>
+</section>
+
+<%# Copy sources: plain text, and simple HTML that pastes into Outlook as bullets. %>
+<textarea data-report-text hidden><%= report.text %></textarea>
+<template data-report-html>
+  <div style="font-family: Calibri, Arial, sans-serif; font-size: 11pt;">
+    <% for (const day of report.days) { %>
+      <% if (report.multiDay) { %><p style="margin: 12pt 0 6pt;"><strong><u><%= day.label %></u></strong></p><% } %>
+      <% for (const u of day.users) { %>
+        <p style="margin: 6pt 0 2pt;"><strong><%= u.heading %></strong></p>
+        <ul style="margin-top: 0;">
+          <% for (const line of u.lines) { %><li><%= line %></li><% } %>
+        </ul>
+      <% } %>
+    <% } %>
+  </div>
+</template>
+<%- include('../partials/foot') %>

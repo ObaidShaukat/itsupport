@@ -185,3 +185,84 @@ if (stepList && window.Sortable) {
     },
   });
 }
+
+// "Log work" dialog. Without JavaScript (or <dialog> support) the button is a
+// plain link to the /log-work page.
+const logWorkDialog = document.getElementById('log-work-dialog');
+if (logWorkDialog && typeof logWorkDialog.showModal === 'function') {
+  document.addEventListener('click', (event) => {
+    const opener = event.target.closest('[data-log-work]');
+    if (!opener) return;
+    event.preventDefault();
+    logWorkDialog.querySelector('form').reset();
+    logWorkDialog.showModal();
+    logWorkDialog.querySelector('textarea').focus();
+  });
+  logWorkDialog.addEventListener('click', (event) => {
+    // A click on the backdrop lands on the dialog element itself.
+    if (event.target === logWorkDialog || event.target.closest('[data-dialog-close]')) logWorkDialog.close();
+  });
+}
+
+// Daily Report copy buttons: plain text, or HTML bullets that paste into Outlook.
+// navigator.clipboard needs HTTPS; over plain http the older execCommand route is used.
+function copyWithSelection(node) {
+  node.style.position = 'fixed';
+  node.style.left = '-9999px';
+  document.body.appendChild(node);
+  const selection = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  selection.removeAllRanges();
+  selection.addRange(range);
+  if (node.select) node.select();
+  const ok = document.execCommand('copy');
+  selection.removeAllRanges();
+  node.remove();
+  if (!ok) throw new Error('Copy was blocked by the browser.');
+}
+
+async function copyPlain(text) {
+  if (navigator.clipboard && window.isSecureContext) return navigator.clipboard.writeText(text);
+  const area = document.createElement('textarea');
+  area.value = text;
+  copyWithSelection(area);
+}
+
+async function copyFormatted(html, text) {
+  if (navigator.clipboard && window.isSecureContext && window.ClipboardItem) {
+    return navigator.clipboard.write([new ClipboardItem({
+      'text/html': new Blob([html], { type: 'text/html' }),
+      'text/plain': new Blob([text], { type: 'text/plain' }),
+    })]);
+  }
+  const holder = document.createElement('div');
+  holder.innerHTML = html;
+  copyWithSelection(holder);
+}
+
+const reportText = document.querySelector('[data-report-text]');
+const reportHtml = document.querySelector('template[data-report-html]');
+const copyStatus = document.querySelector('[data-copy-status]');
+document.querySelectorAll('[data-copy]').forEach((button) => {
+  button.addEventListener('click', async () => {
+    const text = reportText ? reportText.value : '';
+    try {
+      if (button.dataset.copy === 'html') await copyFormatted(reportHtml.innerHTML.trim(), text);
+      else await copyPlain(text);
+      if (copyStatus) {
+        copyStatus.textContent = button.dataset.copy === 'html' ? 'Copied with formatting. Paste it into your email.' : 'Copied as plain text.';
+        copyStatus.classList.remove('is-error');
+      }
+    } catch (err) {
+      if (copyStatus) {
+        copyStatus.textContent = 'Could not copy automatically. Select the report and copy it by hand.';
+        copyStatus.classList.add('is-error');
+      }
+    }
+    if (copyStatus) {
+      copyStatus.hidden = false;
+      setTimeout(() => { copyStatus.hidden = true; }, 4000);
+    }
+  });
+});

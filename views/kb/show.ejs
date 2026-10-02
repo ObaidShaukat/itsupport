@@ -7,10 +7,7 @@
       <span class="chip chip-category"><%= article.category %></span>
       <% for (const t of tags) { %><span class="chip"><%- icon('tag') %><%= t %></span><% } %>
     </div>
-    <p class="muted small">
-      Updated <%= fmtDate(article.updated_at) %><% if (article.updated_by_name) { %> by <%= article.updated_by_name %><% } %>
-      · created <%= fmtDate(article.created_at) %><% if (article.created_by_name) { %> by <%= article.created_by_name %><% } %>
-    </p>
+    <%- include('../partials/record-meta', { meta }) %>
   </div>
   <div class="actions">
     <a href="/kb/<%= article.id %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
@@ -33,13 +30,18 @@
       <% if (solutionHtml) { %><div class="prose"><%- solutionHtml %></div><% } else { %><p class="empty">No solution written yet.</p><% } %>
     </section>
   </div>
-  <section class="card">
-    <h2>Attachments</h2>
-    <% if (!attachments.length) { %>
-      <p class="empty">No attachments.</p>
-    <% } else { %>
-      <%- include('../partials/media', { items: attachments, mode: 'view' }) %>
-    <% } %>
-  </section>
+  <div>
+    <section class="card">
+      <h2>Attachments</h2>
+      <% if (!attachments.length) { %>
+        <p class="empty">No attachments.</p>
+      <% } else { %>
+        <%- include('../partials/media', { items: attachments, mode: 'view' }) %>
+      <% } %>
+    </section>
+    <section class="card">
+      <%- include('../partials/history', { entries: activity.slice().reverse() }) %>
+    </section>
+  </div>
 </div>
 <%- include('../partials/foot') %>

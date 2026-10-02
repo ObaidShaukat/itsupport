@@ -4,6 +4,7 @@
     <p class="crumbs"><a href="/services">Services</a> / <a href="/categories/<%= service.category_id %>"><%= service.category_name %></a></p>
     <h1><%= service.name %></h1>
     <% if (service.description) { %><p class="muted pre-line"><%= service.description %></p><% } %>
+    <%- include('../partials/record-meta', { meta }) %>
   </div>
   <div class="actions">
     <details class="edit edit-right">
@@ -139,4 +140,8 @@
   </section>
 </div>
 <% } %>
+
+<section class="card section">
+  <%- include('../partials/history', { entries: activity.slice().reverse() }) %>
+</section>
 <%- include('../partials/foot') %>

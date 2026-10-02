@@ -1,5 +1,36 @@
   </main>
 </div>
+<% if (locals.currentUser) { %>
+<datalist id="log-work-clients">
+  <% for (const name of (locals.logWorkClients || [])) { %><option value="<%= name %>"><% } %>
+</datalist>
+<dialog class="dialog" id="log-work-dialog" aria-labelledby="log-work-title">
+  <form method="post" action="/log-work" class="form">
+    <%- locals.csrfField %>
+    <input type="hidden" name="back" value="<%= locals.currentPath || '/' %>">
+    <div class="dialog-head">
+      <h2 id="log-work-title">Log work</h2>
+      <button type="button" class="icon-btn" data-dialog-close aria-label="Close"><%- icon('x') %></button>
+    </div>
+    <label class="field">
+      <span>Client <span class="muted">(optional)</span></span>
+      <input type="text" name="client" list="log-work-clients" autocomplete="off" maxlength="200" placeholder="Start typing to search clients">
+    </label>
+    <label class="field">
+      <span>What did you do?</span>
+      <textarea name="description" rows="4" required maxlength="2000" placeholder="e.g. Replaced the office printer toner and tested printing."></textarea>
+    </label>
+    <label class="field">
+      <span>Date</span>
+      <input type="date" name="date" value="<%= locals.today %>" required>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="button" class="btn btn-ghost" data-dialog-close>Cancel</button>
+    </div>
+  </form>
+</dialog>
+<% } %>
 <script src="/js/app.js"></script>
 </body>
 </html>

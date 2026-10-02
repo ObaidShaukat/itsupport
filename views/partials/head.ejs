@@ -45,6 +45,10 @@
     </nav>
   </aside>
   <main class="main">
+    <div class="topbar">
+      <a href="/report" class="topbar-link"><%- icon('calendar') %><span>Today's report</span></a>
+      <a href="/log-work?back=<%= encodeURIComponent(locals.currentPath || '/') %>" class="btn btn-primary" data-log-work><%- icon('pen') %><span>Log work</span></a>
+    </div>
 <% } else { %>
 <div class="shell shell-bare">
   <main class="main">

@@ -1,6 +1,6 @@
 # itsupport
 
-Cleartwo IT support portal: clients, service checklists with flowcharts and tutorials, tickets, and a General IT Support knowledge base.
+Cleartwo IT support portal: clients, service checklists with flowcharts and tutorials, tickets, a General IT Support knowledge base, an activity log and a Daily Report.
 
 Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads) and marked (Markdown). It runs under PM2.
 
@@ -99,6 +99,15 @@ npm run migrate
 pm2 restart itsupport
 ```
 
+## Activity log and Daily Report
+
+Every create, update and delete (tickets, comments, client services, steps, notes, services, tutorials, KB articles and clients) is written to the `activity_log` table with the signed-in user and time. Records show "Created by … / Last updated by …" and a History panel built from it. Records created before the activity log existed fall back to their own created fields.
+
+- **Log work:** the button in the top bar of every page records manual work: an optional client, a description and a date (default today). Each user can edit or delete their own entries from the Daily Report page.
+- **Daily Report** (`/report`): pick a day (default today), step back and forward, or choose a date range (up to 62 days, grouped by day). Filter to one user or show everyone. Each user's work is grouped per client into one line, for example "Provided IT support to ASL Solicitors regarding RDP issues, Outlook issues.", and ends with "Other IT related tasks."
+- **Copy buttons:** "Copy report" gives plain text. "Copy as formatted" gives bullets that paste into Outlook. Browsers only allow full clipboard access over HTTPS. Over plain http a fallback is used that works in current browsers.
+- **Report days** use UK time (Europe/London).
+
 ## Uploads
 
 Tutorials (on each service) and knowledge base attachments are stored on disk in `uploads/`, or in `UPLOAD_DIR` if you set it. Files are saved under random names, kept out of `public/`, and only served to signed-in users at `/files/<name>`.
@@ -130,7 +139,7 @@ index.js              App entry: middleware, sessions, routes
 pm2.config.cjs        PM2 process definition
 db/schema.sql         Table definitions (npm run migrate)
 scripts/              migrate, seed and create-user scripts
-src/routes/           auth, dashboard, users, services (+ tutorials), clients, tickets, kb, files
+src/routes/           auth, dashboard, users, services (+ tutorials), clients, tickets, kb, files, activity (log work), report
 src/middleware/       login check and CSRF protection
 src/lib/              helpers (ordering, Mermaid flowcharts, fonts, validation)
 views/                EJS templates

@@ -6,10 +6,22 @@ const { HttpError, str, requireId, toId, flash, notFound } = require('../lib/htt
 const { nextStepPosition } = require('../lib/order');
 const { buildFlowchart } = require('../lib/mermaid');
 const { receivedFiles, removeStoredFiles, discardUploads } = require('../lib/uploads');
+const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
 const router = express.Router();
 
 const isDuplicate = (err) => err.code === 'ER_DUP_ENTRY';
+
+// Logs against a service (steps and tutorials appear in the service's History).
+async function logService(req, serviceId, action, summary, type = 'service') {
+  const [[service]] = await pool.query('SELECT name FROM services WHERE id = ?', [serviceId]);
+  await logActivity(null, req.user, { type, id: serviceId, action, subject: service ? service.name : null, summary });
+}
+
+// Category changes have no History panel of their own, so entity_id stays empty.
+const logCategory = (req, action, name, summary) => logActivity(null, req.user, {
+  type: 'service', action, subject: name, summary,
+});
 
 // ---- Overview ----
 
@@ -43,6 +55,7 @@ router.post('/categories', async (req, res) => {
     flash(req, 'error', `A category called "${name}" already exists.`);
     return res.redirect('/services');
   }
+  await logCategory(req, 'created', name, `Added service category ${name}`);
   flash(req, 'success', `Category "${name}" added.`);
   res.redirect('/services');
 });
@@ -69,6 +82,8 @@ router.post('/categories/:id', async (req, res) => {
     flash(req, 'error', 'Category name is required.');
     return res.redirect(`/categories/${id}`);
   }
+  const [[before]] = await pool.query('SELECT name FROM service_categories WHERE id = ?', [id]);
+  if (!before) throw notFound();
   try {
     await pool.query('UPDATE service_categories SET name = ? WHERE id = ?', [name, id]);
   } catch (err) {
@@ -76,6 +91,7 @@ router.post('/categories/:id', async (req, res) => {
     flash(req, 'error', `A category called "${name}" already exists.`);
     return res.redirect(`/categories/${id}`);
   }
+  if (before.name !== name) await logCategory(req, 'updated', name, `Renamed category ${before.name} to ${name}`);
   flash(req, 'success', 'Category renamed.');
   res.redirect(`/categories/${id}`);
 });
@@ -87,7 +103,10 @@ router.post('/categories/:id/delete', async (req, res) => {
     JOIN services s ON s.id = t.service_id
     WHERE s.category_id = ?
   `, [id]);
+  const [[category]] = await pool.query('SELECT name FROM service_categories WHERE id = ?', [id]);
+  if (!category) return res.redirect('/services');
   await pool.query('DELETE FROM service_categories WHERE id = ?', [id]);
+  await logCategory(req, 'deleted', category.name, `Deleted category ${category.name} and its services`);
   await removeStoredFiles(files.map((f) => f.file_name));
   flash(req, 'success', 'Category deleted.');
   res.redirect('/services');
@@ -118,6 +137,7 @@ router.post('/categories/:id/services', async (req, res) => {
     flash(req, 'error', `This category already has a service called "${name}".`);
     return res.redirect(`/categories/${categoryId}`);
   }
+  await logService(req, serviceId, 'created', `Added service ${name}`);
   flash(req, 'success', `Service "${name}" added. Now add its steps.`);
   res.redirect(`/services/${serviceId}`);
 });
@@ -144,8 +164,12 @@ router.get('/services/:id', async (req, res) => {
     WHERE t.service_id = ?
     ORDER BY t.title, t.id
   `, [id]);
+  const activity = await historyFor(['service', 'tutorial'], [id]);
+  const meta = recordMeta(activity, 'service');
   res.render('services/show', {
     title: service.name,
+    activity,
+    meta,
     tab: req.query.tab === 'tutorials' ? 'tutorials' : 'steps',
     service,
     steps,
@@ -185,15 +209,17 @@ router.post('/services/:id', async (req, res) => {
     flash(req, 'error', `That category already has a service called "${name}".`);
     return res.redirect(`/services/${id}`);
   }
+  await logService(req, id, 'updated', `Updated service details for ${name}`);
   flash(req, 'success', 'Service updated.');
   res.redirect(`/services/${id}`);
 });
 
 router.post('/services/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
-  const [[service]] = await pool.query('SELECT category_id FROM services WHERE id = ?', [id]);
+  const [[service]] = await pool.query('SELECT category_id, name FROM services WHERE id = ?', [id]);
   if (!service) return res.redirect('/services');
   const [files] = await pool.query('SELECT file_name FROM service_tutorials WHERE service_id = ?', [id]);
+  await logService(req, id, 'deleted', `Deleted service ${service.name}`);
   await pool.query('DELETE FROM services WHERE id = ?', [id]);
   await removeStoredFiles(files.map((f) => f.file_name));
   flash(req, 'success', 'Service deleted.');
@@ -218,6 +244,7 @@ router.post('/services/:id/steps', async (req, res) => {
       [serviceId, title, position]
     );
   });
+  await logService(req, serviceId, 'updated', `Added step: ${title}`);
   res.redirect(`/services/${serviceId}#steps`);
 });
 
@@ -245,6 +272,7 @@ router.post('/services/:id/steps/order', async (req, res) => {
     return order.map((sid) => byId.get(sid));
   });
 
+  await logService(req, serviceId, 'updated', 'Reordered steps');
   res.json({ ok: true, flowchart: buildFlowchart(steps) });
 });
 
@@ -262,6 +290,7 @@ router.post('/steps/:id', async (req, res) => {
     flash(req, 'error', 'Step text is required.');
   } else {
     await pool.query('UPDATE service_steps SET title = ? WHERE id = ?', [title, id]);
+    await logService(req, serviceId, 'updated', `Edited step: ${title}`);
   }
   res.redirect(`/services/${serviceId}#steps`);
 });
@@ -269,7 +298,9 @@ router.post('/steps/:id', async (req, res) => {
 router.post('/steps/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   const serviceId = await stepServiceId(id);
+  const [[step]] = await pool.query('SELECT title FROM service_steps WHERE id = ?', [id]);
   await pool.query('DELETE FROM service_steps WHERE id = ?', [id]);
+  await logService(req, serviceId, 'updated', `Deleted step: ${step ? step.title : ''}`);
   res.redirect(`/services/${serviceId}#steps`);
 });
 
@@ -302,6 +333,7 @@ router.post('/services/:id/tutorials', async (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `, [serviceId, title, description, file.file_name, file.original_name, file.size_bytes, file.kind, req.user.id]);
   req.keepUploads = true;
+  await logService(req, serviceId, 'uploaded', `Uploaded tutorial ${title} (${file.original_name})`, 'tutorial');
   flash(req, 'success', `Tutorial "${title}" added.`);
   res.redirect(tutorialsTab(serviceId));
 });
@@ -338,16 +370,19 @@ router.post('/tutorials/:id', async (req, res) => {
       [title, description, id]
     );
   }
+  await logService(req, tutorial.service_id, file ? 'uploaded' : 'updated',
+    file ? `Replaced the file for tutorial ${title} (${file.original_name})` : `Edited tutorial ${title}`, 'tutorial');
   flash(req, 'success', 'Tutorial updated.');
   res.redirect(tutorialsTab(tutorial.service_id));
 });
 
 router.post('/tutorials/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
-  const [[tutorial]] = await pool.query('SELECT service_id, file_name FROM service_tutorials WHERE id = ?', [id]);
+  const [[tutorial]] = await pool.query('SELECT service_id, title, file_name FROM service_tutorials WHERE id = ?', [id]);
   if (!tutorial) throw notFound();
   await pool.query('DELETE FROM service_tutorials WHERE id = ?', [id]);
   await removeStoredFiles([tutorial.file_name]);
+  await logService(req, tutorial.service_id, 'deleted', `Deleted tutorial ${tutorial.title}`, 'tutorial');
   flash(req, 'success', 'Tutorial deleted.');
   res.redirect(tutorialsTab(tutorial.service_id));
 });

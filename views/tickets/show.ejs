@@ -3,7 +3,7 @@
   <div>
     <p class="crumbs"><a href="/tickets">Tickets</a> / <a href="/clients/<%= ticket.client_id %>"><%= ticket.client_name %></a></p>
     <h1><span class="muted">#<%= ticket.id %></span> <%= ticket.title %></h1>
-    <p class="muted small">Opened <%= fmtDate(ticket.created_at) %><% if (ticket.created_by_name) { %> by <%= ticket.created_by_name %><% } %></p>
+    <%- include('../partials/record-meta', { meta }) %>
   </div>
   <div class="actions">
     <%- include('../partials/status', { status: ticket.status }) %>
@@ -64,7 +64,7 @@
     </section>
 
     <section class="card">
-      <h2>History</h2>
+      <h2>Status history</h2>
       <ul class="timeline">
         <% for (const h of history) { %>
           <li>
@@ -79,6 +79,10 @@
           </li>
         <% } %>
       </ul>
+    </section>
+
+    <section class="card">
+      <%- include('../partials/history', { entries: activity.slice().reverse(), open: true }) %>
     </section>
   </div>
 </div>

@@ -226,3 +226,32 @@ CREATE TABLE IF NOT EXISTS kb_attachments (
   CONSTRAINT fk_kb_attachments_user FOREIGN KEY (uploaded_by)
     REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Activity log (audit trail) and manual "Log work" entries; feeds the Daily Report.
+-- entity_id is the record whose History panel shows the entry (see src/lib/activity.js).
+-- client_name and subject are snapshots so entries still read correctly after renames
+-- or deletes. activity_date is the report day (UK date, or the date chosen for manual work).
+CREATE TABLE IF NOT EXISTS activity_log (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NULL,
+  client_id INT UNSIGNED NULL,
+  client_name VARCHAR(200) NULL,
+  entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
+                   'kb_article', 'tutorial', 'client', 'manual') NOT NULL,
+  entity_id INT UNSIGNED NULL,
+  action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
+              'reopened', 'deleted', 'uploaded') NOT NULL,
+  subject VARCHAR(255) NULL,
+  summary TEXT NOT NULL,
+  activity_date DATE NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_activity_log_date_user (activity_date, user_id),
+  KEY idx_activity_log_entity (entity_type, entity_id),
+  KEY idx_activity_log_client (client_id, created_at),
+  CONSTRAINT fk_activity_log_user FOREIGN KEY (user_id)
+    REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_activity_log_client FOREIGN KEY (client_id)
+    REFERENCES clients (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

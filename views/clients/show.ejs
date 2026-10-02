@@ -3,6 +3,7 @@
   <div>
     <p class="crumbs"><a href="/clients">Clients</a></p>
     <h1><%= client.name %></h1>
+    <%- include('../partials/record-meta', { meta: clientMeta }) %>
   </div>
   <div class="actions">
     <a href="/clients/<%= client.id %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
@@ -58,10 +59,7 @@
         <div class="card-head">
           <div>
             <h3><%= cs.service_name %></h3>
-            <div class="muted small">
-              Assigned <%= fmtDate(cs.created_at) %><% if (cs.assigned_by) { %> by <%= cs.assigned_by %><% } %>
-              <% if (cs.closed_at) { %> · closed <%= fmtDate(cs.closed_at) %><% } %>
-            </div>
+            <%- include('../partials/record-meta', { meta: cs.meta }) %>
           </div>
           <%- include('../partials/status', { status: cs.status }) %>
         </div>
@@ -137,6 +135,8 @@
           <% } %>
         </div>
 
+        <%- include('../partials/history', { entries: cs.history.slice().reverse() }) %>
+
         <div class="card-foot">
           <% if (cs.status === 'closed') { %>
             <form method="post" action="/client-services/<%= cs.id %>/reopen" class="inline">
@@ -164,6 +164,13 @@
   <div class="card">
     <%- include('../partials/status-filter', { base: `/clients/${client.id}`, counts: null }) %>
     <%- include('../partials/ticket-table', { tickets, status }) %>
+  </div>
+</section>
+
+<section class="section" id="activity">
+  <div class="card">
+    <%- include('../partials/history', { entries: activity, label: 'Client activity', showSubject: true }) %>
+    <% if (activity.length >= 100) { %><p class="muted small">Showing the latest 100 entries.</p><% } %>
   </div>
 </section>
 <%- include('../partials/foot') %>

@@ -1,0 +1,25 @@
+<%
+  // entries: activity_log rows, newest first. open: start expanded. showSubject: name the ticket or service on each row.
+  const truncate = (text, max = 220) => (text && text.length > max ? `${text.slice(0, max - 1)}…` : text || '');
+%>
+<details class="history" <%= locals.open ? 'open' : '' %>>
+  <summary><%- icon('clock') %><span><%= locals.label || 'History' %></span> <span class="count"><%= entries.length %></span></summary>
+  <% if (!entries.length) { %>
+    <p class="empty small">Nothing has been logged yet.</p>
+  <% } else { %>
+    <ol class="history-list">
+      <% for (const e of entries) { %>
+        <li>
+          <span class="history-action history-<%= e.action %>"><%= activityLabels[e.action] || e.action %></span>
+          <div class="history-body">
+            <div><%= truncate(e.summary) %></div>
+            <div class="muted small">
+              <%= e.username || 'Deleted user' %> · <%= fmtDate(e.created_at) %>
+              <% if (locals.showSubject && e.subject && e.entity_type !== 'client') { %> · <%= e.subject %><% } %>
+            </div>
+          </div>
+        </li>
+      <% } %>
+    </ol>
+  <% } %>
+</details>

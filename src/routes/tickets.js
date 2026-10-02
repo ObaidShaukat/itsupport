@@ -2,6 +2,22 @@ const express = require('express');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
 const { TICKET_STATUSES, isTicketStatus } = require('../lib/tickets');
+const { logActivity, historyFor, recordMeta } = require('../lib/activity');
+
+const ticketEntry = (ticket, type, action, summary) => ({
+  type, id: ticket.id, action, summary, clientId: ticket.client_id, clientName: ticket.client_name, subject: ticket.title,
+});
+
+async function ticketContext(db, id, lock = false) {
+  const [[ticket]] = await db.query(`
+    SELECT t.id, t.title, t.status, t.client_id, c.name AS client_name
+    FROM tickets t
+    JOIN clients c ON c.id = t.client_id
+    WHERE t.id = ? ${lock ? 'FOR UPDATE' : ''}
+  `, [id]);
+  if (!ticket) throw notFound();
+  return ticket;
+}
 
 const router = express.Router();
 
@@ -51,7 +67,7 @@ router.post('/', async (req, res) => {
   let ticketId = null;
   if (!error) {
     ticketId = await transaction(async (conn) => {
-      const [[client]] = await conn.query('SELECT id FROM clients WHERE id = ?', [ticket.client_id]);
+      const [[client]] = await conn.query('SELECT id, name FROM clients WHERE id = ?', [ticket.client_id]);
       if (!client) return null;
       const [result] = await conn.query(
         "INSERT INTO tickets (client_id, title, description, status, created_by) VALUES (?, ?, ?, 'open', ?)",
@@ -61,6 +77,10 @@ router.post('/', async (req, res) => {
         "INSERT INTO ticket_history (ticket_id, user_id, old_status, new_status) VALUES (?, ?, NULL, 'open')",
         [result.insertId, req.user.id]
       );
+      await logActivity(conn, req.user, ticketEntry(
+        { id: result.insertId, title: ticket.title, client_id: client.id, client_name: client.name },
+        'ticket', 'created', `Opened ticket #${result.insertId}: ${ticket.title}`
+      ));
       return result.insertId;
     });
     if (!ticketId) error = 'That client no longer exists.';
@@ -98,7 +118,9 @@ router.get('/:id', async (req, res) => {
     WHERE th.ticket_id = ?
     ORDER BY th.created_at DESC, th.id DESC
   `, [id]);
-  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history });
+  const activity = await historyFor(['ticket', 'ticket_comment'], [id]);
+  const meta = recordMeta(activity, 'ticket', { createdBy: ticket.created_by_name, createdAt: ticket.created_at });
+  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta });
 });
 
 router.post('/:id/status', async (req, res) => {
@@ -110,14 +132,16 @@ router.post('/:id/status', async (req, res) => {
   }
 
   const changed = await transaction(async (conn) => {
-    const [[ticket]] = await conn.query('SELECT id, status FROM tickets WHERE id = ? FOR UPDATE', [id]);
-    if (!ticket) throw notFound();
+    const ticket = await ticketContext(conn, id, true);
     if (ticket.status === status) return false;
     await conn.query('UPDATE tickets SET status = ? WHERE id = ?', [status, id]);
     await conn.query(
       'INSERT INTO ticket_history (ticket_id, user_id, old_status, new_status) VALUES (?, ?, ?, ?)',
       [id, req.user.id, ticket.status, status]
     );
+    await logActivity(conn, req.user, ticketEntry(
+      ticket, 'ticket', 'status_changed', `Status: ${TICKET_STATUSES[ticket.status]} → ${TICKET_STATUSES[status]}`
+    ));
     return true;
   });
 
@@ -133,9 +157,9 @@ router.post('/:id/comments', async (req, res) => {
     return res.redirect(`/tickets/${id}#comments`);
   }
   await transaction(async (conn) => {
-    const [[ticket]] = await conn.query('SELECT id FROM tickets WHERE id = ? FOR UPDATE', [id]);
-    if (!ticket) throw notFound();
+    const ticket = await ticketContext(conn, id, true);
     await conn.query('INSERT INTO ticket_comments (ticket_id, user_id, body) VALUES (?, ?, ?)', [id, req.user.id, body]);
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', `Comment: ${body}`));
     await conn.query('UPDATE tickets SET updated_at = NOW() WHERE id = ?', [id]);
   });
   res.redirect(`/tickets/${id}#comments`);

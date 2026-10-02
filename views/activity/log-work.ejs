@@ -1,0 +1,33 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/report">Daily Report</a></p>
+    <h1><%= entry.id ? 'Edit logged work' : 'Log work' %></h1>
+    <p class="muted">Work that isn't tracked elsewhere in the portal. It appears on the Daily Report as written.</p>
+  </div>
+</header>
+
+<section class="card card-narrow">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="<%= action %>" class="form">
+    <%- csrfField %>
+    <input type="hidden" name="back" value="<%= back %>">
+    <label class="field">
+      <span>Client <span class="muted">(optional)</span></span>
+      <input type="text" name="client" value="<%= entry.client %>" list="log-work-clients" autocomplete="off" maxlength="200" placeholder="Start typing to search clients">
+    </label>
+    <label class="field">
+      <span>What did you do?</span>
+      <textarea name="description" rows="5" required maxlength="2000"><%= entry.description %></textarea>
+    </label>
+    <label class="field">
+      <span>Date</span>
+      <input type="date" name="date" value="<%= entry.date %>" required>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="<%= back %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../partials/foot') %>

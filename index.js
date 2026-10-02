@@ -13,6 +13,7 @@ const { requireAuth } = require('./src/middleware/auth');
 const multipart = require('./src/middleware/multipart');
 const { detectFonts } = require('./src/lib/fonts');
 const { TICKET_STATUSES } = require('./src/lib/tickets');
+const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
 
 if (!config.sessionSecret) {
   console.error('SESSION_SECRET is not set in .env');
@@ -49,12 +50,14 @@ const LOGO_PATH = path.join(__dirname, 'public', 'logo.png');
 
 app.locals.fonts = fonts;
 app.locals.ticketStatuses = TICKET_STATUSES;
+app.locals.activityLabels = ACTION_LABELS;
 app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },
   { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
   { key: 'tickets', href: '/tickets', label: 'Tickets', icon: 'message' },
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
   { key: 'kb', href: '/kb', label: 'General IT Support', icon: 'book' },
+  { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -121,6 +124,7 @@ const NAV_PREFIXES = [
   ['/services', 'services'], ['/categories', 'services'], ['/steps', 'services'],
   ['/users', 'users'],
   ['/kb', 'kb'],
+  ['/report', 'report'], ['/log-work', 'report'],
 ];
 app.use((req, res, next) => {
   const hit = NAV_PREFIXES.find(([prefix]) => req.path === prefix || req.path.startsWith(`${prefix}/`));
@@ -132,6 +136,19 @@ app.use((req, res, next) => {
 
 app.use(require('./src/routes/auth'));
 app.use(requireAuth);
+
+// Data for the "Log work" dialog in the top bar of every page.
+app.use(async (req, res, next) => {
+  res.locals.today = londonDate();
+  res.locals.currentPath = req.originalUrl;
+  // Only full pages need it, not file downloads or fetch() calls.
+  if (req.method === 'GET' && !req.path.startsWith('/files/') && req.accepts(['html', 'json']) === 'html') {
+    const [clients] = await pool.query('SELECT name FROM clients ORDER BY name');
+    res.locals.logWorkClients = clients.map((c) => c.name);
+  }
+  next();
+});
+
 app.use('/', require('./src/routes/dashboard'));
 app.use('/users', require('./src/routes/users'));
 app.use('/tickets', require('./src/routes/tickets'));
@@ -139,6 +156,8 @@ app.use(require('./src/routes/services'));
 app.use(require('./src/routes/clients'));
 app.use('/kb', require('./src/routes/kb'));
 app.use('/files', require('./src/routes/files'));
+app.use('/log-work', require('./src/routes/activity'));
+app.use('/report', require('./src/routes/report'));
 
 // ---- Errors ----
 

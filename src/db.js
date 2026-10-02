@@ -5,6 +5,9 @@ const pool = mysql.createPool({
   ...config.db,
   waitForConnections: true,
   connectionLimit: 10,
+  // DATE columns (e.g. activity_log.activity_date) come back as 'YYYY-MM-DD'
+  // strings, so no timezone shifting happens. DATETIMEs are still Date objects.
+  dateStrings: ['DATE'],
 });
 
 // Runs fn(conn) inside a transaction, committing on success and rolling back on error.
