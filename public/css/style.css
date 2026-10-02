@@ -938,3 +938,133 @@ input[type="date"]:focus { outline: none; border-color: var(--blue); box-shadow:
 .btn-danger-solid { background: var(--red); border-color: var(--red); color: #FFFFFF; }
 .btn-danger-solid:hover { background: #A11F15; border-color: #A11F15; color: #FFFFFF; }
 .table td.row-actions { width: 1%; white-space: nowrap; text-align: right; }
+
+/* ---- Animations ----
+   Subtle, quick (150-350ms) and CSS-only. Everything here is switched off for
+   people who ask their system for reduced motion (see the end of this block). */
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes pop-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes tick {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+
+/* Page content rises in, cards and stat tiles slightly staggered. */
+.main > .page-head { animation: fade-up 0.3s ease-out both; }
+.main > .card,
+.main > .section,
+.main > .grid-2,
+.main > .stats,
+.main > .tabs,
+.main > .list-search,
+.main > .category-grid,
+.main > div > .category-grid { animation: fade-up 0.35s ease-out both; animation-delay: 0.05s; }
+.main > .grid-2 { animation-delay: 0.08s; }
+.main > .section + .section { animation-delay: 0.12s; }
+.stats .stat { animation: fade-up 0.35s ease-out both; }
+.stats .stat:nth-child(2) { animation-delay: 0.06s; }
+.stats .stat:nth-child(3) { animation-delay: 0.12s; }
+.category-grid > .card,
+.cs-grid > .card { animation: fade-up 0.35s ease-out both; }
+.category-grid > .card:nth-child(2), .cs-grid > .card:nth-child(2) { animation-delay: 0.04s; }
+.category-grid > .card:nth-child(3), .cs-grid > .card:nth-child(3) { animation-delay: 0.08s; }
+.category-grid > .card:nth-child(n+4), .cs-grid > .card:nth-child(n+4) { animation-delay: 0.12s; }
+
+/* Flash messages slide in. */
+.flash { animation: slide-down 0.3s ease-out both; }
+
+/* Cards lift a touch on hover where they are links or hold actions. */
+.card { transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease; }
+/* Only on devices with a real pointer: on touch screens a stuck hover would trap
+   the full-screen edit panels inside the transformed card. */
+@media (hover: hover) {
+  .category-grid > .card:hover,
+  .cs-grid > .card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+}
+
+/* Buttons and icon buttons: gentle press feedback. */
+.btn,
+.icon-btn { transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s, transform 0.12s; }
+.btn:active,
+.icon-btn:active { transform: scale(0.96); }
+.btn-primary:hover { box-shadow: 0 6px 16px rgba(3, 144, 215, 0.3); transform: translateY(-1px); }
+
+/* Sidebar links slide slightly on hover. */
+.nav a .icon,
+.nav-signout .icon { transition: transform 0.2s ease; }
+.nav a:hover .icon,
+.nav-signout:hover .icon { transform: translateX(2px); }
+
+/* Table rows and list rows fade their hover colour. */
+.table tbody tr,
+.row,
+.list li { transition: background 0.15s ease; }
+
+/* Popovers, dialogs and the mobile menu. */
+.edit[open] > .edit-panel { animation: pop-in 0.18s ease-out both; }
+.dialog[open] { animation: pop-in 0.2s ease-out both; }
+.dialog[open]::backdrop { animation: fade-in 0.2s ease-out both; }
+.history[open] .history-list,
+.report-toggle[open] > :not(summary) { animation: fade-in 0.2s ease-out both; }
+@media (max-width: 860px) {
+  .nav-toggle:checked ~ .sidebar .nav { animation: slide-down 0.2s ease-out both; }
+}
+
+/* Progress bars fill from the left. */
+.progress span { transform-origin: left center; animation: grow-x 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: 0.15s; }
+
+/* Checklist ticks pop when a step is done. */
+.is-done .check-btn .check-icon .icon { animation: tick 0.35s ease-out; }
+.check-btn .check-icon { transition: color 0.2s ease; }
+
+/* Gallery images zoom slightly on hover (transition already set), tabs underline slides. */
+.tabs a { transition: color 0.15s, border-color 0.2s; }
+
+/* Status badges and chips fade in with their row. */
+.badge, .chip { transition: background 0.2s, color 0.2s; }
+
+/* Jumping to an item (e.g. /clients/5#cs-12 after ticking a step) scrolls smoothly
+   and briefly highlights it. */
+html { scroll-behavior: smooth; }
+@keyframes target-glow {
+  0%, 30% { box-shadow: 0 0 0 3px rgba(103, 65, 195, 0.35), var(--shadow-lg); }
+  100% { box-shadow: var(--shadow); }
+}
+.card:target { animation: target-glow 1.6s ease-out both; scroll-margin-top: 1.5rem; }
+
+/* Respect "reduce motion": no movement, no animation. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .category-grid > .card:hover,
+  .cs-grid > .card:hover,
+  .btn-primary:hover,
+  .stat:hover { transform: none; }
+}
