@@ -576,3 +576,241 @@ document.querySelectorAll('[data-field-form]').forEach((form) => {
 document.querySelectorAll('select[data-autosubmit]').forEach((select) => {
   select.addEventListener('change', () => select.form && select.form.submit());
 });
+
+// ---- Searchable dropdown (combobox) ----
+// Upgrades a native field marked data-combobox into a portal-styled, searchable
+// dropdown: type to filter, Up/Down + Enter to choose, Esc or a click outside to close,
+// and a clear (×) button. Works on:
+//   <select data-combobox>                      submits the option value (e.g. client id)
+//   <input list="some-datalist" data-combobox>  submits the option text (e.g. client name)
+// The original field stays in the form (visually hidden) and is what gets submitted,
+// so forms still work without JavaScript.
+let comboboxCount = 0;
+
+function enhanceCombobox(native) {
+  if (native.dataset.comboboxReady) return;
+  native.dataset.comboboxReady = '1';
+  const isSelect = native.tagName === 'SELECT';
+  const datalist = !isSelect && native.list;
+  const id = `combobox-${++comboboxCount}`;
+
+  // Options: [{ value, label }]. A select's empty option becomes the placeholder.
+  const readOptions = () => (isSelect
+    ? [...native.options].filter((o) => o.value !== '').map((o) => ({ value: o.value, label: o.textContent.trim() }))
+    : [...(datalist ? datalist.options : [])].map((o) => ({ value: o.value, label: o.value })));
+  let options = readOptions();
+  const emptyOption = isSelect ? [...native.options].find((o) => o.value === '') : null;
+  const placeholder = native.getAttribute('placeholder') || (emptyOption ? emptyOption.textContent.trim() : 'Search…');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'combobox';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'combobox-input';
+  input.autocomplete = 'off';
+  input.spellcheck = false;
+  input.placeholder = placeholder;
+  input.setAttribute('role', 'combobox');
+  input.setAttribute('aria-expanded', 'false');
+  input.setAttribute('aria-controls', `${id}-list`);
+  input.setAttribute('aria-autocomplete', 'list');
+  if (native.id) {
+    // Keep <label for="..."> working: the visible input takes over the id.
+    input.id = native.id;
+    native.removeAttribute('id');
+  }
+  const labelEl = native.closest('label');
+  const labelText = labelEl ? (labelEl.querySelector('span') || labelEl).textContent.trim() : '';
+  if (labelText) input.setAttribute('aria-label', labelText);
+
+  const clear = document.createElement('button');
+  clear.type = 'button';
+  clear.className = 'combobox-clear';
+  clear.setAttribute('aria-label', 'Clear');
+  clear.textContent = '×';
+  const toggle = document.createElement('span');
+  toggle.className = 'combobox-arrow';
+  toggle.setAttribute('aria-hidden', 'true');
+  const list = document.createElement('ul');
+  list.className = 'combobox-list';
+  list.id = `${id}-list`;
+  list.setAttribute('role', 'listbox');
+  list.hidden = true;
+
+  native.parentNode.insertBefore(wrap, native);
+  wrap.append(input, clear, toggle, list, native);
+  native.classList.add('combobox-native');
+  native.tabIndex = -1;
+  native.setAttribute('aria-hidden', 'true');
+  if (!isSelect) native.removeAttribute('list'); // no native datalist popup any more
+
+  const currentLabel = () => {
+    if (isSelect) {
+      const o = options.find((x) => x.value === native.value);
+      return o ? o.label : '';
+    }
+    return native.value;
+  };
+  const sync = () => {
+    input.value = currentLabel();
+    wrap.classList.toggle('has-value', Boolean(native.value));
+  };
+
+  let shown = [];
+  let active = -1;
+
+  function render(filter) {
+    const q = filter.trim().toLowerCase();
+    shown = q ? options.filter((o) => o.label.toLowerCase().includes(q)) : options;
+    list.replaceChildren();
+    if (!shown.length) {
+      const li = document.createElement('li');
+      li.className = 'combobox-empty';
+      li.textContent = 'No matches';
+      list.appendChild(li);
+    }
+    shown.forEach((o, i) => {
+      const li = document.createElement('li');
+      li.id = `${id}-opt-${i}`;
+      li.setAttribute('role', 'option');
+      li.className = 'combobox-option';
+      if (o.value === native.value && native.value !== '') li.classList.add('is-selected');
+      li.setAttribute('aria-selected', String(i === active));
+      // Highlight the typed part.
+      const at = q ? o.label.toLowerCase().indexOf(q) : -1;
+      if (at >= 0) {
+        li.append(o.label.slice(0, at));
+        const mark = document.createElement('mark');
+        mark.textContent = o.label.slice(at, at + q.length);
+        li.append(mark, o.label.slice(at + q.length));
+      } else {
+        li.textContent = o.label;
+      }
+      li.addEventListener('mousedown', (e) => {
+        e.preventDefault(); // keep focus in the input
+        choose(o);
+      });
+      list.appendChild(li);
+    });
+    setActive(active >= shown.length ? shown.length - 1 : active);
+  }
+
+  function setActive(i) {
+    active = i;
+    [...list.querySelectorAll('.combobox-option')].forEach((li, n) => {
+      li.classList.toggle('is-active', n === i);
+      li.setAttribute('aria-selected', String(n === i));
+    });
+    if (i >= 0) {
+      const li = list.querySelector(`#${id}-opt-${i}`);
+      input.setAttribute('aria-activedescendant', li.id);
+      li.scrollIntoView({ block: 'nearest' });
+    } else {
+      input.removeAttribute('aria-activedescendant');
+    }
+  }
+
+  function open() {
+    if (!list.hidden) return;
+    options = readOptions();
+    active = -1;
+    render(input.value === currentLabel() ? '' : input.value);
+    const selected = shown.findIndex((o) => o.value === native.value && native.value !== '');
+    if (selected >= 0) setActive(selected);
+    list.hidden = false;
+    wrap.classList.add('is-open');
+    input.setAttribute('aria-expanded', 'true');
+  }
+
+  function close() {
+    list.hidden = true;
+    wrap.classList.remove('is-open');
+    input.setAttribute('aria-expanded', 'false');
+    input.removeAttribute('aria-activedescendant');
+  }
+
+  function setValue(value) {
+    if (native.value === value) return sync();
+    native.value = value;
+    sync();
+    native.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  function choose(o) {
+    setValue(o.value);
+    close();
+  }
+
+  // Leaving the field: an exact (case-insensitive) match is accepted; anything else
+  // goes back to the last chosen value, so only real clients are ever submitted.
+  function commitTyped() {
+    const typed = input.value.trim().toLowerCase();
+    if (!typed) return setValue('');
+    const match = options.find((o) => o.label.toLowerCase() === typed);
+    if (match) setValue(match.value);
+    else sync();
+  }
+
+  input.addEventListener('focus', () => input.select());
+  input.addEventListener('click', open);
+  input.addEventListener('input', () => {
+    if (list.hidden) open();
+    active = 0;
+    render(input.value);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (list.hidden) return open();
+      const n = shown.length;
+      if (!n) return undefined;
+      setActive(e.key === 'ArrowDown' ? (active + 1) % n : (active - 1 + n) % n);
+    } else if (e.key === 'Enter') {
+      if (!list.hidden) {
+        e.preventDefault(); // do not submit the form while choosing
+        if (shown[active]) choose(shown[active]);
+        else if (shown.length === 1) choose(shown[0]);
+      }
+    } else if (e.key === 'Escape') {
+      if (!list.hidden) {
+        e.preventDefault();
+        e.stopPropagation(); // close only this list, not the dialog or popover
+        close();
+        sync();
+      }
+    } else if (e.key === 'Tab') {
+      if (!list.hidden && shown[active] && input.value.trim()) choose(shown[active]);
+      close();
+    }
+  });
+  input.addEventListener('blur', () => {
+    setTimeout(() => {
+      if (wrap.contains(document.activeElement)) return;
+      close();
+      commitTyped();
+    }, 0);
+  });
+  clear.addEventListener('mousedown', (e) => e.preventDefault());
+  clear.addEventListener('click', () => {
+    setValue('');
+    input.focus();
+    open();
+  });
+  toggle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    if (list.hidden) { input.focus(); open(); } else close();
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!wrap.contains(e.target)) close();
+  });
+  // Required fields: show the browser's message on the visible input.
+  // (the browser focuses the hidden field after this event, so move focus afterwards)
+  native.addEventListener('invalid', () => setTimeout(() => { input.focus(); wrap.classList.add('is-invalid'); }));
+  native.addEventListener('change', () => wrap.classList.remove('is-invalid'));
+  // Forms that are reset (edit popovers, the Log work dialog) show the reset value.
+  if (native.form) native.form.addEventListener('reset', () => setTimeout(sync));
+  native.addEventListener('change', sync);
+  sync();
+}
+
+document.querySelectorAll('[data-combobox]').forEach(enhanceCombobox);

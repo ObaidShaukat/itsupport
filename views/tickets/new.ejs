@@ -16,7 +16,7 @@
       <%- csrfField %>
       <label class="field">
         <span>Client</span>
-        <select name="client_id" required>
+        <select name="client_id" required data-combobox>
           <option value="">Choose a client…</option>
           <% for (const c of clients) { %>
             <option value="<%= c.id %>" <%= c.id === ticket.client_id ? 'selected' : '' %>><%= c.name %></option>

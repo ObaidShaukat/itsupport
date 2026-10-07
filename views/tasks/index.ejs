@@ -30,7 +30,7 @@
       </label>
       <label class="field">
         <span>Client</span>
-        <select name="client">
+        <select name="client" data-combobox>
           <option value="">Any client</option>
           <% for (const c of clients) { %>
             <option value="<%= c.id %>" <%= filters.clientId === c.id ? 'selected' : '' %>><%= c.name %></option>
@@ -109,7 +109,7 @@
         </label>
         <label class="field">
           <span>Client</span>
-          <select name="client_id">
+          <select name="client_id" data-combobox>
             <option value="">No client</option>
             <% for (const c of clients) { %>
               <option value="<%= c.id %>" <%= open.client_id === c.id ? 'selected' : '' %>><%= c.name %></option>

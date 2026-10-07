@@ -97,7 +97,7 @@
                   <input type="hidden" name="back" value="<%= backPath %>">
                   <label class="field">
                     <span>Client <span class="muted">(optional)</span></span>
-                    <input type="text" name="client" value="<%= m.client_name || '' %>" list="log-work-clients" autocomplete="off" maxlength="200">
+                    <input type="text" name="client" value="<%= m.client_name || '' %>" list="log-work-clients" autocomplete="off" maxlength="200" placeholder="Search clients…" data-combobox>
                   </label>
                   <label class="field">
                     <span>Description</span>
