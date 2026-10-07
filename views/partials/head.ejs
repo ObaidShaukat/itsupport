@@ -36,7 +36,7 @@
         <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
       <% } %>
       <div class="nav-foot">
-        <span class="whoami"><%= currentUser.username %></span>
+        <span class="whoami"><%= currentUser.name || currentUser.username %></span>
         <form method="post" action="/logout">
           <%- locals.csrfField %>
           <button type="submit" class="nav-signout"><%- icon('logout') %><span>Sign out</span></button>

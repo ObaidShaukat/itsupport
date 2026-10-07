@@ -10,8 +10,8 @@ const SORTS = {
   title: ['t.title', 'asc'],
   client: ['c.name', 'asc'],
   status: ["FIELD(t.status, 'open', 'customer_waiting', 'closed')", 'asc'],
-  created_by: ['cu.username', 'asc'],
-  updated_by: ['uu.username', 'asc'],
+  created_by: ["COALESCE(NULLIF(cu.display_name, ''), cu.username)", 'asc'],
+  updated_by: ["COALESCE(NULLIF(uu.display_name, ''), uu.username)", 'asc'],
   updated: ['t.updated_at', 'desc'],
   priority: ["FIELD(t.priority, 'urgent', 'high', 'normal', 'low')", 'asc'],
 };
@@ -58,7 +58,7 @@ async function listTickets({ clientId = null, status, priority, sort, dir }) {
   const [tickets] = await pool.query(`
     SELECT t.id, t.title, t.status, t.priority, t.created_at, t.updated_at,
            c.id AS client_id, c.name AS client_name,
-           cu.username AS created_by, uu.username AS updated_by
+           COALESCE(NULLIF(cu.display_name, ''), cu.username) AS created_by, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     LEFT JOIN users cu ON cu.id = t.created_by

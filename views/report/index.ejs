@@ -5,7 +5,7 @@
     <p class="muted"><%= periodLabel %></p>
   </div>
   <div class="actions">
-    <a href="/activity?date=<%= from %><%= userId ? `&user=${userId}` : '' %>" class="btn btn-ghost"><%- icon('clock') %><span>Activity log</span></a>
+    <a href="/activity?date=<%= from %><%= view === 'me' ? `&user=${currentUser.id}` : view !== 'all' ? `&user=${view}` : '' %>" class="btn btn-ghost"><%- icon('clock') %><span>Activity log</span></a>
     <button type="button" class="btn" data-copy="text" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy plain text</span></button>
     <button type="button" class="btn btn-primary" data-copy="html" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy for email</span></button>
   </div>
@@ -24,12 +24,15 @@
         <input type="date" name="to" value="<%= to === from ? '' : to %>">
       </label>
       <label class="field">
-        <span>User</span>
-        <select name="user">
-          <option value="">All users</option>
-          <% for (const u of users) { %>
-            <option value="<%= u.id %>" <%= u.id === userId ? 'selected' : '' %>><%= u.username %></option>
-          <% } %>
+        <span>View</span>
+        <select name="view" data-autosubmit>
+          <option value="me" <%= view === 'me' ? 'selected' : '' %>>My report</option>
+          <option value="all" <%= view === 'all' ? 'selected' : '' %>>All team</option>
+          <optgroup label="Someone else">
+            <% for (const u of users) { if (u.id === currentUser.id) continue; %>
+              <option value="<%= u.id %>" <%= view === String(u.id) ? 'selected' : '' %>><%= u.name %></option>
+            <% } %>
+          </optgroup>
         </select>
       </label>
       <button type="submit" class="btn">Show</button>
@@ -46,7 +49,7 @@
 
 <section class="card report">
   <% if (!report.days.length) { %>
-    <p class="empty">No activity recorded <%= from === to ? 'on this day' : 'in this period' %>.</p>
+    <p class="empty"><%= view === 'me' ? 'You have no activity' : view === 'all' ? 'Nobody has any activity' : 'No activity' %> recorded <%= from === to ? 'on this day' : 'in this period' %>.</p>
   <% } else { %>
     <div class="report-preview-head">
       <p class="muted small"><%- icon('edit') %> Preview. Click any line to edit it before copying. Edits are not saved; reload to start again.</p>

@@ -51,7 +51,7 @@ const TASK_SELECT = `
          t.created_at, t.updated_at, t.assigned_to, t.client_id, t.ticket_id,
          (t.status = 'todo' AND t.due_at < NOW()) AS overdue,
          c.name AS client_name, tk.title AS ticket_title,
-         au.username AS assigned_name, cu.username AS created_name, uu.username AS updated_name
+         COALESCE(NULLIF(au.display_name, ''), au.username) AS assigned_name, COALESCE(NULLIF(cu.display_name, ''), cu.username) AS created_name, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_name
   FROM tasks t
   LEFT JOIN clients c ON c.id = t.client_id
   LEFT JOIN tickets tk ON tk.id = t.ticket_id

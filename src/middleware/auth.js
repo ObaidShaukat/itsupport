@@ -5,11 +5,13 @@ const { pool } = require('../db');
 async function requireAuth(req, res, next) {
   if (!req.session.userId) return res.redirect('/login');
 
-  const [[user]] = await pool.query('SELECT id, username, role FROM users WHERE id = ?', [req.session.userId]);
+  const [[user]] = await pool.query('SELECT id, username, display_name, role, report_view FROM users WHERE id = ?', [req.session.userId]);
   if (!user) {
     return req.session.destroy(() => res.redirect('/login'));
   }
 
+  // name: what to show for this user (display name, or the username when empty).
+  user.name = user.display_name || user.username;
   req.user = user;
   res.locals.currentUser = user;
   next();

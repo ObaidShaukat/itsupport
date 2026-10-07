@@ -109,7 +109,7 @@ router.get('/stock/:id', async (req, res) => {
   `, [item.id]);
   const [people] = await pool.query("SELECT id, name FROM inv_people WHERE status = 'active' ORDER BY name");
   const [log] = await pool.query(`
-    SELECT l.action, l.summary, l.created_at, u.username FROM activity_log l LEFT JOIN users u ON u.id = l.user_id
+    SELECT l.action, l.summary, l.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username FROM activity_log l LEFT JOIN users u ON u.id = l.user_id
     WHERE l.entity_type = 'inv_stock' AND l.entity_id = ? ORDER BY l.created_at DESC, l.id DESC LIMIT 100
   `, [item.id]);
   const fields = fieldsForCategory(await cf.fieldsFor('stock'), item.category_id);

@@ -86,7 +86,7 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const [[ticket]] = await pool.query(`
-    SELECT t.*, c.name AS client_name, u.username AS created_by_name, uu.username AS updated_by_name
+    SELECT t.*, c.name AS client_name, COALESCE(NULLIF(u.display_name, ''), u.username) AS created_by_name, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by_name
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.created_by
@@ -95,14 +95,14 @@ router.get('/:id', async (req, res) => {
   `, [id]);
   if (!ticket) throw notFound();
   const [comments] = await pool.query(`
-    SELECT tc.id, tc.body, tc.created_at, u.username
+    SELECT tc.id, tc.body, tc.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
     FROM ticket_comments tc
     LEFT JOIN users u ON u.id = tc.user_id
     WHERE tc.ticket_id = ?
     ORDER BY tc.created_at, tc.id
   `, [id]);
   const [history] = await pool.query(`
-    SELECT th.old_status, th.new_status, th.old_priority, th.new_priority, th.created_at, u.username
+    SELECT th.old_status, th.new_status, th.old_priority, th.new_priority, th.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
     FROM ticket_history th
     LEFT JOIN users u ON u.id = th.user_id
     WHERE th.ticket_id = ?

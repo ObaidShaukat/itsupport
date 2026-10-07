@@ -10,7 +10,7 @@ const router = express.Router();
 
 router.get('/', async (req, res) => {
   const date = isDate(req.query.date) ? req.query.date : londonDate();
-  const [users] = await pool.query('SELECT id, username FROM users ORDER BY username');
+  const [users] = await pool.query("SELECT id, COALESCE(NULLIF(users.display_name, ''), users.username) AS username FROM users ORDER BY username");
   const userId = users.some((u) => u.id === toId(req.query.user)) ? toId(req.query.user) : null;
   const type = ENTITY_TYPES.includes(req.query.type) ? req.query.type : '';
 
@@ -26,7 +26,7 @@ router.get('/', async (req, res) => {
     params.push(type);
   }
   const [entries] = await pool.query(`
-    SELECT l.id, l.created_at, l.updated_at, l.activity_date, u.username, l.action, l.entity_type, l.entity_id,
+    SELECT l.id, l.created_at, l.updated_at, l.activity_date, COALESCE(NULLIF(u.display_name, ''), u.username) AS username, l.action, l.entity_type, l.entity_id,
            l.client_id, l.client_name, l.subject, l.summary, l.changes
     FROM activity_log l
     LEFT JOIN users u ON u.id = l.user_id

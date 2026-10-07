@@ -61,7 +61,7 @@ async function categoryOptions() {
 
 async function attachmentsFor(articleId) {
   const [rows] = await pool.query(`
-    SELECT a.id, a.file_name, a.original_name, a.size_bytes, a.kind, a.created_at, u.username AS uploaded_by
+    SELECT a.id, a.file_name, a.original_name, a.size_bytes, a.kind, a.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS uploaded_by
     FROM kb_attachments a
     LEFT JOIN users u ON u.id = a.uploaded_by
     WHERE a.article_id = ?
@@ -149,7 +149,7 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const [[article]] = await pool.query(`
-    SELECT a.*, c.username AS created_by_name, e.username AS updated_by_name
+    SELECT a.*, COALESCE(NULLIF(c.display_name, ''), c.username) AS created_by_name, COALESCE(NULLIF(e.display_name, ''), e.username) AS updated_by_name
     FROM kb_articles a
     LEFT JOIN users c ON c.id = a.created_by
     LEFT JOIN users e ON e.id = a.updated_by

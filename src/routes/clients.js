@@ -87,14 +87,14 @@ router.get('/clients/:id', async (req, res) => {
   if (!client) throw notFound();
 
   const [clientServices] = await pool.query(`
-    SELECT cs.id, cs.service_id, cs.service_name, cs.status, cs.created_at, cs.closed_at, u.username AS assigned_by
+    SELECT cs.id, cs.service_id, cs.service_name, cs.status, cs.created_at, cs.closed_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS assigned_by
     FROM client_services cs
     LEFT JOIN users u ON u.id = cs.assigned_by
     WHERE cs.client_id = ?
     ORDER BY cs.status = 'closed', cs.created_at DESC
   `, [id]);
   const [steps] = await pool.query(`
-    SELECT css.id, css.client_service_id, css.title, css.done, css.done_at, u.username AS done_by
+    SELECT css.id, css.client_service_id, css.title, css.done, css.done_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS done_by
     FROM client_service_steps css
     JOIN client_services cs ON cs.id = css.client_service_id
     LEFT JOIN users u ON u.id = css.done_by
@@ -103,7 +103,7 @@ router.get('/clients/:id', async (req, res) => {
   `, [id]);
   const [notes] = await pool.query(`
     SELECT n.id, n.client_service_id, n.body, n.created_at, n.updated_at,
-           u.username AS author, e.username AS editor
+           COALESCE(NULLIF(u.display_name, ''), u.username) AS author, COALESCE(NULLIF(e.display_name, ''), e.username) AS editor
     FROM client_service_notes n
     JOIN client_services cs ON cs.id = n.client_service_id
     LEFT JOIN users u ON u.id = n.user_id

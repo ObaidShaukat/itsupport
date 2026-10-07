@@ -169,11 +169,11 @@ router.get('/assets/:id', async (req, res) => {
   const asset = await inv.assetById(requireId(req.params.id));
   if (!asset) throw notFound();
   const [history] = await pool.query(`
-    SELECT h.*, u.username AS created_by_name FROM inv_asset_assignments h LEFT JOIN users u ON u.id = h.created_by
+    SELECT h.*, COALESCE(NULLIF(u.display_name, ''), u.username) AS created_by_name FROM inv_asset_assignments h LEFT JOIN users u ON u.id = h.created_by
     WHERE h.asset_id = ? ORDER BY COALESCE(h.assigned_until, '9999-12-31') DESC, h.id DESC
   `, [asset.id]);
   const [log] = await pool.query(`
-    SELECT l.action, l.summary, l.created_at, u.username FROM activity_log l LEFT JOIN users u ON u.id = l.user_id
+    SELECT l.action, l.summary, l.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username FROM activity_log l LEFT JOIN users u ON u.id = l.user_id
     WHERE l.entity_type = 'inv_asset' AND l.entity_id = ? ORDER BY l.created_at DESC, l.id DESC LIMIT 100
   `, [asset.id]);
   const [people] = await pool.query("SELECT id, name FROM inv_people WHERE status = 'active' ORDER BY name");

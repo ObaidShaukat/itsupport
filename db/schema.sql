@@ -5,6 +5,10 @@
 CREATE TABLE IF NOT EXISTS users (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   username VARCHAR(100) NOT NULL,
+  -- Shown everywhere a user appears; empty means the username is shown.
+  display_name VARCHAR(100) NULL,
+  -- Last Daily Report "View" choice: 'me', 'all' or a user id.
+  report_view VARCHAR(20) NULL,
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'admin',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

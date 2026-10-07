@@ -158,7 +158,7 @@ router.get('/services/:id', async (req, res) => {
   const [categories] = await pool.query('SELECT id, name FROM service_categories ORDER BY name');
   const [tutorials] = await pool.query(`
     SELECT t.id, t.title, t.description, t.file_name, t.original_name, t.size_bytes, t.kind,
-           t.created_at, t.updated_at, u.username AS uploaded_by
+           t.created_at, t.updated_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS uploaded_by
     FROM service_tutorials t
     LEFT JOIN users u ON u.id = t.uploaded_by
     WHERE t.service_id = ?

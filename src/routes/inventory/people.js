@@ -164,11 +164,11 @@ router.get('/people/:id', async (req, res) => {
   const fields = await cf.fieldsFor('person');
   const values = (await cf.valuesFor('person', [person.id])).get(person.id) || {};
   const [offboarding] = await pool.query(
-    'SELECT o.*, u.username AS done_by_name FROM inv_offboarding_items o LEFT JOIN users u ON u.id = o.done_by WHERE o.person_id = ? ORDER BY o.done, o.id',
+    "SELECT o.*, COALESCE(NULLIF(u.display_name, ''), u.username) AS done_by_name FROM inv_offboarding_items o LEFT JOIN users u ON u.id = o.done_by WHERE o.person_id = ? ORDER BY o.done, o.id",
     [person.id]
   );
   const [timeline] = await pool.query(`
-    SELECT l.action, l.summary, l.created_at, u.username
+    SELECT l.action, l.summary, l.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
     FROM activity_log l LEFT JOIN users u ON u.id = l.user_id
     WHERE l.related_person_id = ? OR (l.entity_type = 'inv_person' AND l.entity_id = ?)
     ORDER BY l.created_at DESC, l.id DESC LIMIT 200

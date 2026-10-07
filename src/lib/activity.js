@@ -118,7 +118,7 @@ async function logActivity(db, user, entry) {
 }
 
 const ENTRY_COLUMNS = `
-  l.id, l.user_id, u.username, l.client_id, l.client_name, l.entity_type, l.entity_id,
+  l.id, l.user_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS username, l.client_id, l.client_name, l.entity_type, l.entity_id,
   l.action, l.subject, l.summary, l.changes, l.related_person_id, l.activity_date, l.created_at
 `;
 

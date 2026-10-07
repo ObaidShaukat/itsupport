@@ -571,3 +571,8 @@ document.querySelectorAll('[data-field-form]').forEach((form) => {
   syncType();
   syncLabel();
 });
+
+// Selects marked data-autosubmit submit their form when changed (e.g. Daily Report View).
+document.querySelectorAll('select[data-autosubmit]').forEach((select) => {
+  select.addEventListener('change', () => select.form && select.form.submit());
+});

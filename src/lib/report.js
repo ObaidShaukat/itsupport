@@ -210,7 +210,7 @@ async function buildReport({ from, to, userId }) {
   const params = [...range.params];
   if (userId) params.push(userId);
   const [rows] = await pool.query(`
-    SELECT l.user_id, u.username, l.client_id, COALESCE(c.name, l.client_name) AS client_name,
+    SELECT l.user_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS username, l.client_id, COALESCE(c.name, l.client_name) AS client_name,
            l.entity_type, l.entity_id, l.action, l.subject, l.summary, l.changes,
            s.report_phrase AS service_phrase,
            l.activity_date, l.created_at, l.id
@@ -239,8 +239,10 @@ async function buildReport({ from, to, userId }) {
     label: dayLabel(date),
     users: [...byDay.get(date).values()]
       .sort((a, b) => (a.username || '~').localeCompare(b.username || '~'))
-      .map((u) => ({ heading: heading(u.username), lines: userLines(u.rows) })),
-  }));
+      .map((u) => ({ heading: heading(u.username), lines: userLines(u.rows) }))
+      // Only "Other IT related tasks." means nothing to report: leave them out.
+      .filter((u) => u.lines.length > 1),
+  })).filter((day) => day.users.length);
 
   const multiDay = from !== to;
   const text = days.map((day) => {

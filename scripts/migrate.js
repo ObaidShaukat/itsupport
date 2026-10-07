@@ -8,6 +8,8 @@ const config = require('../src/config');
 // [table, column, definition] for columns added after a table was first released.
 // MySQL has no "ADD COLUMN IF NOT EXISTS", so each is checked first.
 const ADDED_COLUMNS = [
+  ['users', 'display_name', 'VARCHAR(100) NULL AFTER username'],
+  ['users', 'report_view', 'VARCHAR(20) NULL AFTER display_name'],
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
   // Inventory entries also point at the person they concern (person timeline).
   ['activity_log', 'related_person_id', 'INT UNSIGNED NULL AFTER changes'],

@@ -11,14 +11,17 @@ const logUser = (req, id, action, username, summary) => logActivity(null, req.us
 const router = express.Router();
 
 const password = (value) => (typeof value === 'string' ? value : '');
+// Display name: shown everywhere the user appears; empty falls back to the username.
+const displayName = (value) => str(value, 100) || null;
 
 router.get('/', async (req, res) => {
-  const [users] = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY username');
+  const [users] = await pool.query("SELECT id, username, display_name, role, created_at FROM users ORDER BY COALESCE(NULLIF(display_name, ''), username)");
   res.render('users/index', { title: 'Users', users });
 });
 
 router.post('/', async (req, res) => {
   const username = str(req.body.username, 101);
+  const display = displayName(req.body.display_name);
   const pass = password(req.body.password);
   const problem = validateUsername(username) || validatePassword(pass);
   if (problem) {
@@ -28,29 +31,30 @@ router.post('/', async (req, res) => {
 
   const hash = await hashPassword(pass);
   try {
-    const [result] = await pool.query('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hash, 'admin']);
-    await logUser(req, result.insertId, 'created', username, `Added user ${username}`);
+    const [result] = await pool.query('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)', [username, display, hash, 'admin']);
+    await logUser(req, result.insertId, 'created', display || username, `Added user ${display ? `${display} (${username})` : username}`);
   } catch (err) {
     if (err.code !== 'ER_DUP_ENTRY') throw err;
     flash(req, 'error', `The username "${username}" is already taken.`);
     return res.redirect('/users');
   }
-  flash(req, 'success', `User "${username}" added.`);
+  flash(req, 'success', `User "${display || username}" added.`);
   res.redirect('/users');
 });
 
 router.post('/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const username = str(req.body.username, 101);
+  const display = displayName(req.body.display_name);
   const problem = validateUsername(username);
   if (problem) {
     flash(req, 'error', problem);
     return res.redirect('/users');
   }
 
-  const [[before]] = await pool.query('SELECT username FROM users WHERE id = ?', [id]);
+  const [[before]] = await pool.query('SELECT username, display_name FROM users WHERE id = ?', [id]);
   try {
-    const [result] = await pool.query('UPDATE users SET username = ? WHERE id = ?', [username, id]);
+    const [result] = await pool.query('UPDATE users SET username = ?, display_name = ? WHERE id = ?', [username, display, id]);
     if (!result.affectedRows) {
       flash(req, 'error', 'That user no longer exists.');
       return res.redirect('/users');
@@ -60,10 +64,13 @@ router.post('/:id', async (req, res) => {
     flash(req, 'error', `The username "${username}" is already taken.`);
     return res.redirect('/users');
   }
-  if (before && before.username !== username) {
-    await logUser(req, id, 'updated', username, `Renamed user ${before.username} to ${username}`);
+  const changes = [];
+  if (before && before.username !== username) changes.push(`username ${before.username} → ${username}`);
+  if (before && (before.display_name || null) !== display) changes.push(`display name "${before.display_name || ''}" → "${display || ''}"`);
+  if (changes.length) {
+    await logUser(req, id, 'updated', display || username, `Updated user ${display || username}: ${changes.join(', ')}`);
   }
-  flash(req, 'success', `User renamed to "${username}".`);
+  flash(req, 'success', changes.length ? 'User updated.' : 'No changes.');
   res.redirect('/users');
 });
 

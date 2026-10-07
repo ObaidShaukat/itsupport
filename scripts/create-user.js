@@ -1,11 +1,12 @@
-// Adds a portal user. Usage: npm run create-user -- <username> <password>
+// Adds a portal user. Usage: npm run create-user -- <username> <password> [display name]
 const { pool } = require('../src/db');
 const { validateUsername, validatePassword, hashPassword } = require('../src/lib/users');
 
 async function main() {
-  const [username = '', password = ''] = process.argv.slice(2);
+  const [username = '', password = '', ...nameParts] = process.argv.slice(2);
+  const displayName = nameParts.join(' ').trim().slice(0, 100) || null;
   if (!username || !password) {
-    console.error('Usage: npm run create-user -- <username> <password>');
+    console.error('Usage: npm run create-user -- <username> <password> [display name]');
     process.exitCode = 1;
     return;
   }
@@ -19,7 +20,7 @@ async function main() {
 
   const hash = await hashPassword(password);
   try {
-    await pool.query('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)', [username, hash, 'admin']);
+    await pool.query('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)', [username, displayName, hash, 'admin']);
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
       console.error(`User "${username}" already exists.`);

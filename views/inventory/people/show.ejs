@@ -191,7 +191,7 @@
         </div>
         <div class="form-row">
           <label class="field"><span>Granted</span><input type="date" name="granted_date" value="<%= today %>"></label>
-          <label class="field"><span>Granted by</span><input type="text" name="granted_by" value="<%= currentUser.username %>" maxlength="150"></label>
+          <label class="field"><span>Granted by</span><input type="text" name="granted_by" value="<%= currentUser.name || currentUser.username %>" maxlength="150"></label>
         </div>
         <label class="checkbox-field"><input type="checkbox" name="in_1password" value="1"><span>Credentials stored in 1Password</span></label>
         <label class="field"><span>1Password item link <span class="muted">(optional)</span></span><input type="url" name="onepassword_link" maxlength="500" placeholder="https://start.1password.com/…"></label>

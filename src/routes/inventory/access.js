@@ -194,7 +194,7 @@ router.post('/access', async (req, res) => {
     const [r] = await conn.query(`
       INSERT INTO inv_access (person_id, app_id, username, granted_date, granted_by, status, removed_date, in_1password, onepassword_link, notes, created_by, updated_by)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [a.person_id, app, a.username || null, a.granted_date || londonDate(), a.granted_by || req.user.username, a.status,
+    `, [a.person_id, app, a.username || null, a.granted_date || londonDate(), a.granted_by || req.user.name, a.status,
       a.status === 'removed' ? (a.removed_date || londonDate()) : null, a.in_1password, a.onepassword_link || null, a.notes || null,
       req.user.id, req.user.id]);
     await cf.saveValues(conn, 'access', r.insertId, fields, values);

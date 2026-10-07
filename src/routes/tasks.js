@@ -75,7 +75,7 @@ router.get('/', async (req, res) => {
   };
 
   const [tasks, counts] = await Promise.all([listTasks(view, filters), viewCounts(filters)]);
-  const [users] = await pool.query('SELECT id, username FROM users ORDER BY username');
+  const [users] = await pool.query("SELECT id, COALESCE(NULLIF(users.display_name, ''), users.username) AS username FROM users ORDER BY username");
   const [clients] = await pool.query('SELECT id, name FROM clients ORDER BY name');
   const [tickets] = await pool.query(`
     SELECT t.id, t.title, c.name AS client_name FROM tickets t JOIN clients c ON c.id = t.client_id

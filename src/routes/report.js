@@ -1,4 +1,6 @@
-// Daily Report: one day (default today) or a date range, all users or one.
+// Daily Report: one day (default today) or a date range. "View" picks whose work is
+// shown: 'me' (default), 'all' or a user id. The last choice is saved on the user
+// (users.report_view); that is a display preference, so it is not activity-logged.
 const express = require('express');
 const { pool } = require('../db');
 const { toId } = require('../lib/http');
@@ -18,8 +20,20 @@ router.get('/', async (req, res) => {
     notice = `Reports cover at most ${MAX_RANGE_DAYS} days, so this one ends on ${dayLabel(to)}.`;
   }
 
-  const [users] = await pool.query('SELECT id, username FROM users ORDER BY username');
-  const userId = users.some((u) => u.id === toId(req.query.user)) ? toId(req.query.user) : null;
+  const [users] = await pool.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name FROM users ORDER BY name");
+
+  // ?view= wins (and is remembered); otherwise the saved choice; otherwise "me".
+  // The old ?user= links still work.
+  const valid = (v) => v === 'me' || v === 'all' || users.some((u) => String(u.id) === v);
+  let view = typeof req.query.view === 'string' ? req.query.view : (toId(req.query.user) ? String(toId(req.query.user)) : '');
+  if (valid(view)) {
+    if (view !== req.user.report_view) {
+      await pool.query('UPDATE users SET report_view = ? WHERE id = ?', [view, req.user.id]);
+    }
+  } else {
+    view = valid(req.user.report_view || '') ? req.user.report_view : 'me';
+  }
+  const userId = view === 'all' ? null : view === 'me' ? req.user.id : Number(view);
 
   const report = await buildReport({ from, to, userId });
 
@@ -34,7 +48,7 @@ router.get('/', async (req, res) => {
   const link = (range) => {
     const params = new URLSearchParams({ from: range.from });
     if (range.to !== range.from) params.set('to', range.to);
-    if (userId) params.set('user', String(userId));
+    params.set('view', view);
     return `/report?${params}`;
   };
 
@@ -52,7 +66,7 @@ router.get('/', async (req, res) => {
     title: 'Daily Report',
     from,
     to,
-    userId,
+    view,
     users,
     report,
     manual,

@@ -2,7 +2,7 @@
 <header class="page-head">
   <div>
     <h1>Dashboard</h1>
-    <p class="muted">Welcome back, <%= currentUser.username %>.</p>
+    <p class="muted">Welcome back, <%= currentUser.name || currentUser.username %>.</p>
   </div>
   <div class="actions">
     <a href="/tickets/new" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
