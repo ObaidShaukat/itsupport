@@ -47,6 +47,10 @@
       <% } %>
     </section>
 
+    <section class="card" id="reminders">
+      <%- include('../partials/reminders-panel', { reminders, ticket, users }) %>
+    </section>
+
     <section class="card" id="comments">
       <h2>Comments</h2>
       <% if (!comments.length) { %>
@@ -123,10 +127,6 @@
           </li>
         <% } %>
       </ul>
-    </section>
-
-    <section class="card" id="tasks">
-      <%- include('../partials/tasks-panel', { tasks, link: { ticket_id: ticket.id, client_id: ticket.client_id } }) %>
     </section>
 
     <section class="card">

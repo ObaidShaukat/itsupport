@@ -59,7 +59,6 @@ app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },
   { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
   { key: 'tickets', href: '/tickets', label: 'Tickets', icon: 'message' },
-  { key: 'tasks', href: '/tasks', label: 'Tasks', icon: 'box-check' },
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
   { key: 'kb', href: '/kb', label: 'General IT Support', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
@@ -131,7 +130,6 @@ const NAV_PREFIXES = [
   ['/users', 'users'],
   ['/kb', 'kb'],
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
-  ['/tasks', 'tasks'],
   ['/inventory', 'inventory'],
 ];
 app.use((req, res, next) => {
@@ -167,7 +165,7 @@ app.use('/files', require('./src/routes/files'));
 app.use('/log-work', require('./src/routes/activity'));
 app.use('/report', require('./src/routes/report'));
 app.use('/activity', require('./src/routes/activity-log'));
-app.use('/tasks', require('./src/routes/tasks'));
+app.use('/reminders', require('./src/routes/reminders'));
 app.use('/notifications', require('./src/routes/notifications'));
 app.use('/inventory', require('./src/routes/inventory'));
 

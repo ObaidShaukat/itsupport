@@ -1,0 +1,28 @@
+<%#
+  Reminder form fields (add and edit). reminder: { note, for_user_id, input } or null;
+  users: [{ id, name }]. Quick picks fill the UK date/time field (public/js/app.js).
+%>
+<% const r = locals.reminder || {}; const forId = r.for_user_id || currentUser.id; %>
+<label class="field">
+  <span>Note</span>
+  <textarea name="note" rows="2" maxlength="500" placeholder="e.g. Chase the supplier for the replacement part"><%= r.note || '' %></textarea>
+</label>
+<label class="field">
+  <span>For</span>
+  <select name="for_user_id" data-combobox>
+    <% for (const u of users) { %>
+      <option value="<%= u.id %>" <%= u.id === forId ? 'selected' : '' %>><%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %></option>
+    <% } %>
+  </select>
+</label>
+<div class="field" data-reminder-when>
+  <span>When <span class="muted">(UK time)</span></span>
+  <div class="reminder-picks" role="group" aria-label="Quick picks">
+    <button type="button" class="chip" data-pick="1h">In 1 hour</button>
+    <button type="button" class="chip" data-pick="afternoon">This afternoon (15:00)</button>
+    <button type="button" class="chip" data-pick="tomorrow">Tomorrow morning (09:00)</button>
+    <button type="button" class="chip" data-pick="monday">Next Monday (09:00)</button>
+    <button type="button" class="chip" data-pick="custom">Custom</button>
+  </div>
+  <input type="datetime-local" name="remind_at" value="<%= r.input || '' %>" required aria-label="Reminder date and time">
+</div>

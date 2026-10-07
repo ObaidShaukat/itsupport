@@ -58,7 +58,9 @@ async function listTickets({ clientId = null, status, priority, sort, dir }) {
   const [tickets] = await pool.query(`
     SELECT t.id, t.title, t.status, t.priority, t.created_at, t.updated_at,
            c.id AS client_id, c.name AS client_name,
-           COALESCE(NULLIF(cu.display_name, ''), cu.username) AS created_by, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by
+           COALESCE(NULLIF(cu.display_name, ''), cu.username) AS created_by, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by,
+           (SELECT MIN(COALESCE(r.snoozed_until, r.remind_at)) FROM reminders r
+            WHERE r.ticket_id = t.id AND r.status = 'pending') AS next_reminder_at
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     LEFT JOIN users cu ON cu.id = t.created_by

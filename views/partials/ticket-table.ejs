@@ -22,7 +22,12 @@
         <% for (const t of tickets) { %>
           <tr class="ticket-row ticket-row-<%= t.priority %>" data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name %> <%= ticketStatuses[t.status] %> <%= ticketPriorities[t.priority] %> <%= t.created_by || '' %> <%= t.updated_by || '' %>">
             <td class="muted"><%= t.id %></td>
-            <td><a href="/tickets/<%= t.id %>"><%= t.title %></a></td>
+            <td>
+              <a href="/tickets/<%= t.id %>"><%= t.title %></a>
+              <% if (t.next_reminder_at) { %>
+                <a href="/tickets/<%= t.id %>#reminders" class="row-reminder" title="Next reminder: <%= fmtDate(t.next_reminder_at) %>" aria-label="Next reminder: <%= fmtDate(t.next_reminder_at) %>"><%- icon('bell') %></a>
+              <% } %>
+            </td>
             <td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td>
             <td><%- include('status', { status: t.status }) %></td>
             <td class="nowrap"><%= t.created_by || 'Deleted user' %></td>

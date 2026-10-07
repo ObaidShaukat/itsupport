@@ -16,6 +16,8 @@ const ADDED_COLUMNS = [
   ['services', 'report_phrase', 'VARCHAR(255) NULL AFTER description'],
   ['tickets', 'priority', "ENUM('low', 'normal', 'high', 'urgent') NOT NULL DEFAULT 'normal' AFTER status"],
   ['tickets', 'updated_by', 'INT UNSIGNED NULL AFTER created_by'],
+  // Ticket reminders become notifications (the old task_id stays for old rows).
+  ['notifications', 'reminder_id', 'INT UNSIGNED NULL AFTER task_id'],
   ['ticket_history', 'old_priority', "ENUM('low', 'normal', 'high', 'urgent') NULL AFTER new_status"],
   ['ticket_history', 'new_priority', "ENUM('low', 'normal', 'high', 'urgent') NULL AFTER old_priority"],
   // Daily Report action / issue / detail on comments, notes and log entries.

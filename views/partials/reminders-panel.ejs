@@ -1,0 +1,81 @@
+<%#
+  Reminders panel on the ticket page. reminders: { pending, done } from ticketReminders();
+  ticket: the ticket; users: reminder recipients.
+%>
+<% const back = `/tickets/${ticket.id}#reminders`; %>
+<div class="card-head">
+  <h2><%- icon('bell') %> Reminders <span class="muted small">(<%= reminders.pending.length %> pending)</span></h2>
+</div>
+
+<details class="report-toggle reminder-add" <%= reminders.pending.length ? '' : 'open' %>>
+  <summary><%- icon('plus') %> Add reminder</summary>
+  <form method="post" action="/reminders" class="form" data-reminder-form>
+    <%- csrfField %>
+    <input type="hidden" name="ticket_id" value="<%= ticket.id %>">
+    <input type="hidden" name="back" value="<%= back %>">
+    <%- include('reminder-fields', { reminder: null, users }) %>
+    <div><button type="submit" class="btn btn-primary"><%- icon('bell') %><span>Add reminder</span></button></div>
+  </form>
+</details>
+
+<% if (!reminders.pending.length) { %>
+  <p class="empty">No pending reminders.</p>
+<% } else { %>
+  <ul class="reminder-list">
+    <% for (const r of reminders.pending) { %>
+      <li class="reminder <%= r.is_due ? 'is-due' : '' %>">
+        <div class="reminder-main">
+          <div class="reminder-when">
+            <%- icon('clock') %> <strong><%= fmtDate(r.due_at) %></strong>
+            <% if (r.is_due) { %><span class="chip chip-due">Due</span><% } %>
+            <% if (r.snoozed_until) { %><span class="chip">Snoozed</span><% } %>
+          </div>
+          <% if (r.note) { %><p class="pre-line reminder-note"><%= r.note %></p><% } %>
+          <div class="muted small">For <%= r.for_name || 'Deleted user' %> · added by <%= r.created_name || 'Deleted user' %><% if (r.updated_name && r.updated_at > r.created_at) { %> · updated by <%= r.updated_name %><% } %></div>
+        </div>
+        <div class="reminder-actions">
+          <form method="post" action="/reminders/<%= r.id %>/done" class="inline">
+            <%- csrfField %>
+            <input type="hidden" name="back" value="<%= back %>">
+            <button type="submit" class="btn btn-small"><%- icon('check') %><span>Done</span></button>
+          </form>
+          <details class="edit edit-right">
+            <summary class="btn btn-small btn-ghost"><%- icon('edit') %><span>Edit</span></summary>
+            <div class="edit-panel">
+              <form method="post" action="/reminders/<%= r.id %>" class="form" data-reminder-form>
+                <%- csrfField %>
+                <input type="hidden" name="back" value="<%= back %>">
+                <%- include('reminder-fields', { reminder: r, users }) %>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary">Save</button>
+                  <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                </div>
+              </form>
+            </div>
+          </details>
+          <%- include('delete', { action: `/reminders/${r.id}/delete`, confirm: 'Delete this reminder? This cannot be undone.', back, label: 'Delete reminder' }) %>
+        </div>
+      </li>
+    <% } %>
+  </ul>
+<% } %>
+
+<% if (reminders.done.length) { %>
+  <details class="report-toggle reminder-done-list">
+    <summary>Done (<%= reminders.done.length %>)</summary>
+    <ul class="reminder-list">
+      <% for (const r of reminders.done) { %>
+        <li class="reminder is-done">
+          <div class="reminder-main">
+            <div class="reminder-when"><%- icon('check-circle') %> <span><%= fmtDate(r.due_at) %></span></div>
+            <% if (r.note) { %><p class="pre-line reminder-note"><%= r.note %></p><% } %>
+            <div class="muted small">For <%= r.for_name || 'Deleted user' %> · done<%= r.updated_name ? ` by ${r.updated_name}` : '' %> on <%= fmtDate(r.done_at) %></div>
+          </div>
+          <div class="reminder-actions">
+            <%- include('delete', { action: `/reminders/${r.id}/delete`, confirm: 'Delete this reminder? This cannot be undone.', back, label: 'Delete reminder' }) %>
+          </div>
+        </li>
+      <% } %>
+    </ul>
+  </details>
+<% } %>

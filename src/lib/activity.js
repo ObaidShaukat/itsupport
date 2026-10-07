@@ -9,7 +9,8 @@
 //   client                             -> client id
 //   user                               -> user id (Users page changes)
 //   setting                            -> (no longer written) old report action/issue changes
-//   task                               -> task id
+//   task                               -> (no longer written) old Tasks feature
+//   reminder                           -> ticket id (ticket reminders; never on the Daily Report)
 //   inv_person / inv_asset / inv_stock / inv_access / inv_shared -> that inventory record
 //   inv_setting                        -> lists, categories and custom fields
 // related_person_id ties an inventory entry to the person it concerns (their timeline).
@@ -22,7 +23,7 @@
 // activity_date is the UK date of the action (or the date picked for manual work).
 const { pool } = require('../db');
 
-const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task',
+const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder',
   'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting', 'manual'];
 const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed'];
 
@@ -65,7 +66,7 @@ function londonDayStart(date) {
 }
 
 // UK wall-clock time from a form ("YYYY-MM-DDTHH:MM", e.g. a datetime-local input) as
-// a UTC Date, or null. User-chosen times like task due dates and reminders are the
+// a UTC Date, or null. User-chosen times like ticket reminders are the
 // only times set from JavaScript; "now" timestamps always come from MySQL.
 function londonLocalToUtc(value) {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || '').trim());

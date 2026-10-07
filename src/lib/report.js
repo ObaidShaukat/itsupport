@@ -94,8 +94,7 @@ const forClient = withClient;
 // ---- Bullets ----
 
 // One user's day: one bullet per entry, in this order: client services, tickets,
-// tasks, log work, knowledge base, then always "Other IT related tasks.".
-//   Task completed:   "Completed task: {title} for {client}."  (no client: "Completed task: {title}.")
+// log work, knowledge base, then always "Other IT related tasks.".
 //   Log work:         the typed text with the client put in (see withClient); no client: as typed.
 //   Ticket comment:   the typed comment with the client put in (see withClient).
 //                     Empty comment: "Provided IT support to {client} regarding {ticket title}."
@@ -108,11 +107,11 @@ const forClient = withClient;
 //   Knowledge base:   "Documented a solution for '{title}' in the knowledge base." /
 //                     "Updated the knowledge base article '{title}'."
 // Typed text never gets a prefix of ours; withClient() only inserts the client. Exact duplicate
-// lines are removed. Deletes, unticked steps, reopenings and client/user/catalogue
-// changes are left out (they are listed on /activity).
+// lines are removed. Deletes, unticked steps, reopenings, ticket reminders and
+// client/user/catalogue changes are left out (they are listed on /activity).
 function userLines(rows) {
   const section = () => ({ items: [], byKey: new Map() });
-  const sections = { services: section(), tickets: section(), tasks: section(), logwork: section(), kb: section() };
+  const sections = { services: section(), tickets: section(), logwork: section(), kb: section() };
   const commentedTickets = new Set();
 
   // Adds an item once per key; later rows for the same key update it in place.
@@ -171,11 +170,8 @@ function userLines(rows) {
         if (step && !steps.steps.some((x) => x.toLowerCase() === step.toLowerCase())) steps.steps.push(step);
         break;
       }
-      case 'task':
-        // Only completions are reported; other task changes are on /activity.
-        if (row.action === 'completed' && subject) {
-          item(sections.tasks, `task:${row.entity_id}`, () => ({ text: sentence(forClient(`Completed task: ${subject}`, client)) }));
-        }
+      case 'reminder':
+        // Reminders are history only (ticket History, /activity), never report lines.
         break;
       case 'kb_article': {
         const a = item(sections.kb, `kb:${row.entity_id}`, () => ({ kb: true, created: false }));
@@ -206,7 +202,7 @@ function userLines(rows) {
 
   const seen = new Set();
   const lines = [];
-  for (const sec of [sections.services, sections.tickets, sections.tasks, sections.logwork, sections.kb]) {
+  for (const sec of [sections.services, sections.tickets, sections.logwork, sections.kb]) {
     for (const entry of sec.items) {
       const line = render(entry);
       if (line && !seen.has(line.toLowerCase())) {

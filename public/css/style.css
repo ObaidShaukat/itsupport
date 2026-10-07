@@ -1231,105 +1231,52 @@ html { scroll-behavior: smooth; }
   .nav a.active::after { display: none; }
 }
 
-/* ---- Tasks ---- */
+/* ---- Ticket reminders ---- */
 
-.tasks-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 1.5rem; align-items: start; }
-.tasks-layout.has-panel { grid-template-columns: 200px minmax(0, 1fr) minmax(300px, 380px); }
-.task-views { display: grid; gap: 0.15rem; padding: 0.6rem; position: sticky; top: 1rem; margin: 0; }
-.task-views a {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.55rem 0.75rem;
-  border-radius: var(--radius-sm);
-  color: var(--text);
-  font-weight: 500;
-}
-.task-views a:hover { background: var(--purple-soft); color: var(--purple); text-decoration: none; }
-.task-views a.active { background: var(--blue); color: #FFFFFF; }
-.task-views .count { font-size: 0.78rem; opacity: 0.75; }
-.task-views a.task-view-overdue:not(.active) .count { color: var(--red); opacity: 1; font-weight: 700; }
-
-.task-filters { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end; padding: 1rem; }
-.task-filters .field { flex: 1; min-width: 150px; }
-
-.quick-add {
-  position: relative;
-  margin-bottom: 1rem;
-}
-.quick-add-icon { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--blue); pointer-events: none; }
-.quick-add input[type="text"] {
-  padding: 0.85rem 1rem 0.85rem 2.8rem;
-  border-radius: var(--radius);
-  font-size: 1rem;
-  box-shadow: var(--shadow);
-  border-color: transparent;
-}
-.quick-add input[type="text"]:focus { border-color: var(--blue); }
-
-.task-list { list-style: none; margin: 0; padding: 0; }
-.task {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.6rem;
-  padding: 0.65rem 0.4rem;
-  border-bottom: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  transition: background 0.15s;
-}
-.task:last-child { border-bottom: 0; }
-.task:hover { background: var(--surface-soft); }
-.task.is-selected { background: var(--blue-soft); }
-.task-main { flex: 1; min-width: 0; color: var(--text); display: grid; gap: 0.15rem; }
-.task-main:hover { text-decoration: none; color: var(--text); }
-.task-title { font-weight: 600; overflow-wrap: anywhere; }
-.task.is-done .task-title { text-decoration: line-through; color: var(--muted); }
-.task-meta { display: flex; flex-wrap: wrap; gap: 0.25rem 0.9rem; font-size: 0.8rem; color: var(--muted); }
-.task-meta span { display: inline-flex; align-items: center; gap: 0.25rem; }
-.task-meta .icon { width: 13px; height: 13px; }
-.task.is-overdue .task-due { color: var(--red); font-weight: 600; }
-.task-check, .task-star {
-  border: 0;
-  background: none;
-  padding: 0.15rem;
-  cursor: pointer;
-  color: var(--muted);
-  display: inline-grid;
-  place-items: center;
-  border-radius: 50%;
-  transition: color 0.15s, transform 0.15s;
-}
-.task-check .icon, .task-star .icon { width: 22px; height: 22px; }
-.task-check:hover { color: var(--blue); transform: scale(1.1); }
-.task.is-done .task-check { color: var(--green); }
-.task-star:hover { color: #E8A100; }
-.task-star.is-on { color: #E8A100; }
-.task-star.is-on .icon { fill: #FFC93C; }
-.task-list-compact .task { padding: 0.5rem 0.2rem; }
-.task-add { margin-bottom: 0.75rem; }
 .checkbox-field { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; color: var(--indigo); }
 .checkbox-field input { accent-color: var(--blue); width: 16px; height: 16px; }
 
-.task-panel { position: sticky; top: 1rem; margin: 0; max-height: calc(100vh - 2rem); overflow-y: auto; animation: panel-in 0.25s ease-out both; }
-@keyframes panel-in {
-  from { opacity: 0; transform: translateX(16px); }
-  to { opacity: 1; transform: none; }
+#reminders h2 { display: inline-flex; align-items: center; gap: 0.4rem; }
+#reminders h2 .icon { color: var(--purple); }
+.reminder-add { margin-bottom: 0.75rem; }
+.reminder-picks { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.45rem; }
+.reminder-picks .chip {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--indigo);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
-.task-panel-foot { display: flex; justify-content: space-between; gap: 0.5rem; margin: 1rem 0 0.5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+.reminder-picks .chip:hover { border-color: var(--purple); color: var(--purple); }
+.reminder-picks .chip[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #FFFFFF; }
+.reminder-picks .chip:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 
-@media (max-width: 1100px) {
-  .tasks-layout, .tasks-layout.has-panel { grid-template-columns: 1fr; }
-  .task-views { position: static; display: flex; flex-wrap: wrap; }
-  .task-views a { flex: 1 1 auto; gap: 0.5rem; }
-  .task-panel {
-    position: fixed;
-    inset: auto 0 0 0;
-    max-height: 85vh;
-    border-radius: var(--radius) var(--radius) 0 0;
-    z-index: 40;
-    box-shadow: 0 -10px 40px rgba(32, 13, 108, 0.25);
-  }
+.reminder-list { list-style: none; margin: 0; padding: 0; }
+.reminder {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 0.7rem 0.2rem;
+  border-bottom: 1px solid var(--border);
 }
+.reminder:last-child { border-bottom: 0; }
+.reminder-main { flex: 1; min-width: 0; display: grid; gap: 0.2rem; }
+.reminder-when { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.reminder-when .icon { width: 15px; height: 15px; color: var(--purple); }
+.reminder.is-due .reminder-when strong { color: var(--red); }
+.reminder.is-done { opacity: 0.75; }
+.reminder.is-done .reminder-when .icon { color: var(--green); }
+.reminder-note { margin: 0; overflow-wrap: anywhere; }
+.reminder-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; justify-content: flex-end; }
+.chip-due { background: var(--red-soft); color: var(--red); }
+.reminder-done-list { margin-top: 0.75rem; }
+
+/* Ticket list: bell on rows with a pending reminder (tooltip: next reminder time). */
+.row-reminder { display: inline-flex; vertical-align: middle; margin-left: 0.35rem; color: var(--purple); }
+.row-reminder .icon { width: 15px; height: 15px; }
+.row-reminder:hover { color: var(--blue); }
 
 /* ---- Notifications bell and toasts ---- */
 
@@ -1372,11 +1319,17 @@ html { scroll-behavior: smooth; }
   animation: pop-in 0.18s ease-out both;
 }
 .bell-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
-.bell-list { list-style: none; margin: 0 0 0.5rem; padding: 0; max-height: 360px; overflow-y: auto; display: grid; gap: 0.5rem; }
-.notice { padding: 0.6rem 0.7rem; border-radius: var(--radius-sm); background: var(--blue-soft); }
-.notice.is-read { background: var(--surface-soft); opacity: 0.8; }
-.notice-title { display: block; font-weight: 600; color: var(--text); }
-.notice-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.4rem; }
+.bell-list { max-height: 420px; overflow-y: auto; display: grid; gap: 0.75rem; }
+.bell-group h3 { margin: 0 0 0.35rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.bell-group-missed h3 { color: var(--red); }
+.bell-group ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.notice { display: block; padding: 0.55rem 0.7rem; border-radius: var(--radius-sm); background: var(--surface-soft); color: var(--text); }
+.notice:hover { background: var(--purple-soft); text-decoration: none; color: var(--text); }
+.bell-group-due .notice { background: var(--blue-soft); }
+.bell-group-missed .notice { background: var(--red-soft); }
+.notice-title { display: block; font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
+.notice-note { overflow-wrap: anywhere; }
+.notice-actions { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.5rem; }
 .notice-actions .btn { padding: 0.25rem 0.6rem; font-size: 0.75rem; }
 
 .toasts { position: fixed; right: 1rem; bottom: 1rem; z-index: 60; display: grid; gap: 0.6rem; width: min(360px, calc(100vw - 2rem)); }
@@ -1393,9 +1346,11 @@ html { scroll-behavior: smooth; }
   box-shadow: var(--shadow-lg);
   animation: toast-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
-.toast .notice-actions { grid-column: 2 / 4; }
-.toast-icon { font-size: 1.1rem; line-height: 1.4; }
-.toast-close { width: 26px; height: 26px; font-size: 1.1rem; }
+.toast { grid-template-columns: auto 1fr; }
+.toast .notice-actions { grid-column: 1 / 3; }
+.toast-icon { color: var(--purple); line-height: 1; }
+.toast-icon .icon { width: 20px; height: 20px; }
+.toast-more { justify-self: end; }
 .toast.is-leaving { animation: toast-out 0.25s ease-in both; }
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(16px) scale(0.96); }

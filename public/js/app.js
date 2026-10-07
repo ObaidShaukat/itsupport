@@ -355,9 +355,10 @@ document.querySelectorAll('.stat-value').forEach((el) => {
   requestAnimationFrame(step);
 });
 
-// ---- Notifications bell (in-portal reminders) ----
-// Polls /notifications/poll on load and every 60 seconds. Each poll also turns due
-// task reminders into notifications on the server. New ones pop up as a toast.
+// ---- Reminders: bell, toasts and quick picks ----
+// Polls /notifications/poll on load and every 60 seconds. The server turns the user's
+// due ticket reminders into notifications; due and missed ones stay as toasts until
+// Done or Snooze, and a short soft sound plays once when one first appears.
 const bell = document.querySelector('[data-bell]');
 if (bell) {
   const bellToggle = bell.querySelector('[data-bell-toggle]');
@@ -366,13 +367,15 @@ if (bell) {
   const bellCount = bell.querySelector('[data-bell-count]');
   const toastBox = document.querySelector('[data-toasts]');
   const bellToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const MAX_TOASTS = 4;
+  const toasts = new Map(); // reminder id -> toast element
 
   const post = (url, data = {}) => fetch(url, {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ _csrf: bellToken, ...data }),
     credentials: 'same-origin',
-  }).then((r) => r.json().catch(() => ({ ok: false })));
+  }).then((r) => r.json().catch(() => ({ ok: false }))).catch(() => ({ ok: false }));
 
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
@@ -380,73 +383,155 @@ if (bell) {
     if (text !== undefined) node.textContent = text;
     return node;
   };
+  const svgIcon = (name) => {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'icon');
+    svg.setAttribute('aria-hidden', 'true');
+    const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+    use.setAttribute('href', `#i-${name}`);
+    svg.appendChild(use);
+    return svg;
+  };
 
-  // Read / snooze buttons for one notification (used in the bell list and in toasts).
-  function actionButtons(n, after) {
-    const box = el('div', 'notice-actions');
-    const add = (label, fn) => {
-      const b = el('button', 'btn btn-small btn-ghost', label);
-      b.type = 'button';
-      b.addEventListener('click', async (e) => {
-        e.preventDefault();
-        await fn();
-        after();
-        poll();
+  // Two soft sine notes. Browsers may block sound until the page has been clicked.
+  function chime() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const start = ctx.currentTime + 0.02;
+      [[660, 0], [880, 0.16]].forEach(([freq, at]) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0.0001, start + at);
+        gain.gain.exponentialRampToValueAtTime(0.07, start + at + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + at + 0.5);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(start + at);
+        osc.stop(start + at + 0.55);
       });
-      box.appendChild(b);
-    };
-    if (!n.read) add('Mark read', () => post(`/notifications/${n.id}/read`));
-    if (n.taskId) {
-      add('Snooze 10 min', () => post(`/notifications/${n.id}/snooze`, { until: '10m' }));
-      add('1 hour', () => post(`/notifications/${n.id}/snooze`, { until: '1h' }));
-      add('Tomorrow', () => post(`/notifications/${n.id}/snooze`, { until: 'tomorrow' }));
+      setTimeout(() => ctx.close(), 1500);
+    } catch (err) {
+      // No sound available: the toast is enough.
     }
-    return box;
   }
 
-  function noticeBody(n) {
+  // "#12 Title", client, note and time for one reminder.
+  function reminderBody(r, linkTitle) {
     const wrap = el('div', 'notice-body');
-    const title = el(n.link ? 'a' : 'strong', 'notice-title', n.title);
-    if (n.link) title.href = n.link;
+    const title = el(linkTitle ? 'a' : 'span', 'notice-title', `#${r.ticketId} ${r.ticketTitle}`);
+    if (linkTitle) title.href = r.link;
     wrap.appendChild(title);
-    if (n.body) wrap.appendChild(el('div', 'muted small', n.body));
-    wrap.appendChild(el('div', 'muted small', n.time));
+    wrap.appendChild(el('div', 'muted small', r.client));
+    if (r.note) wrap.appendChild(el('div', 'small notice-note', r.note));
+    wrap.appendChild(el('div', 'muted small', r.time));
     return wrap;
   }
 
-  function render(data) {
-    const unread = Number(data.unread) || 0;
-    bellCount.textContent = unread > 99 ? '99+' : String(unread);
-    bellCount.hidden = unread === 0;
-    bell.classList.toggle('has-unread', unread > 0);
-    bellList.replaceChildren();
-    if (!data.items.length) bellList.appendChild(el('li', 'empty small', 'No notifications yet.'));
-    for (const n of data.items) {
-      const li = el('li', `notice ${n.read ? 'is-read' : ''}`);
-      li.appendChild(noticeBody(n));
-      li.appendChild(actionButtons(n, () => {}));
-      bellList.appendChild(li);
+  function removeToast(id) {
+    const box = toasts.get(id);
+    if (!box) return;
+    toasts.delete(id);
+    box.classList.add('is-leaving');
+    setTimeout(() => box.remove(), 250);
+  }
+
+  function toast(r) {
+    const box = el('div', 'toast');
+    box.setAttribute('role', 'alert');
+    const iconWrap = el('span', 'toast-icon');
+    iconWrap.appendChild(svgIcon('bell'));
+    box.appendChild(iconWrap);
+    box.appendChild(reminderBody(r, true));
+
+    const actions = el('div', 'notice-actions');
+    const open = el('a', 'btn btn-small', 'Open ticket');
+    open.href = r.link;
+    actions.appendChild(open);
+    const add = (label, url, data, primary) => {
+      const b = el('button', `btn btn-small ${primary ? 'btn-primary' : 'btn-ghost'}`, label);
+      b.type = 'button';
+      b.addEventListener('click', async () => {
+        actions.querySelectorAll('button').forEach((x) => { x.disabled = true; });
+        const res = await post(url, data);
+        if (res.ok) removeToast(r.id);
+        else actions.querySelectorAll('button').forEach((x) => { x.disabled = false; });
+        poll();
+      });
+      actions.appendChild(b);
+    };
+    add('Done', `/reminders/${r.id}/done`, {}, true);
+    add('Snooze 10 min', `/reminders/${r.id}/snooze`, { until: '10m' });
+    add('1 hour', `/reminders/${r.id}/snooze`, { until: '1h' });
+    add('Tomorrow 09:00', `/reminders/${r.id}/snooze`, { until: 'tomorrow' });
+    box.appendChild(actions);
+    return box;
+  }
+
+  // Shows the due and missed reminders as toasts (up to MAX_TOASTS, plus a "more" note)
+  // and removes toasts for reminders that were done or snoozed elsewhere.
+  function renderToasts(list) {
+    if (!toastBox) return;
+    const visible = list.slice(0, MAX_TOASTS);
+    const ids = new Set(visible.map((r) => r.id));
+    for (const id of [...toasts.keys()]) if (!ids.has(id)) removeToast(id);
+    for (const r of visible) {
+      if (toasts.has(r.id)) continue;
+      const box = toast(r);
+      toasts.set(r.id, box);
+      toastBox.appendChild(box);
+    }
+    let more = toastBox.querySelector('[data-toast-more]');
+    const extra = list.length - visible.length;
+    if (extra > 0) {
+      if (!more) {
+        more = el('button', 'btn btn-small toast-more');
+        more.type = 'button';
+        more.dataset.toastMore = '';
+        more.addEventListener('click', (e) => {
+          e.stopPropagation();
+          bellPanel.hidden = false;
+          bellToggle.setAttribute('aria-expanded', 'true');
+        });
+      }
+      more.textContent = `+${extra} more due — open the bell`;
+      toastBox.appendChild(more);
+    } else if (more) {
+      more.remove();
     }
   }
 
-  function toast(n) {
-    if (!toastBox) return;
-    const box = el('div', 'toast');
-    box.setAttribute('role', 'status');
-    const close = el('button', 'icon-btn toast-close', '×');
-    close.type = 'button';
-    close.setAttribute('aria-label', 'Dismiss');
-    const dismiss = () => {
-      box.classList.add('is-leaving');
-      setTimeout(() => box.remove(), 250);
-    };
-    close.addEventListener('click', dismiss);
-    box.appendChild(el('span', 'toast-icon', '🔔'));
-    box.appendChild(noticeBody(n));
-    box.appendChild(close);
-    box.appendChild(actionButtons(n, dismiss));
-    toastBox.appendChild(box);
-    setTimeout(dismiss, 20000);
+  function renderBell(data) {
+    const count = Number(data.count) || 0;
+    bellCount.textContent = count > 99 ? '99+' : String(count);
+    bellCount.hidden = count === 0;
+    bell.classList.toggle('has-unread', count > 0);
+    bellToggle.setAttribute('aria-label', count ? `Reminders (${count} due)` : 'Reminders');
+    bellList.replaceChildren();
+    const groups = [
+      ['due', 'Due now', data.due],
+      ['missed', 'Missed', data.missed],
+      ['upcoming', 'Upcoming (next 7 days)', data.upcoming],
+    ];
+    for (const [key, label, items] of groups) {
+      if (!items.length) continue;
+      const group = el('section', `bell-group bell-group-${key}`);
+      group.appendChild(el('h3', '', `${label} (${items.length})`));
+      const ul = el('ul');
+      for (const r of items) {
+        const li = el('li');
+        const link = el('a', 'notice');
+        link.href = r.link;
+        link.appendChild(reminderBody(r, false));
+        li.appendChild(link);
+        ul.appendChild(li);
+      }
+      group.appendChild(ul);
+      bellList.appendChild(group);
+    }
+    if (!bellList.children.length) bellList.appendChild(el('p', 'empty small', 'No reminders due in the next 7 days.'));
   }
 
   async function poll() {
@@ -455,8 +540,9 @@ if (bell) {
       if (!res.ok) return;
       const data = await res.json();
       if (!data.ok) return;
-      render(data);
-      data.toasts.forEach(toast);
+      renderBell(data);
+      renderToasts([...data.due, ...data.missed]);
+      if (data.sound) chime();
     } catch (err) {
       // Offline or signed out: try again on the next tick.
     }
@@ -474,24 +560,68 @@ if (bell) {
       bellToggle.setAttribute('aria-expanded', 'false');
     }
   });
-  bell.querySelector('[data-bell-read-all]').addEventListener('click', async () => {
-    await post('/notifications/read-all');
-    poll();
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !bellPanel.hidden) {
+      bellPanel.hidden = true;
+      bellToggle.setAttribute('aria-expanded', 'false');
+      bellToggle.focus();
+    }
   });
 
   poll();
   setInterval(poll, 60000);
 }
 
-// Task side panel: Esc closes it (back to the list).
-const taskPanel = document.querySelector('[data-task-panel]');
-if (taskPanel) {
-  document.addEventListener('keydown', (e) => {
-    if (e.key !== 'Escape' || document.querySelector('dialog[open], details.edit[open]')) return;
-    const close = taskPanel.querySelector('[data-panel-close]');
-    if (close) window.location.href = close.href;
-  });
+// Reminder forms: quick picks fill the date/time field with a UK (Europe/London) time,
+// whatever the computer's own time zone. Custom opens the field for any time.
+function londonParts(date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London', hourCycle: 'h23', weekday: 'short',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return { date: `${get('year')}-${get('month')}-${get('day')}`, time: `${get('hour')}:${get('minute')}`, weekday: get('weekday') };
 }
+function plusDays(ymd, days) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+function reminderPick(kind) {
+  const now = londonParts(new Date());
+  if (kind === '1h') {
+    const later = londonParts(new Date(Date.now() + 3600000));
+    return `${later.date}T${later.time}`;
+  }
+  if (kind === 'afternoon') return `${now.date}T15:00`;
+  if (kind === 'tomorrow') return `${plusDays(now.date, 1)}T09:00`;
+  if (kind === 'monday') {
+    const day = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(now.weekday) + 1; // Mon = 1
+    return `${plusDays(now.date, 8 - day)}T09:00`; // on a Monday: next week's
+  }
+  return null;
+}
+document.querySelectorAll('[data-reminder-when]').forEach((box) => {
+  const input = box.querySelector('input[name="remind_at"]');
+  const buttons = box.querySelectorAll('[data-pick]');
+  const press = (active) => buttons.forEach((b) => b.setAttribute('aria-pressed', String(b === active)));
+  buttons.forEach((button) => {
+    button.setAttribute('aria-pressed', 'false');
+    button.addEventListener('click', () => {
+      press(button);
+      const value = reminderPick(button.dataset.pick);
+      if (value) {
+        input.value = value;
+        return;
+      }
+      input.focus();
+      try { input.showPicker?.(); } catch (err) { /* not allowed here: the focused field is enough */ }
+    });
+  });
+  input.addEventListener('input', () => {
+    const custom = box.querySelector('[data-pick="custom"]');
+    press(custom);
+  });
+});
 
 // ---- Inventory ----
 

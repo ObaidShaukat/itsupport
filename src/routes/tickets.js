@@ -3,7 +3,7 @@ const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound, safePath } = require('../lib/http');
 const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } = require('../lib/tickets');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
-const { linkedTasks } = require('../lib/tasks');
+const { ticketReminders, reminderUsers, clearReminderNotifications } = require('../lib/reminders');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
 const ticketEntry = (ticket, type, action, summary) => ({
@@ -108,10 +108,11 @@ router.get('/:id', async (req, res) => {
     WHERE th.ticket_id = ?
     ORDER BY th.created_at DESC, th.id DESC
   `, [id]);
-  const activity = await historyFor(['ticket', 'ticket_comment'], [id]);
+  const activity = await historyFor(['ticket', 'ticket_comment', 'reminder'], [id]);
   const meta = recordMeta(activity, 'ticket', { createdBy: ticket.created_by_name, createdAt: ticket.created_at });
-  const tasks = await linkedTasks('ticket_id', id);
-  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta, tasks });
+  const reminders = await ticketReminders(id);
+  const users = await reminderUsers();
+  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta, reminders, users });
 });
 
 router.post('/:id/status', async (req, res) => {
@@ -218,6 +219,8 @@ router.post('/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   const ticket = await ticketContext(pool, id);
   await logActivity(null, req.user, ticketEntry(ticket, 'ticket', 'deleted', `Deleted ticket #${id}: ${ticket.title}`));
+  // Reminders go with the ticket (ON DELETE CASCADE); their notifications go first.
+  await clearReminderNotifications(pool, { ticketId: id, remove: true });
   await pool.query('DELETE FROM tickets WHERE id = ?', [id]);
   flash(req, 'success', `Ticket #${id} "${ticket.title}" deleted.`);
   res.redirect(safePath(req.body.back, `/clients/${ticket.client_id}#tickets`));
