@@ -3,7 +3,7 @@
 <header class="page-head">
   <div>
     <p class="crumbs"><a href="<%= left ? '/inventory/former' : '/inventory/people' %>"><%= left ? 'Former Employees' : 'People' %></a></p>
-    <h1><%= person.name %> <span class="chip <%= left ? 'chip-warn' : 'chip-category' %>"><%= left ? `Left ${person.leaving_date || ''}` : 'Active' %></span></h1>
+    <h1><%= person.name %> <span class="chip <%= left ? 'chip-warn' : 'chip-category' %>"><%= left ? `Left ${fmtDay(person.leaving_date)}` : 'Active' %></span></h1>
     <p class="muted small"><%= [person.role, person.team_name, person.company_name].filter(Boolean).join(' · ') %></p>
   </div>
   <div class="actions">
@@ -36,8 +36,8 @@
   <dl class="details">
     <div><dt>Email</dt><dd><%= person.email || '—' %></dd></div>
     <div><dt>Phone</dt><dd><%= person.phone || '—' %></dd></div>
-    <div><dt>Start date</dt><dd><%= person.start_date || '—' %></dd></div>
-    <% if (left) { %><div><dt>Leaving date</dt><dd><%= person.leaving_date || '—' %></dd></div><% } %>
+    <div><dt>Start date</dt><dd><%= fmtDay(person.start_date) || '—' %></dd></div>
+    <% if (left) { %><div><dt>Leaving date</dt><dd><%= fmtDay(person.leaving_date) || '—' %></dd></div><% } %>
   </dl>
   <%- include('../_cf-values', { fields, values }) %>
   <% if (person.notes) { %><p class="pre-line"><%= person.notes %></p><% } %>
@@ -156,8 +156,8 @@
             <tr>
               <td><strong><%= a.app_name || 'Other' %></strong></td>
               <td><%= a.username || '—' %></td>
-              <td><span class="chip <%= a.status === 'active' ? 'chip-category' : '' %>"><%= a.status === 'active' ? 'Active' : `Removed ${a.removed_date || ''}` %></span></td>
-              <td class="nowrap small"><%= a.granted_date || '' %><%= a.granted_by ? ` by ${a.granted_by}` : '' %></td>
+              <td><span class="chip <%= a.status === 'active' ? 'chip-category' : '' %>"><%= a.status === 'active' ? 'Active' : `Removed ${fmtDay(a.removed_date)}` %></span></td>
+              <td class="nowrap small"><%= fmtDay(a.granted_date) %><%= a.granted_by ? ` by ${a.granted_by}` : '' %></td>
               <td><% if (a.in_1password) { %><%- icon('lock') %> Yes<% if (a.onepassword_link) { %> · <a href="<%= a.onepassword_link %>" target="_blank" rel="noopener noreferrer">Open</a><% } %><% } else { %><span class="muted">No</span><% } %></td>
               <td class="row-actions">
                 <a href="/inventory/access/<%= a.id %>/edit" class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></a>

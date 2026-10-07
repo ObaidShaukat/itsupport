@@ -541,7 +541,8 @@ if (bell) {
       const data = await res.json();
       if (!data.ok) return;
       renderBell(data);
-      renderToasts([...data.due, ...data.missed]);
+      // "Email only" users (My profile) get no popups.
+      renderToasts(data.popup === false ? [] : [...data.due, ...data.missed]);
       if (data.sound) chime();
     } catch (err) {
       // Offline or signed out: try again on the next tick.
@@ -990,7 +991,9 @@ document.querySelectorAll('[data-signature-editor]').forEach((editor) => {
   const modeButton = editor.querySelector('[data-sig-mode]');
   let htmlMode = false;
 
-  const refresh = () => renderSignature(preview, source.value);
+  // The preview shows {job_title} filled in, as it will be when the report is sent.
+  const jobTitle = editor.dataset.jobTitle || '';
+  const refresh = () => renderSignature(preview, source.value.split('{job_title}').join(escapeHtml(jobTitle)));
   const loadArea = () => {
     area.innerHTML = cleanSignatureHtml(source.value);
     refresh();
@@ -1029,6 +1032,7 @@ document.querySelectorAll('[data-signature-editor]').forEach((editor) => {
     const cmd = button.dataset.sigCmd;
     if (cmd === 'bold' || cmd === 'italic') document.execCommand(cmd);
     else if (cmd === 'clear') document.execCommand('removeFormat');
+    else if (cmd === 'job_title') document.execCommand('insertText', false, '{job_title}');
     else if (cmd === 'break') {
       if (!document.execCommand('insertLineBreak')) document.execCommand('insertHTML', false, '<br>');
     } else if (cmd === 'link') {
@@ -1186,3 +1190,133 @@ if (sendDialog && typeof sendDialog.showModal === 'function') {
     sendForm.querySelectorAll('button[type="submit"]').forEach((b) => { b.disabled = true; });
   });
 }
+
+// ---- Profile picture: choose a square crop before uploading ----
+// The picture is shown in a square frame: drag (or arrow keys) to move it, the slider
+// to zoom. The chosen square, in the picture's own pixels, goes in crop_x / crop_y /
+// crop_size; the server crops to it and resizes to 256 x 256.
+const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+const AVATAR_MAX = 5 * 1024 * 1024;
+document.querySelectorAll('[data-avatar-form]').forEach((form) => {
+  const fileInput = form.querySelector('[data-avatar-file]');
+  const cropBox = form.querySelector('[data-avatar-crop]');
+  const frame = form.querySelector('[data-crop-frame]');
+  const img = form.querySelector('[data-crop-image]');
+  const zoom = form.querySelector('[data-crop-zoom]');
+  const error = form.querySelector('[data-avatar-error]');
+  const field = (name) => form.querySelector(`input[name="${name}"]`);
+  let natural = { w: 0, h: 0 };
+  let pos = { x: 0, y: 0 }; // image top-left inside the frame, in screen pixels
+  let url = null;
+
+  const frameSize = () => frame.clientWidth || 220;
+  let zoomLevel = 1; // the slider value the picture is currently drawn at
+  const scale = (level = zoomLevel) => (frameSize() / Math.min(natural.w, natural.h)) * level;
+  const showError = (message) => {
+    error.textContent = message;
+    error.hidden = !message;
+  };
+  const clamp = () => {
+    const f = frameSize();
+    const s = scale();
+    pos.x = Math.min(0, Math.max(f - natural.w * s, pos.x));
+    pos.y = Math.min(0, Math.max(f - natural.h * s, pos.y));
+  };
+  const draw = () => {
+    if (!natural.w) return;
+    clamp();
+    const s = scale();
+    img.style.width = `${natural.w * s}px`;
+    img.style.height = `${natural.h * s}px`;
+    img.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
+    const size = Math.floor(frameSize() / s);
+    field('crop_size').value = String(Math.min(size, natural.w, natural.h));
+    field('crop_x').value = String(Math.max(0, Math.min(natural.w - size, Math.round(-pos.x / s))));
+    field('crop_y').value = String(Math.max(0, Math.min(natural.h - size, Math.round(-pos.y / s))));
+  };
+  const reset = () => {
+    ['crop_x', 'crop_y', 'crop_size'].forEach((n) => { field(n).value = ''; });
+    cropBox.hidden = true;
+    natural = { w: 0, h: 0 };
+    if (url) URL.revokeObjectURL(url);
+    url = null;
+  };
+
+  fileInput.addEventListener('change', () => {
+    showError('');
+    reset();
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    if (!AVATAR_TYPES.includes(file.type)) {
+      showError('Use a JPG, PNG or WebP image.');
+      fileInput.value = '';
+      return;
+    }
+    if (file.size > AVATAR_MAX) {
+      showError('The picture must be 5 MB or smaller.');
+      fileInput.value = '';
+      return;
+    }
+    url = URL.createObjectURL(file);
+    img.onload = () => {
+      natural = { w: img.naturalWidth, h: img.naturalHeight };
+      zoom.value = '1';
+      zoomLevel = 1;
+      cropBox.hidden = false;
+      const f = frameSize();
+      const s = scale();
+      pos = { x: (f - natural.w * s) / 2, y: (f - natural.h * s) / 2 };
+      draw();
+    };
+    img.onerror = () => {
+      showError('That file could not be read as a picture.');
+      fileInput.value = '';
+      reset();
+    };
+    img.src = url;
+  });
+
+  // Zoom around the centre of the frame.
+  zoom.addEventListener('input', () => {
+    if (!natural.w) return;
+    const f = frameSize();
+    const before = scale();
+    const cx = (f / 2 - pos.x) / before;
+    const cy = (f / 2 - pos.y) / before;
+    zoomLevel = Number(zoom.value) || 1;
+    const after = scale();
+    pos = { x: f / 2 - cx * after, y: f / 2 - cy * after };
+    draw();
+  });
+
+  let drag = null;
+  frame.addEventListener('pointerdown', (e) => {
+    if (!natural.w) return;
+    drag = { x: e.clientX, y: e.clientY, start: { ...pos } };
+    frame.setPointerCapture(e.pointerId);
+    frame.classList.add('is-dragging');
+  });
+  frame.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    pos = { x: drag.start.x + e.clientX - drag.x, y: drag.start.y + e.clientY - drag.y };
+    draw();
+  });
+  const endDrag = () => {
+    drag = null;
+    frame.classList.remove('is-dragging');
+  };
+  frame.addEventListener('pointerup', endDrag);
+  frame.addEventListener('pointercancel', endDrag);
+  frame.addEventListener('keydown', (e) => {
+    const step = e.shiftKey ? 30 : 8;
+    const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
+    if (!moves[e.key] || !natural.w) return;
+    e.preventDefault();
+    pos = { x: pos.x + moves[e.key][0], y: pos.y + moves[e.key][1] };
+    draw();
+  });
+  form.addEventListener('reset', () => {
+    showError('');
+    reset();
+  });
+});

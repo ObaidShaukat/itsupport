@@ -1,0 +1,40 @@
+<%#
+  Profile picture: upload (JPG / PNG / WebP, max 5 MB) with a square crop chosen in the
+  browser (drag to move, slider to zoom), and Remove. person: { id, name, avatar_file };
+  action: form URL (e.g. /profile/avatar); the remove form posts to action + '/delete'.
+  The server crops to the chosen square (or the centre) and resizes to 256 x 256.
+%>
+<div class="avatar-upload" data-avatar-upload>
+  <div class="avatar-upload-current">
+    <%- avatar(person, 'lg') %>
+    <div class="muted small">JPG, PNG or WebP, up to 5 MB.<br>Shown as a 256 × 256 square.</div>
+  </div>
+  <form method="post" action="<%= action %>" enctype="multipart/form-data" class="form" data-avatar-form>
+    <%- csrfField %>
+    <input type="hidden" name="crop_x" value="">
+    <input type="hidden" name="crop_y" value="">
+    <input type="hidden" name="crop_size" value="">
+    <label class="field">
+      <span>Choose a picture</span>
+      <input type="file" name="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required data-avatar-file>
+    </label>
+    <div class="avatar-crop" data-avatar-crop hidden>
+      <div class="avatar-crop-frame" data-crop-frame tabindex="0" aria-label="Drag to choose the part of the picture to show. Arrow keys move it.">
+        <img alt="" data-crop-image draggable="false">
+      </div>
+      <label class="field avatar-zoom">
+        <span>Zoom</span>
+        <input type="range" min="1" max="4" step="0.01" value="1" data-crop-zoom>
+      </label>
+      <p class="muted small">Drag the picture to choose what shows in the circle.</p>
+    </div>
+    <p class="field-error small" data-avatar-error hidden></p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary"><%- icon('upload') %><span>Save picture</span></button>
+      <% if (person.avatar_file) { %>
+        <button type="submit" class="btn btn-ghost" formaction="<%= action %>/delete" formenctype="application/x-www-form-urlencoded" formnovalidate>Remove picture</button>
+      <% } %>
+      <% if (locals.cancel) { %><button type="button" class="btn btn-ghost" data-cancel>Cancel</button><% } %>
+    </div>
+  </form>
+</div>

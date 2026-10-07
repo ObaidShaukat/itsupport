@@ -9,7 +9,7 @@ const { bellFor } = require('../lib/reminders');
 const router = express.Router();
 
 router.get('/poll', async (req, res) => {
-  const bell = await bellFor(req.user.id, req.app.locals.fmtDate);
+  const bell = await bellFor(req.user, req.fmt.fmtDate);
   res.json({ ok: true, ...bell });
 });
 

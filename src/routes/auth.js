@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { pool } = require('../db');
 const { str } = require('../lib/http');
+const { trackSession, forgetSession } = require('../lib/sessions');
 
 const router = express.Router();
 
@@ -28,11 +29,15 @@ router.post('/login', async (req, res, next) => {
   req.session.regenerate((err) => {
     if (err) return next(err);
     req.session.userId = user.id;
-    req.session.save((saveErr) => (saveErr ? next(saveErr) : res.redirect('/')));
+    // Recorded for "Active sessions" on My profile (device, IP, signed in at).
+    trackSession(req, { force: true })
+      .catch((trackErr) => console.error('Could not record the session:', trackErr.message))
+      .finally(() => req.session.save((saveErr) => (saveErr ? next(saveErr) : res.redirect('/'))));
   });
 });
 
-router.post('/logout', (req, res, next) => {
+router.post('/logout', async (req, res, next) => {
+  await forgetSession(req.sessionID).catch((err) => console.error('Could not forget the session:', err.message));
   req.session.destroy((err) => {
     if (err) return next(err);
     res.clearCookie('itsupport.sid');

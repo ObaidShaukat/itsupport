@@ -14,10 +14,12 @@
     <p class="empty" data-filter-empty hidden>No users match your search.</p>
     <ul class="rows">
       <% for (const u of users) { %>
-        <li class="row" data-filter-item data-search="<%= u.display_name || '' %> <%= u.username %> <%= u.role %>">
+        <li class="row user-row" data-filter-item data-search="<%= u.display_name || '' %> <%= u.username %> <%= u.job_title || '' %> <%= u.role %>">
+          <%- avatar({ id: u.id, name: u.display_name || u.username }, 'md') %>
           <div class="row-main">
             <strong><%= u.display_name || u.username %></strong>
             <% if (u.id === currentUser.id) { %><span class="badge badge-you">You</span><% } %>
+            <% if (u.job_title) { %><div class="user-job"><%= u.job_title %></div><% } %>
             <div class="muted small"><%= u.username %></div>
             <div class="muted small"><%= u.role %> · added <%= fmtDate(u.created_at) %><%= u.email_signature ? ' · has an email signature' : '' %></div>
           </div>
@@ -33,11 +35,28 @@
                     <input type="text" name="display_name" value="<%= u.display_name || '' %>" maxlength="100" placeholder="<%= u.username %>">
                   </label>
                   <label class="field">
+                    <span>Job title <span class="muted">(optional)</span></span>
+                    <input type="text" name="job_title" value="<%= u.job_title || '' %>" maxlength="100">
+                  </label>
+                  <label class="field">
                     <span>Email / username</span>
                     <input type="text" name="username" value="<%= u.username %>" required maxlength="100">
                   </label>
                   <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                  </div>
+                </form>
+                <div class="form">
+                  <h3 class="edit-section">Profile picture</h3>
+                  <%- include('../partials/avatar-upload', { person: u, action: `/users/${u.id}/avatar`, cancel: true }) %>
+                </div>
+                <form method="post" action="/users/<%= u.id %>/preferences" class="form">
+                  <%- csrfField %>
+                  <h3 class="edit-section">Preferences</h3>
+                  <%- include('../partials/preference-fields', { prefs: u, reminderChannels }) %>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save preferences</button>
                     <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
                   </div>
                 </form>
@@ -47,6 +66,7 @@
                   <label class="field">
                     <span>New password</span>
                     <input type="password" name="password" required minlength="8" autocomplete="new-password">
+                    <small class="muted">Signs <%= u.id === currentUser.id ? 'out your other sessions' : 'this user out everywhere' %>.</small>
                   </label>
                   <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Reset password</button>
@@ -56,7 +76,7 @@
                 <form method="post" action="/users/<%= u.id %>/signature" class="form">
                   <%- csrfField %>
                   <h3 class="edit-section">Email signature</h3>
-                  <%- include('../partials/signature-editor', { value: u.email_signature }) %>
+                  <%- include('../partials/signature-editor', { value: u.email_signature, jobTitle: u.job_title }) %>
                   <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save signature</button>
                     <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -81,6 +101,10 @@
         <span>Email / username</span>
         <input type="text" name="username" required maxlength="100" autocomplete="off" placeholder="e.g. obaid@cleartwo.co.uk">
         <small class="muted">Used to sign in.</small>
+      </label>
+      <label class="field">
+        <span>Job title <span class="muted">(optional)</span></span>
+        <input type="text" name="job_title" maxlength="100" autocomplete="off" placeholder="e.g. IT Support Engineer">
       </label>
       <label class="field">
         <span>Display name</span>

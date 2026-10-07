@@ -95,7 +95,7 @@ router.get('/:id', async (req, res) => {
   `, [id]);
   if (!ticket) throw notFound();
   const [comments] = await pool.query(`
-    SELECT tc.id, tc.body, tc.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
+    SELECT tc.id, tc.body, tc.created_at, tc.user_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
     FROM ticket_comments tc
     LEFT JOIN users u ON u.id = tc.user_id
     WHERE tc.ticket_id = ?

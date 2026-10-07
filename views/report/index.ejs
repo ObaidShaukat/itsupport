@@ -15,7 +15,7 @@
 <% if (send.sends.length) { %>
   <div class="report-sent" role="status">
     <% for (const s of send.sends) { %>
-      <p><%- icon('check-circle') %> <span><%= s.summary %> at <%= new Date(s.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }) %><%= from !== to ? ` (${s.activity_date})` : '' %>.</span></p>
+      <p><%- icon('check-circle') %> <span><%= s.summary %> at <%= fmtTime(s.created_at) %><%= from !== to ? ` (${fmtDay(s.activity_date)})` : '' %>.</span></p>
     <% } %>
   </div>
 <% } %>
@@ -95,7 +95,7 @@
         <li class="row">
           <div class="row-main">
             <div class="pre-line"><%= m.summary %></div>
-            <div class="muted small"><%= m.activity_date %><% if (m.client_name) { %> · <%= m.client_name %><% } %></div>
+            <div class="muted small"><%= fmtDay(m.activity_date) %><% if (m.client_name) { %> · <%= m.client_name %><% } %></div>
           </div>
           <div class="row-actions">
             <details class="edit">

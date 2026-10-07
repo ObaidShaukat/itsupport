@@ -1,0 +1,24 @@
+<%#
+  Reminder notifications and date format. prefs: { reminder_channel, date_format };
+  reminderChannels: labels from src/lib/profile.js; dateFormats: app.locals.
+%>
+<fieldset class="field choice-group">
+  <legend>Reminder notifications</legend>
+  <% for (const [key, label] of Object.entries(reminderChannels)) { %>
+    <label class="choice">
+      <input type="radio" name="reminder_channel" value="<%= key %>" <%= (prefs.reminder_channel || 'both') === key ? 'checked' : '' %>>
+      <span><%= label %></span>
+    </label>
+  <% } %>
+  <small class="muted">How ticket reminders reach you: a popup in the portal, an email, or both.</small>
+</fieldset>
+<fieldset class="field choice-group">
+  <legend>Date format</legend>
+  <% for (const [key, label] of Object.entries(dateFormats)) { %>
+    <label class="choice">
+      <input type="radio" name="date_format" value="<%= key %>" <%= (prefs.date_format || 'd_mon_yyyy') === key ? 'checked' : '' %>>
+      <span><%= label %></span>
+    </label>
+  <% } %>
+  <small class="muted">Times are always 24-hour UK time.</small>
+</fieldset>

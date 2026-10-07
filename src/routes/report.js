@@ -11,6 +11,7 @@ const { OUR_DOMAIN, mailStatus, userEmail, isEmail, sendMail } = require('../lib
 const {
   MAX_RECIPIENTS, reportSubject, parseAddresses, parseReportJson, fromReport, reportText, reportHtml, signatureText,
 } = require('../lib/report-email');
+const { sanitizeSignature, fillSignature } = require('../lib/signature');
 
 const router = express.Router();
 
@@ -114,7 +115,7 @@ router.get('/', async (req, res) => {
       cc: me.report_cc || '',
       subject: reportSubject(from, to),
       hasSignature: Boolean(me.email_signature),
-      signature: me.email_signature || '',
+      signature: fillSignature(sanitizeSignature(me.email_signature || ''), req.user),
       suggestions,
       sends,
     },
@@ -155,6 +156,8 @@ router.post('/send', async (req, res) => {
   if (!days.length) return fail('There is nothing in your report to send.');
 
   const [[me]] = await pool.query('SELECT email_signature FROM users WHERE id = ?', [req.user.id]);
+  // {job_title} in the signature becomes the sender's job title.
+  const signature = fillSignature(sanitizeSignature(me.email_signature || ''), req.user);
   const name = req.user.name;
   // Our own domain sends as the user; anyone else sends from the portal address.
   const fromAddress = sender.endsWith(OUR_DOMAIN)
@@ -166,8 +169,8 @@ router.post('/send', async (req, res) => {
     to: toList.emails,
     cc: ccWithSender,
     subject,
-    html: reportHtml(days, me.email_signature),
-    text: reportText(days, signatureText(me.email_signature)),
+    html: reportHtml(days, signature),
+    text: reportText(days, signatureText(signature)),
   }, { kind: 'report', userId: req.user.id });
   if (!result.ok) return fail(result.error);
 

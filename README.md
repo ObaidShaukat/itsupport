@@ -29,6 +29,8 @@ cd itsupport
 npm install
 ```
 
+Profile pictures use `sharp`, which installs a prebuilt binary for the server's platform (Linux, Windows or macOS on x64/arm64) as an optional dependency; no build tools are needed. If `require('sharp')` fails, run `npm install --include=optional sharp`.
+
 If npm reports that install scripts were blocked for `bcrypt`, it still works, because bcrypt ships prebuilt binaries for Linux, Windows and macOS. If `require('bcrypt')` fails on your platform, run `npm install-scripts approve bcrypt` and then `npm rebuild bcrypt`.
 
 ### 4. Configure `.env`
@@ -46,7 +48,7 @@ Fill in:
 | `SESSION_SECRET` | Long random string. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `COOKIE_SECURE` | `true` when users reach the portal over HTTPS |
 | `TRUST_PROXY` | `true` when running behind nginx, IIS or another reverse proxy |
-| `UPLOAD_DIR` | Optional. Folder for uploaded files. Defaults to `uploads/` in the app folder |
+| `UPLOAD_DIR` | Optional. Folder for uploaded files (profile pictures go in its `avatars` subfolder). Defaults to `uploads/` in the app folder |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Mail server for reminder emails and sent reports. Port 587 uses STARTTLS (465 uses TLS) |
 | `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` | Address and name emails are sent from (e.g. `it@cleartwo.co.uk`, `Cleartwo IT Support`) |
 | `APP_URL` | Address of the portal, e.g. `https://support.cleartwo.co.uk`, used for the "Open ticket" button in reminder emails |
@@ -138,7 +140,14 @@ Each ticket page has a **Reminders** panel listing pending reminders (soonest fi
 ## Users, My profile and email signatures
 
 - **Users page:** add people, and edit anyone with the pencil: display name, email / username (use the person's email address, as emails are sent to it), password, and email signature, each with its own Save and Cancel. Clicking outside the popup or pressing Esc closes it without saving.
-- **My profile:** click your name in the sidebar or top bar to change your own display name, email signature and password (your current password is needed).
+- **My profile:** click your name or picture in the sidebar or top bar. You can change:
+  - **Profile picture:** upload a JPG, PNG or WebP (up to 5 MB), drag and zoom to choose the square, and save. It is resized to 256 × 256 and shown in the sidebar, top bar, comments, history, the Users list and created / updated by columns. Without a picture you get a coloured circle with your initials. Remove picture takes it away.
+  - **Display name and job title:** the job title shows under your name on your profile and in the Users list, and `{job_title}` in your signature is replaced by it.
+  - **Reminder notifications:** Popup only, Email only, or Both (default).
+  - **Date format:** "7 Oct 2026" (default) or "07/10/2026", used for every date the portal shows you. Times are 24-hour UK time.
+  - **Email signature** and **password** (your current password is needed; changing it signs out your other sessions).
+  - **Active sessions:** every device you are signed in on, with browser, IP address, when you signed in and when it was last active. "This device" is marked. Sign out any other session, or all other sessions at once.
+- **Admins** can change any user's picture, job title, preferences, signature and password from the pencil on the Users page. Resetting someone's password signs them out everywhere.
 - **Email signatures:** use the editor (bold, italic, links, line breaks, images by URL) or choose **Paste HTML** to paste a signature copied from Outlook, with a live preview underneath. Signatures are cleaned before saving (no scripts or styles) and are added to the bottom of Daily Reports you send.
 
 ## Activity log and Daily Report

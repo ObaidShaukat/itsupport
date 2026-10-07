@@ -1,10 +1,10 @@
 <% if (meta && (meta.createdAt || meta.updatedAt)) { %>
   <p class="record-meta">
     <% if (meta.createdAt) { %>
-      <span>Created<%= meta.createdBy ? ` by ${meta.createdBy}` : '' %> on <%= fmtDate(meta.createdAt) %></span>
+      <span>Created<% if (meta.createdBy) { %> by <span class="person"><%- avatar({ name: meta.createdBy }, 'xs') %><%= meta.createdBy %></span><% } %> on <%= fmtDate(meta.createdAt) %></span>
     <% } %>
     <% if (meta.updatedAt) { %>
-      <span>Last updated by <%= meta.updatedBy %> on <%= fmtDate(meta.updatedAt) %></span>
+      <span>Last updated by <span class="person"><%- avatar({ name: meta.updatedBy }, 'xs') %><%= meta.updatedBy %></span> on <%= fmtDate(meta.updatedAt) %></span>
     <% } %>
   </p>
 <% } %>

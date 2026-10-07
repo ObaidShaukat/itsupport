@@ -30,8 +30,8 @@
             </td>
             <td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td>
             <td><%- include('status', { status: t.status }) %></td>
-            <td class="nowrap"><%= t.created_by || 'Deleted user' %></td>
-            <td class="nowrap"><%= t.updated_by || '—' %></td>
+            <td class="nowrap"><span class="person"><%- avatar({ id: t.created_by_id, name: t.created_by }, 'xs') %><%= t.created_by || 'Deleted user' %></span></td>
+            <td class="nowrap"><% if (t.updated_by) { %><span class="person"><%- avatar({ id: t.updated_by_id, name: t.updated_by }, 'xs') %><%= t.updated_by %></span><% } else { %>—<% } %></td>
             <td class="nowrap muted"><%= fmtDate(t.updated_at) %></td>
             <td><%- include('priority', { priority: t.priority }) %></td>
             <td class="row-actions">

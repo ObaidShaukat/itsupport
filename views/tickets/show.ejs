@@ -59,7 +59,7 @@
         <ul class="comments">
           <% for (const c of comments) { %>
             <li class="comment">
-              <div class="comment-meta"><strong><%= c.username || 'Deleted user' %></strong> <span class="muted small"><%= fmtDate(c.created_at) %></span></div>
+              <div class="comment-meta"><%- avatar({ id: c.user_id, name: c.username }, 'sm') %><strong><%= c.username || 'Deleted user' %></strong> <span class="muted small"><%= fmtDate(c.created_at) %></span></div>
               <p class="pre-line"><%= c.body %></p>
             </li>
           <% } %>

@@ -36,7 +36,7 @@
         <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
       <% } %>
       <div class="nav-foot">
-        <a href="/profile" class="whoami <%= locals.nav === 'profile' ? 'active' : '' %>" title="My profile"><%= currentUser.name || currentUser.username %></a>
+        <a href="/profile" class="whoami <%= locals.nav === 'profile' ? 'active' : '' %>" title="My profile"><%- avatar(currentUser, 'sm') %><span><%= currentUser.name || currentUser.username %></span></a>
         <form method="post" action="/logout">
           <%- locals.csrfField %>
           <button type="submit" class="nav-signout"><%- icon('logout') %><span>Sign out</span></button>
@@ -56,7 +56,7 @@
         </div>
       </div>
       <a href="/report" class="topbar-link"><%- icon('calendar') %><span>Today's report</span></a>
-      <a href="/profile" class="topbar-link topbar-profile" title="My profile"><%- icon('users') %><span><%= currentUser.name %></span></a>
+      <a href="/profile" class="topbar-link topbar-profile" title="My profile"><%- avatar(currentUser, 'sm') %><span><%= currentUser.name %></span></a>
       <a href="/log-work?back=<%= encodeURIComponent(locals.currentPath || '/') %>" class="btn btn-primary" data-log-work><%- icon('pen') %><span>Log work</span></a>
     </div>
 <% } else { %>

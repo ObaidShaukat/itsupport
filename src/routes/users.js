@@ -4,6 +4,9 @@ const { str, requireId, flash } = require('../lib/http');
 const { validateUsername, validatePassword, hashPassword } = require('../lib/users');
 const { logActivity } = require('../lib/activity');
 const { readSignature } = require('../lib/signature');
+const { REMINDER_CHANNELS, jobTitle, updateAvatar, clearAvatar, readPreferences, savePreferences } = require('../lib/profile');
+const { signOutOtherSessions } = require('../lib/sessions');
+const { removeAvatar } = require('../lib/avatars');
 
 const logUser = (req, id, action, username, summary) => logActivity(null, req.user, {
   type: 'user', id, action, subject: username, summary,
@@ -16,13 +19,14 @@ const password = (value) => (typeof value === 'string' ? value : '');
 const displayName = (value) => str(value, 100) || null;
 
 router.get('/', async (req, res) => {
-  const [users] = await pool.query("SELECT id, username, display_name, email_signature, role, created_at FROM users ORDER BY COALESCE(NULLIF(display_name, ''), username)");
-  res.render('users/index', { title: 'Users', users });
+  const [users] = await pool.query("SELECT id, username, display_name, job_title, avatar_file, reminder_channel, date_format, email_signature, role, created_at FROM users ORDER BY COALESCE(NULLIF(display_name, ''), username)");
+  res.render('users/index', { title: 'Users', users, reminderChannels: REMINDER_CHANNELS });
 });
 
 router.post('/', async (req, res) => {
   const username = str(req.body.username, 101);
   const display = displayName(req.body.display_name);
+  const title = jobTitle(req.body.job_title);
   const pass = password(req.body.password);
   const signature = readSignature(req.body.email_signature);
   const problem = validateUsername(username) || validatePassword(pass) || signature.error;
@@ -34,8 +38,8 @@ router.post('/', async (req, res) => {
   const hash = await hashPassword(pass);
   try {
     const [result] = await pool.query(
-      'INSERT INTO users (username, display_name, email_signature, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-      [username, display, signature.html, hash, 'admin']
+      'INSERT INTO users (username, display_name, job_title, email_signature, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)',
+      [username, display, title, signature.html, hash, 'admin']
     );
     await logUser(req, result.insertId, 'created', display || username, `Added user ${display ? `${display} (${username})` : username}`);
   } catch (err) {
@@ -51,15 +55,16 @@ router.post('/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const username = str(req.body.username, 101);
   const display = displayName(req.body.display_name);
+  const title = jobTitle(req.body.job_title);
   const problem = validateUsername(username);
   if (problem) {
     flash(req, 'error', problem);
     return res.redirect('/users');
   }
 
-  const [[before]] = await pool.query('SELECT username, display_name FROM users WHERE id = ?', [id]);
+  const [[before]] = await pool.query('SELECT username, display_name, job_title FROM users WHERE id = ?', [id]);
   try {
-    const [result] = await pool.query('UPDATE users SET username = ?, display_name = ? WHERE id = ?', [username, display, id]);
+    const [result] = await pool.query('UPDATE users SET username = ?, display_name = ?, job_title = ? WHERE id = ?', [username, display, title, id]);
     if (!result.affectedRows) {
       flash(req, 'error', 'That user no longer exists.');
       return res.redirect('/users');
@@ -72,6 +77,7 @@ router.post('/:id', async (req, res) => {
   const changes = [];
   if (before && before.username !== username) changes.push(`username ${before.username} → ${username}`);
   if (before && (before.display_name || null) !== display) changes.push(`display name "${before.display_name || ''}" → "${display || ''}"`);
+  if (before && (before.job_title || null) !== title) changes.push(`job title "${before.job_title || ''}" → "${title || ''}"`);
   if (changes.length) {
     await logUser(req, id, 'updated', display || username, `Updated user ${display || username}: ${changes.join(', ')}`);
   }
@@ -91,8 +97,10 @@ router.post('/:id/password', async (req, res) => {
   const hash = await hashPassword(pass);
   const [result] = await pool.query('UPDATE users SET password_hash = ? WHERE id = ?', [hash, id]);
   if (result.affectedRows) {
+    // Every session of that user ends (except this one, when resetting your own).
+    const signedOut = await signOutOtherSessions(id, req.sessionID);
     const [[user]] = await pool.query('SELECT username FROM users WHERE id = ?', [id]);
-    await logUser(req, id, 'updated', user.username, `Reset the password for ${user.username}`);
+    await logUser(req, id, 'updated', user.username, `Reset the password for ${user.username}${signedOut ? ` and signed out ${signedOut} session${signedOut === 1 ? '' : 's'}` : ''}`);
   }
   flash(req, result.affectedRows ? 'success' : 'error', result.affectedRows ? 'Password reset.' : 'That user no longer exists.');
   res.redirect('/users');
@@ -120,6 +128,54 @@ router.post('/:id/signature', async (req, res) => {
   res.redirect('/users');
 });
 
+const userName = async (id) => {
+  const [[user]] = await pool.query("SELECT COALESCE(NULLIF(display_name, ''), username) AS name FROM users WHERE id = ?", [id]);
+  return user ? user.name : null;
+};
+
+router.post('/:id/avatar', async (req, res) => {
+  const id = requireId(req.params.id);
+  const name = await userName(id);
+  if (!name) {
+    flash(req, 'error', 'That user no longer exists.');
+    return res.redirect('/users');
+  }
+  const result = await updateAvatar(id, req);
+  if (result.error) {
+    flash(req, 'error', result.error);
+    return res.redirect('/users');
+  }
+  await logUser(req, id, 'updated', name, `Changed the profile picture for ${name}`);
+  flash(req, 'success', 'Profile picture saved.');
+  res.redirect('/users');
+});
+
+router.post('/:id/avatar/delete', async (req, res) => {
+  const id = requireId(req.params.id);
+  const name = await userName(id);
+  if (name && await clearAvatar(id)) {
+    await logUser(req, id, 'updated', name, `Removed the profile picture for ${name}`);
+    flash(req, 'success', 'Profile picture removed.');
+  } else {
+    flash(req, 'success', 'No picture to remove.');
+  }
+  res.redirect('/users');
+});
+
+router.post('/:id/preferences', async (req, res) => {
+  const id = requireId(req.params.id);
+  const name = await userName(id);
+  const { prefs, error } = readPreferences(req.body);
+  if (!name || error) {
+    flash(req, 'error', error || 'That user no longer exists.');
+    return res.redirect('/users');
+  }
+  const changed = await savePreferences(id, prefs);
+  if (changed) await logUser(req, id, 'updated', name, `Changed ${name}'s ${changed}`);
+  flash(req, 'success', changed ? 'Preferences saved.' : 'No changes.');
+  res.redirect('/users');
+});
+
 router.post('/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   if (id === req.user.id) {
@@ -127,9 +183,12 @@ router.post('/:id/delete', async (req, res) => {
     return res.redirect('/users');
   }
 
-  const [[user]] = await pool.query('SELECT username FROM users WHERE id = ?', [id]);
+  const [[user]] = await pool.query('SELECT username, avatar_file FROM users WHERE id = ?', [id]);
   const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
-  if (result.affectedRows) await logUser(req, id, 'deleted', user.username, `Deleted user ${user.username}`);
+  if (result.affectedRows) {
+    await removeAvatar(user.avatar_file);
+    await logUser(req, id, 'deleted', user.username, `Deleted user ${user.username}`);
+  }
   flash(req, 'success', result.affectedRows ? 'User deleted.' : 'That user was already deleted.');
   res.redirect('/users');
 });

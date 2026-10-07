@@ -31,7 +31,7 @@
             <% if (r.snoozed_until) { %><span class="chip">Snoozed</span><% } %>
           </div>
           <% if (r.note) { %><p class="pre-line reminder-note"><%= r.note %></p><% } %>
-          <div class="muted small">For <%= r.for_name || 'Deleted user' %> · added by <%= r.created_name || 'Deleted user' %><% if (r.updated_name && r.updated_at > r.created_at) { %> · updated by <%= r.updated_name %><% } %></div>
+          <div class="muted small">For <span class="person"><%- avatar({ id: r.for_user_id, name: r.for_name }, 'xs') %><%= r.for_name || 'Deleted user' %></span> · added by <%= r.created_name || 'Deleted user' %><% if (r.updated_name && r.updated_at > r.created_at) { %> · updated by <%= r.updated_name %><% } %></div>
         </div>
         <div class="reminder-actions">
           <form method="post" action="/reminders/<%= r.id %>/done" class="inline">

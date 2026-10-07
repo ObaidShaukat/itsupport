@@ -56,7 +56,7 @@ async function listTickets({ clientId = null, status, priority, sort, dir }) {
   }
   const order = sort ? `${SORTS[sort][0]} ${dir === 'desc' ? 'DESC' : 'ASC'}, t.updated_at DESC, t.id DESC` : DEFAULT_ORDER;
   const [tickets] = await pool.query(`
-    SELECT t.id, t.title, t.status, t.priority, t.created_at, t.updated_at,
+    SELECT t.id, t.title, t.status, t.priority, t.created_at, t.updated_at, t.created_by AS created_by_id, t.updated_by AS updated_by_id,
            c.id AS client_id, c.name AS client_name,
            COALESCE(NULLIF(cu.display_name, ''), cu.username) AS created_by, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by,
            (SELECT MIN(COALESCE(r.snoozed_until, r.remind_at)) FROM reminders r

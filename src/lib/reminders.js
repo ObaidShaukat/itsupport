@@ -13,6 +13,7 @@ const { pool, transaction } = require('../db');
 const { str, toId } = require('./http');
 const { londonDate, londonDayStart, londonLocalToUtc, toLondonInput } = require('./activity');
 const { addDays } = require('./report');
+const { formattersFor } = require('./dates');
 
 const DUE_AT = 'COALESCE(r.snoozed_until, r.remind_at)';
 const USER_NAME = (alias) => `COALESCE(NULLIF(${alias}.display_name, ''), ${alias}.username)`;
@@ -125,8 +126,12 @@ async function createDueNotifications(userId) {
 // The bell: the user's pending reminders that are due now (today, UK), missed (due
 // before today) or upcoming (next 7 days). Toasts are the due and missed ones; isNew is
 // true the first time a notification is shown (the browser plays the sound once).
-async function bellFor(userId, fmtDate) {
-  await createDueNotifications(userId);
+// users.reminder_channel: 'popup' and 'both' get notifications, toasts and the sound;
+// 'email' only still sees the bell list, but no popups.
+async function bellFor(user, fmtDate) {
+  const userId = user.id;
+  const popup = user.reminder_channel !== 'email';
+  if (popup) await createDueNotifications(userId);
   const todayStart = londonDayStart(londonDate());
   const [rows] = await pool.query(`
     SELECT r.id, r.note, r.ticket_id, t.title, c.name AS client_name, ${DUE_AT} AS due_at,
@@ -152,18 +157,17 @@ async function bellFor(userId, fmtDate) {
   const due = rows.filter((r) => r.is_due && !r.is_missed).reverse().map(shape); // latest first
   const missed = rows.filter((r) => r.is_missed).reverse().map(shape);
   const upcoming = rows.filter((r) => !r.is_due).map(shape);
-  return { count: due.length + missed.length, due, missed, upcoming, sound: fresh.length > 0 };
+  return { count: due.length + missed.length, due, missed, upcoming, popup, sound: popup && fresh.length > 0 };
 }
 
 // ---- Reminder emails ----
 // A timer in index.js calls sendDueReminderEmails() every minute. Each due reminder is
 // emailed to its user once per due time: email_sent_at is claimed (set) before sending,
 // so it never double-sends, and snooze / edit clear it so the next due time emails again.
-// Reminders that fell due more than a day ago (e.g. while email was not set up) are not
+// Users who chose "Popup only" are not emailed. Reminders that fell due more than a day ago (e.g. while email was not set up) are not
 // emailed late; they still show in the portal.
-const londonTime = (date) => new Date(date).toLocaleString('en-GB', {
-  weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London',
-});
+// Due time in the recipient's own date format (24h UK time).
+const londonTime = (date, format) => formattersFor(format).fmtDate(date);
 
 function reminderEmail(r) {
   const { escapeHtml: e, appUrl } = mailer();
@@ -182,7 +186,7 @@ function reminderEmail(r) {
 <p style="${font} margin: 0 0 6px; color: #6741C3; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Reminder</p>
 <p style="${font} margin: 0 0 18px; color: #200D6C; font-size: 20px; font-weight: bold; line-height: 1.35; white-space: pre-line;">${e(r.note || ticket)}</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 22px;">
-${row('Due', `${e(londonTime(r.due_at))} (UK time)`)}
+${row('Due', `${e(londonTime(r.due_at, r.date_format))} (UK time)`)}
 ${row('Ticket', e(ticket))}
 ${row('Client', e(r.client_name))}
 </table>
@@ -195,7 +199,7 @@ ${link
 </td></tr></table></body></html>`;
   const text = [
     'Reminder', '', r.note || ticket, '',
-    `Due: ${londonTime(r.due_at)} (UK time)`, `Ticket: ${ticket}`, `Client: ${r.client_name}`,
+    `Due: ${londonTime(r.due_at, r.date_format)} (UK time)`, `Ticket: ${ticket}`, `Client: ${r.client_name}`,
     link ? `\nOpen the ticket: ${link}` : '',
   ].join('\n');
   return { subject, html, text };
@@ -209,12 +213,12 @@ async function sendDueReminderEmails() {
   if (!mailStatus().enabled) return 0;
   const claimed = await transaction(async (conn) => {
     const [due] = await conn.query(`
-      SELECT r.id, r.note, r.ticket_id, r.for_user_id, ${DUE_AT} AS due_at, t.title, c.name AS client_name, u.username
+      SELECT r.id, r.note, r.ticket_id, r.for_user_id, ${DUE_AT} AS due_at, t.title, c.name AS client_name, u.username, u.date_format
       FROM reminders r
       JOIN tickets t ON t.id = r.ticket_id
       JOIN clients c ON c.id = t.client_id
       JOIN users u ON u.id = r.for_user_id
-      WHERE r.status = 'pending' AND r.email_sent_at IS NULL
+      WHERE r.status = 'pending' AND r.email_sent_at IS NULL AND u.reminder_channel IN ('email', 'both')
         AND ${DUE_AT} <= NOW() AND ${DUE_AT} > DATE_SUB(NOW(), INTERVAL 1 DAY)
       ORDER BY ${DUE_AT}, r.id
       LIMIT 50

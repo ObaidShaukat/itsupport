@@ -1,37 +1,99 @@
 <%- include('../partials/head') %>
-<header class="page-head">
+<header class="page-head profile-head">
+  <%- avatar(me, 'lg') %>
   <div>
-    <h1>My profile</h1>
-    <p class="muted">Signed in as <%= me.username %><%= email ? '' : ' (not an email address, so you cannot email reports)' %>.</p>
+    <h1><%= me.display_name || me.username %></h1>
+    <% if (me.job_title) { %><p class="profile-job"><%= me.job_title %></p><% } %>
+    <p class="muted">Signed in as <%= me.username %><%= email ? '' : ' (not an email address, so you cannot email reports or get reminder emails)' %>.</p>
   </div>
 </header>
 
 <div class="grid-2 grid-wide-left">
   <div>
+    <section class="card" id="details">
+      <h2>Details</h2>
+      <form method="post" action="/profile" class="form">
+        <%- csrfField %>
+        <div class="form-row">
+          <label class="field">
+            <span>Display name</span>
+            <input type="text" name="display_name" value="<%= me.display_name || '' %>" maxlength="100" placeholder="<%= me.username %>">
+            <small class="muted">Shown on reports, tickets and history. Blank shows your username.</small>
+          </label>
+          <label class="field">
+            <span>Job title <span class="muted">(optional)</span></span>
+            <input type="text" name="job_title" value="<%= me.job_title || '' %>" maxlength="100" placeholder="e.g. IT Support Engineer">
+            <small class="muted">Use {job_title} in your signature to show it.</small>
+          </label>
+        </div>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="reset" class="btn btn-ghost">Cancel</button>
+        </div>
+      </form>
+    </section>
+
     <section class="card" id="signature">
       <h2>Email signature</h2>
       <p class="muted small">Added to the bottom of Daily Reports you email. Use the toolbar, or choose Paste HTML to paste a signature copied from Outlook.</p>
       <form method="post" action="/profile/signature" class="form">
         <%- csrfField %>
-        <%- include('../partials/signature-editor', { value: me.email_signature }) %>
+        <%- include('../partials/signature-editor', { value: me.email_signature, jobTitle: me.job_title }) %>
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Save signature</button>
           <button type="reset" class="btn btn-ghost">Cancel</button>
         </div>
       </form>
     </section>
+
+    <section class="card" id="sessions">
+      <div class="card-head">
+        <h2>Active sessions</h2>
+        <% if (sessions.some((s) => !s.current)) { %>
+          <form method="post" action="/profile/sessions/others/delete" class="inline" data-confirm="Sign out all your other sessions? Those devices will need to sign in again.">
+            <%- csrfField %>
+            <button type="submit" class="btn btn-small"><%- icon('logout') %><span>Sign out all other sessions</span></button>
+          </form>
+        <% } %>
+      </div>
+      <% if (!sessions.length) { %>
+        <p class="empty">No sessions recorded yet.</p>
+      <% } else { %>
+        <ul class="rows session-list">
+          <% for (const s of sessions) { %>
+            <li class="row <%= s.current ? 'is-current' : '' %>">
+              <div class="row-main">
+                <strong><%= s.device %></strong>
+                <% if (s.current) { %><span class="badge badge-you">This device</span><% } %>
+                <div class="muted small"><%= s.ip || 'Unknown IP address' %> · signed in <%= fmtDate(s.createdAt) %> · last active <%= fmtDate(s.lastActive) %></div>
+                <% if (s.userAgent) { %><div class="muted small session-agent" title="<%= s.userAgent %>"><%= s.userAgent %></div><% } %>
+              </div>
+              <div class="row-actions">
+                <% if (!s.current) { %>
+                  <form method="post" action="/profile/sessions/<%= s.id %>/delete" class="inline">
+                    <%- csrfField %>
+                    <button type="submit" class="btn btn-small btn-ghost">Sign out</button>
+                  </form>
+                <% } %>
+              </div>
+            </li>
+          <% } %>
+        </ul>
+      <% } %>
+    </section>
   </div>
 
   <div>
-    <section class="card">
-      <h2>Display name</h2>
-      <form method="post" action="/profile" class="form">
+    <section class="card" id="picture">
+      <h2>Profile picture</h2>
+      <%- include('../partials/avatar-upload', { person: me, action: '/profile/avatar' }) %>
+    </section>
+
+    <section class="card" id="preferences">
+      <h2>Preferences</h2>
+      <form method="post" action="/profile/preferences" class="form">
         <%- csrfField %>
-        <label class="field">
-          <span>Display name</span>
-          <input type="text" name="display_name" value="<%= me.display_name || '' %>" maxlength="100" placeholder="<%= me.username %>">
-          <small class="muted">Shown on reports, tickets and history. Leave blank to show your username.</small>
-        </label>
+        <%- include('../partials/preference-fields', { prefs: me, reminderChannels }) %>
         <div class="form-actions">
           <button type="submit" class="btn btn-primary">Save</button>
           <button type="reset" class="btn btn-ghost">Cancel</button>
@@ -50,7 +112,7 @@
         <label class="field">
           <span>New password</span>
           <input type="password" name="password" required minlength="8" autocomplete="new-password">
-          <small class="muted">At least 8 characters.</small>
+          <small class="muted">At least 8 characters. Your other sessions are signed out.</small>
         </label>
         <label class="field">
           <span>Confirm new password</span>

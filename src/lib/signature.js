@@ -60,4 +60,12 @@ function readSignature(value) {
   return { html: html || null };
 }
 
-module.exports = { sanitizeSignature, readSignature };
+// Fills placeholders in a saved signature: {job_title} becomes the user's job title
+// (or nothing). Run after sanitising, with the value escaped.
+function fillSignature(html, user) {
+  if (!html) return '';
+  const jobTitle = String((user && user.job_title) || '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return html.split('{job_title}').join(jobTitle);
+}
+
+module.exports = { sanitizeSignature, readSignature, fillSignature };

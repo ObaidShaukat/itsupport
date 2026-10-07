@@ -17,6 +17,9 @@ const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
 const { ASSET_STATUSES, CONNECTIONS } = require('./src/lib/inventory');
 const { mailStatus } = require('./src/lib/mailer');
 const { sendDueReminderEmails } = require('./src/lib/reminders');
+const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
+const { avatarHelper } = require('./src/lib/avatars');
+const { setStore } = require('./src/lib/sessions');
 
 if (!config.sessionSecret) {
   console.error('SESSION_SECRET is not set in .env');
@@ -69,9 +72,12 @@ app.locals.navItems = [
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
-app.locals.fmtDate = (value) => (value
-  ? new Date(value).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/London' })
-  : '');
+// Default date formatting ("7 Oct 2026, 15:00", UK time). Signed-in requests get the
+// user's own format in res.locals (src/middleware/auth.js).
+Object.assign(app.locals, formattersFor());
+app.locals.dateFormats = DATE_FORMATS;
+// Avatars without a user list: initials only (pages get the real helper below).
+app.locals.avatar = avatarHelper([]);
 app.locals.fmtBytes = (bytes) => {
   const n = Number(bytes) || 0;
   if (n < 1024) return `${n} B`;
@@ -100,6 +106,7 @@ const sessionStore = new MySQLStore({
   expiration: SESSION_HOURS * 60 * 60 * 1000,
   createDatabaseTable: true,
 }, pool);
+setStore(sessionStore); // for "Active sessions" on My profile
 
 app.use(session({
   name: 'itsupport.sid',
@@ -151,10 +158,16 @@ app.use(requireAuth);
 app.use(async (req, res, next) => {
   res.locals.today = londonDate();
   res.locals.currentPath = req.originalUrl;
-  // Only full pages need it, not file downloads or fetch() calls.
-  if (req.method === 'GET' && !req.path.startsWith('/files/') && req.accepts(['html', 'json']) === 'html') {
+  // Only full pages need these, not file downloads or fetch() calls.
+  const page = !req.path.startsWith('/files/') && !req.path.startsWith('/avatars/') && req.accepts(['html', 'json']) === 'html';
+  if (page && req.method === 'GET') {
     const [clients] = await pool.query('SELECT name FROM clients ORDER BY name');
     res.locals.logWorkClients = clients.map((c) => c.name);
+  }
+  if (page) {
+    // Profile pictures (or initials) wherever a user is shown: avatar({ id, name }).
+    const [people] = await pool.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name, avatar_file FROM users");
+    res.locals.avatar = avatarHelper(people);
   }
   next();
 });
@@ -167,6 +180,7 @@ app.use(require('./src/routes/services'));
 app.use(require('./src/routes/clients'));
 app.use('/kb', require('./src/routes/kb'));
 app.use('/files', require('./src/routes/files'));
+app.use('/avatars', require('./src/routes/avatars'));
 app.use('/log-work', require('./src/routes/activity'));
 app.use('/report', require('./src/routes/report'));
 app.use('/activity', require('./src/routes/activity-log'));

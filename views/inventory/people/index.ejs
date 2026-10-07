@@ -55,7 +55,7 @@
               <td><%= p.team_name || '' %></td>
               <td><%= p.role || '' %></td>
               <% if (former) { %>
-                <td class="nowrap"><%= p.leaving_date || '—' %></td>
+                <td class="nowrap"><%= fmtDay(p.leaving_date) || '—' %></td>
                 <td><% if (Number(p.open_offboarding)) { %><span class="chip chip-warn"><%= p.open_offboarding %> to do</span><% } else { %><span class="muted small">Done</span><% } %></td>
               <% } else { %>
                 <td class="num"><%= Number(p.asset_count) %></td>

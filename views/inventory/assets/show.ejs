@@ -21,11 +21,11 @@
       <div><dt>Device name</dt><dd><%= asset.device_name || '—' %></dd></div>
       <div><dt>Wi-Fi MAC</dt><dd><%= asset.wifi_mac || '—' %></dd></div>
       <div><dt>Ethernet MAC</dt><dd><%= asset.ethernet_mac || '—' %></dd></div>
-      <div><dt>Purchase date</dt><dd><%= asset.purchase_date || '—' %></dd></div>
+      <div><dt>Purchase date</dt><dd><%= fmtDay(asset.purchase_date) || '—' %></dd></div>
       <div><dt>Location</dt><dd><%= asset.location || '—' %></dd></div>
       <% if (asset.status === 'sold') { %>
         <div><dt>Sold to</dt><dd><%= asset.sold_to || '—' %></dd></div>
-        <div><dt>Sold date</dt><dd><%= asset.sold_date || '—' %></dd></div>
+        <div><dt>Sold date</dt><dd><%= fmtDay(asset.sold_date) || '—' %></dd></div>
       <% } %>
     </dl>
     <% if (asset.specifications) { %><h3>Specifications</h3><p class="pre-line"><%= asset.specifications %></p><% } %>

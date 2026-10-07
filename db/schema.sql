@@ -14,6 +14,12 @@ CREATE TABLE IF NOT EXISTS users (
   -- Last recipients of the emailed Daily Report (comma-separated), pre-filled next time.
   report_to VARCHAR(1000) NULL,
   report_cc VARCHAR(1000) NULL,
+  -- My profile: optional job title ({job_title} in signatures), profile picture file
+  -- (uploads/avatars), how ticket reminders reach them, and how dates are shown.
+  job_title VARCHAR(100) NULL,
+  avatar_file VARCHAR(64) NULL,
+  reminder_channel ENUM('popup', 'email', 'both') NOT NULL DEFAULT 'both',
+  date_format ENUM('d_mon_yyyy', 'dd_mm_yyyy') NOT NULL DEFAULT 'd_mon_yyyy',
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'admin',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -599,6 +605,23 @@ CREATE TABLE IF NOT EXISTS notifications (
   KEY idx_notifications_reminder (reminder_id),
   CONSTRAINT fk_notifications_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
   CONSTRAINT fk_notifications_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Signed-in sessions, for "Active sessions" on My profile. The session itself lives in
+-- the express-mysql-session "sessions" table; this row records who, which device and
+-- when. Signing a session out destroys it in the store and deletes this row.
+CREATE TABLE IF NOT EXISTS user_sessions (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  session_id VARCHAR(128) NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  user_agent VARCHAR(500) NULL,
+  ip VARCHAR(64) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_active DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user_sessions_session (session_id),
+  KEY idx_user_sessions_user (user_id, last_active),
+  CONSTRAINT fk_user_sessions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Every email the portal tries to send (src/lib/mailer.js): reminders and Daily Reports.

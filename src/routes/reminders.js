@@ -42,7 +42,7 @@ function failed(req, res, ticketId, error) {
 router.post('/', async (req, res) => {
   const ticketId = toId(req.body.ticket_id);
   if (!ticketId) throw notFound();
-  const fmt = req.app.locals.fmtDate;
+  const fmt = req.fmt.fmtDate;
   const result = await transaction(async (conn) => {
     const [[ticket]] = await conn.query(`
       SELECT t.id, t.title, t.client_id, c.name AS client_name
@@ -66,7 +66,7 @@ router.post('/', async (req, res) => {
 });
 
 router.post('/:id', async (req, res) => {
-  const fmt = req.app.locals.fmtDate;
+  const fmt = req.fmt.fmtDate;
   const result = await transaction(async (conn) => {
     const r = await lockedReminder(conn, req);
     const { form, error } = await readReminderForm(conn, req.body, req.user.id);
@@ -109,7 +109,7 @@ router.post('/:id/done', async (req, res) => {
 router.post('/:id/snooze', async (req, res) => {
   const choice = req.body.until;
   const until = snoozeUntil(choice);
-  const fmt = req.app.locals.fmtDate;
+  const fmt = req.fmt.fmtDate;
   const r = await transaction(async (conn) => {
     const reminder = await lockedReminder(conn, req);
     if (!until || reminder.status === 'done') return { ...reminder, invalid: true };
@@ -124,7 +124,7 @@ router.post('/:id/snooze', async (req, res) => {
 });
 
 router.post('/:id/delete', async (req, res) => {
-  const fmt = req.app.locals.fmtDate;
+  const fmt = req.fmt.fmtDate;
   const r = await transaction(async (conn) => {
     const reminder = await lockedReminder(conn, req);
     await clearReminderNotifications(conn, { reminderId: reminder.id, remove: true });

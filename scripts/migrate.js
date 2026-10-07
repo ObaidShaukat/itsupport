@@ -13,6 +13,10 @@ const ADDED_COLUMNS = [
   ['users', 'email_signature', 'MEDIUMTEXT NULL AFTER report_view'],
   ['users', 'report_to', 'VARCHAR(1000) NULL AFTER email_signature'],
   ['users', 'report_cc', 'VARCHAR(1000) NULL AFTER report_to'],
+  ['users', 'job_title', 'VARCHAR(100) NULL AFTER report_cc'],
+  ['users', 'avatar_file', 'VARCHAR(64) NULL AFTER job_title'],
+  ['users', 'reminder_channel', "ENUM('popup', 'email', 'both') NOT NULL DEFAULT 'both' AFTER avatar_file"],
+  ['users', 'date_format', "ENUM('d_mon_yyyy', 'dd_mm_yyyy') NOT NULL DEFAULT 'd_mon_yyyy' AFTER reminder_channel"],
   ['reminders', 'email_sent_at', 'DATETIME NULL AFTER snoozed_until'],
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
   // Inventory entries also point at the person they concern (person timeline).

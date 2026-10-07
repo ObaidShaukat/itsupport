@@ -14,7 +14,7 @@
           <div class="history-body">
             <div><%= truncate(e.summary) %></div>
             <div class="muted small">
-              <%= e.username || 'Deleted user' %> · <%= fmtDate(e.created_at) %>
+              <%- avatar({ id: e.user_id, name: e.username }, 'xs') %> <%= e.username || 'Deleted user' %> · <%= fmtDate(e.created_at) %>
               <% if (locals.showSubject && e.subject && e.entity_type !== 'client') { %> · <%= e.subject %><% } %>
             </div>
           </div>

@@ -59,8 +59,8 @@
               <td><strong><%= a.app_name || 'Other' %></strong></td>
               <td><a href="/inventory/people/<%= a.person_id %>"><%= a.person_name %></a><%= a.person_status === 'left' ? ' (left)' : '' %></td>
               <td><%= a.username || '—' %></td>
-              <td><span class="chip <%= a.status === 'active' ? 'chip-category' : '' %>"><%= a.status === 'active' ? 'Active' : 'Removed' %></span><% if (a.removed_date) { %><div class="muted small"><%= a.removed_date %></div><% } %></td>
-              <td class="nowrap small"><%= a.granted_date || '' %><%= a.granted_by ? ` · ${a.granted_by}` : '' %></td>
+              <td><span class="chip <%= a.status === 'active' ? 'chip-category' : '' %>"><%= a.status === 'active' ? 'Active' : 'Removed' %></span><% if (a.removed_date) { %><div class="muted small"><%= fmtDay(a.removed_date) %></div><% } %></td>
+              <td class="nowrap small"><%= fmtDay(a.granted_date) %><%= a.granted_by ? ` · ${a.granted_by}` : '' %></td>
               <td><%= a.in_1password ? 'Yes' : 'No' %></td>
               <% for (const f of listFields) { %><td><%= f.field_type === 'boolean' ? (v[f.id] === 'yes' ? 'Yes' : v[f.id] === 'no' ? 'No' : '') : (v[f.id] || '') %></td><% } %>
               <td class="row-actions"><a href="/inventory/access/<%= a.id %>/edit" class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></a></td>
