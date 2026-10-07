@@ -75,25 +75,39 @@ const sentence = (text) => {
 const joinAnd = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
 const mentions = (text, client) => Boolean(client) && text.toLowerCase().includes(client.toLowerCase());
-// Adds " for {client}" unless there is no client or the text already names it.
-const forClient = (text, client) => (client && !mentions(text, client) ? `${text} for ${client}` : text);
+
+// Puts the client into typed text without adding any wording of our own:
+// 1. the text already names the client -> unchanged;
+// 2. "...support ... regarding ..." -> "to {client}" goes right before "regarding";
+// 3. otherwise " for {client}" is added at the end. No client -> unchanged.
+function withClient(text, client) {
+  if (!client || mentions(text, client)) return text;
+  const m = /\bsupport\b[\s\S]*?\b(regarding)\b/i.exec(text);
+  if (m) {
+    const at = m.index + m[0].length - m[1].length;
+    return `${text.slice(0, at)}to ${client} ${text.slice(at)}`;
+  }
+  return `${text} for ${client}`;
+}
+const forClient = withClient;
 
 // ---- Bullets ----
 
 // One user's day: one bullet per entry, in this order: client services, tickets,
 // tasks, log work, knowledge base, then always "Other IT related tasks.".
 //   Task completed:   "Completed task: {title} for {client}."  (no client: "Completed task: {title}.")
-//   Log work:         "{text} for {client}."  (no client: "{text}.")
-//   Ticket comment:   "Provided IT support to {client} regarding {comment}."  (empty comment: the ticket title)
+//   Log work:         the typed text with the client put in (see withClient); no client: as typed.
+//   Ticket comment:   the typed comment with the client put in (see withClient).
+//                     Empty comment: "Provided IT support to {client} regarding {ticket title}."
 //   Ticket created / status changed without a comment from this user:
 //                     "Provided IT support to {client} regarding {title}."
-//   Note:             "{note} for {client} ({service})."
+//   Note:             the typed note with the client put in, then " ({service})".
 //   Client services:  "Commenced {service} for {client}." / "Completed {steps} as part of
 //                     {service} for {client}." / "Completed {service} for {client}."
 //                     ({service} is the service's report phrase, or its name)
 //   Knowledge base:   "Documented a solution for '{title}' in the knowledge base." /
 //                     "Updated the knowledge base article '{title}'."
-// "for {client}" is left out when the text already names the client. Exact duplicate
+// Typed text never gets a prefix of ours; withClient() only inserts the client. Exact duplicate
 // lines are removed. Deletes, unticked steps, reopenings and client/user/catalogue
 // changes are left out (they are listed on /activity).
 function userLines(rows) {
@@ -127,8 +141,9 @@ function userLines(rows) {
       case 'ticket_comment': {
         if (!client) break;
         commentedTickets.add(row.entity_id);
-        const regarding = snippet(row.summary) || subject;
-        if (regarding) push(sections.tickets, `Provided IT support to ${client} regarding ${regarding}`);
+        const comment = snippet(row.summary);
+        if (comment) push(sections.tickets, withClient(comment, client));
+        else if (subject) push(sections.tickets, `Provided IT support to ${client} regarding ${subject}`);
         break;
       }
       case 'ticket':
