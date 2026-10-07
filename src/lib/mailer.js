@@ -74,7 +74,9 @@ async function sendMail(message, meta) {
   const status = mailStatus();
   if (!status.enabled) return { ok: false, error: status.message };
   const log = {
-    ...meta, to: addressText(message.to), cc: addressText(message.cc) || null, subject: message.subject,
+    ...meta, to: addressText(message.to), subject: message.subject,
+    // BCC addresses are logged after the CC ones, marked "(bcc)".
+    cc: [addressText(message.cc), addressText(message.bcc) && `(bcc) ${addressText(message.bcc)}`].filter(Boolean).join(', ') || null,
   };
   try {
     const info = await getTransport().sendMail({ from: fromAddress(), ...message });

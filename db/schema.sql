@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS users (
   -- Last recipients of the emailed Daily Report (comma-separated), pre-filled next time.
   report_to VARCHAR(1000) NULL,
   report_cc VARCHAR(1000) NULL,
+  -- "Send me a copy" (BCC to themselves) in the Send report popup, remembered.
+  report_copy TINYINT(1) NOT NULL DEFAULT 0,
   -- My profile: optional job title ({job_title} in signatures), profile picture file
   -- (uploads/avatars), how ticket reminders reach them, and how dates are shown.
   job_title VARCHAR(100) NULL,

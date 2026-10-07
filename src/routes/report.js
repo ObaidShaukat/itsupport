@@ -55,7 +55,7 @@ router.get('/', async (req, res) => {
 
   // Send report popup: last recipients, suggestions (earlier recipients + portal users)
   // and the sends already made for these dates.
-  const [[me]] = await pool.query('SELECT report_to, report_cc, email_signature FROM users WHERE id = ?', [req.user.id]);
+  const [[me]] = await pool.query('SELECT report_to, report_cc, report_copy, email_signature FROM users WHERE id = ?', [req.user.id]);
   const [usedRows] = await pool.query(
     "SELECT to_addresses, cc_addresses FROM email_log WHERE user_id = ? AND kind = 'report' AND status = 'sent' ORDER BY created_at DESC LIMIT 100",
     [req.user.id]
@@ -113,6 +113,7 @@ router.get('/', async (req, res) => {
       ourDomain: OUR_DOMAIN,
       to: me.report_to || '',
       cc: me.report_cc || '',
+      copy: Boolean(me.report_copy),
       subject: reportSubject(from, to),
       hasSignature: Boolean(me.email_signature),
       signature: fillSignature(sanitizeSignature(me.email_signature || ''), req.user),
@@ -146,10 +147,11 @@ router.post('/send', async (req, res) => {
   const invalid = [...toList.invalid, ...ccList.invalid];
   if (invalid.length) return fail(`These are not valid email addresses: ${invalid.join(', ')}`);
   if (!toList.emails.length) return fail('Add at least one recipient.');
-  // The sender is always copied in so they have a copy.
   const cc = ccList.emails.filter((e) => !toList.emails.includes(e));
-  const ccWithSender = toList.emails.includes(sender) || cc.includes(sender) ? cc : [...cc, sender];
-  if (toList.emails.length + ccWithSender.length > MAX_RECIPIENTS) return fail(`Send to at most ${MAX_RECIPIENTS} addresses.`);
+  // "Send me a copy": the sender gets a BCC (not needed when they are already in To / CC).
+  const copy = req.body.send_copy === '1';
+  const bcc = copy && !toList.emails.includes(sender) && !cc.includes(sender) ? [sender] : [];
+  if (toList.emails.length + cc.length + bcc.length > MAX_RECIPIENTS) return fail(`Send to at most ${MAX_RECIPIENTS} addresses.`);
   const subject = str(req.body.subject, 200) || reportSubject(from, to);
 
   const days = parseReportJson(req.body.report) || fromReport(await buildReport({ from, to, userId: req.user.id }));
@@ -167,17 +169,22 @@ router.post('/send', async (req, res) => {
     from: fromAddress,
     replyTo: { name, address: sender },
     to: toList.emails,
-    cc: ccWithSender,
+    cc,
+    bcc,
+    // Mandrill: one email that shows every To and CC recipient, not a separate copy each.
+    headers: { 'X-MC-PreserveRecipients': 'true' },
+    // Keep that exact spelling (nodemailer would write "X-Mc-Preserverecipients").
+    normalizeHeaderKey: (key) => (key.toLowerCase() === 'x-mc-preserverecipients' ? 'X-MC-PreserveRecipients' : key),
     subject,
     html: reportHtml(days, signature),
     text: reportText(days, signatureText(signature)),
   }, { kind: 'report', userId: req.user.id });
   if (!result.ok) return fail(result.error);
 
-  // Remembered for next time (without the automatic copy to the sender).
-  await pool.query('UPDATE users SET report_to = ?, report_cc = ? WHERE id = ?',
-    [toList.emails.join(', ').slice(0, 1000), cc.join(', ').slice(0, 1000) || null, req.user.id]);
-  const summary = `Sent to ${toList.emails.join(', ')}${cc.length ? ` (CC ${cc.join(', ')})` : ''}`;
+  // Recipients and "Send me a copy" are remembered for next time.
+  await pool.query('UPDATE users SET report_to = ?, report_cc = ?, report_copy = ? WHERE id = ?',
+    [toList.emails.join(', ').slice(0, 1000), cc.join(', ').slice(0, 1000) || null, copy ? 1 : 0, req.user.id]);
+  const summary = `Sent to ${toList.emails.join(', ')}${cc.length ? ` (CC ${cc.join(', ')})` : ''}${bcc.length ? ', with a copy to you' : ''}`;
   await logActivity(null, req.user, { type: 'report', action: 'sent', subject, summary, date: from });
   flash(req, 'success', `Report sent to ${toList.emails.join(', ')}.`);
   res.redirect(back);

@@ -152,7 +152,7 @@
       <div class="flash flash-error" role="alert">Your username is not an email address, so the report cannot be sent from you. Ask for it to be changed on the Users page.</div>
     <% } else { %>
       <p class="muted small send-from">
-        From <strong><%= currentUser.name %></strong> &lt;<%= send.senderEmail.endsWith(send.ourDomain) ? send.senderEmail : 'the portal address' %>&gt;, replies to <%= send.senderEmail %>. You are always copied in.
+        From <strong><%= currentUser.name %></strong> &lt;<%= send.senderEmail.endsWith(send.ourDomain) ? send.senderEmail : 'the portal address' %>&gt;, replies to <%= send.senderEmail %>.
       </p>
     <% } %>
     <label class="field">
@@ -193,6 +193,10 @@
         <p class="muted small">No email signature yet. <a href="/profile#signature">Add one on My profile</a>.</p>
       <% } %>
     </div>
+    <label class="checkbox-field send-copy">
+      <input type="checkbox" name="send_copy" value="1" <%= send.copy ? 'checked' : '' %>>
+      <span>Send me a copy <span class="muted small">(BCC to <%= send.senderEmail || 'you' %>)</span></span>
+    </label>
     <div class="form-actions">
       <button type="submit" class="btn btn-primary" <%= send.status.enabled && send.senderEmail ? '' : 'disabled' %>><%- icon('mail') %><span>Send</span></button>
       <button type="button" class="btn btn-ghost" data-send-close>Cancel</button>
