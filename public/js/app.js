@@ -66,6 +66,8 @@ document.addEventListener('click', (event) => {
     if (details) closePopover(details, { focusSummary: true });
     return;
   }
+  // Clicks inside a popup opened from a popover (e.g. Crop picture) leave it open.
+  if (event.target.closest && event.target.closest('dialog')) return;
   openPopovers().forEach((details) => {
     if (!details.contains(event.target)) closePopover(details);
   });
@@ -73,6 +75,8 @@ document.addEventListener('click', (event) => {
 
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
+  // Esc closes the open popup first (the browser does that), not the popover behind it.
+  if (document.querySelector('dialog[open]')) return;
   openPopovers().forEach((details) => closePopover(details, { focusSummary: true }));
 });
 
@@ -1191,132 +1195,294 @@ if (sendDialog && typeof sendDialog.showModal === 'function') {
   });
 }
 
-// ---- Profile picture: choose a square crop before uploading ----
-// The picture is shown in a square frame: drag (or arrow keys) to move it, the slider
-// to zoom. The chosen square, in the picture's own pixels, goes in crop_x / crop_y /
-// crop_size; the server crops to it and resizes to 256 x 256.
-const AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
-const AVATAR_MAX = 5 * 1024 * 1024;
-document.querySelectorAll('[data-avatar-form]').forEach((form) => {
-  const fileInput = form.querySelector('[data-avatar-file]');
-  const cropBox = form.querySelector('[data-avatar-crop]');
-  const frame = form.querySelector('[data-crop-frame]');
-  const img = form.querySelector('[data-crop-image]');
-  const zoom = form.querySelector('[data-crop-zoom]');
-  const error = form.querySelector('[data-avatar-error]');
-  const field = (name) => form.querySelector(`input[name="${name}"]`);
-  let natural = { w: 0, h: 0 };
-  let pos = { x: 0, y: 0 }; // image top-left inside the frame, in screen pixels
-  let url = null;
 
-  const frameSize = () => frame.clientWidth || 220;
-  let zoomLevel = 1; // the slider value the picture is currently drawn at
-  const scale = (level = zoomLevel) => (frameSize() / Math.min(natural.w, natural.h)) * level;
-  const showError = (message) => {
-    error.textContent = message;
-    error.hidden = !message;
-  };
-  const clamp = () => {
-    const f = frameSize();
-    const s = scale();
-    pos.x = Math.min(0, Math.max(f - natural.w * s, pos.x));
-    pos.y = Math.min(0, Math.max(f - natural.h * s, pos.y));
-  };
-  const draw = () => {
-    if (!natural.w) return;
-    clamp();
-    const s = scale();
-    img.style.width = `${natural.w * s}px`;
-    img.style.height = `${natural.h * s}px`;
-    img.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
-    const size = Math.floor(frameSize() / s);
-    field('crop_size').value = String(Math.min(size, natural.w, natural.h));
-    field('crop_x').value = String(Math.max(0, Math.min(natural.w - size, Math.round(-pos.x / s))));
-    field('crop_y').value = String(Math.max(0, Math.min(natural.h - size, Math.round(-pos.y / s))));
-  };
-  const reset = () => {
-    ['crop_x', 'crop_y', 'crop_size'].forEach((n) => { field(n).value = ''; });
-    cropBox.hidden = true;
-    natural = { w: 0, h: 0 };
-    if (url) URL.revokeObjectURL(url);
-    url = null;
-  };
+// ---- Profile picture: crop popup ----
+// Choosing a file in a [data-avatar-form] opens the shared crop popup
+// (views/partials/crop-dialog.ejs). The picture is drawn on a canvas: drag to move,
+// zoom with the slider, mouse wheel or a two-finger pinch, rotate 90° and reset; the
+// circle previews update live. Save draws the square onto a 512 x 512 canvas and
+// uploads only that JPG (quality 0.9), so large phone photos upload quickly. Cancel,
+// Esc or a click outside closes the popup and clears the chosen file.
+const cropDialog = document.querySelector('[data-crop-dialog]');
+if (cropDialog && typeof cropDialog.showModal === 'function') {
+  const OUTPUT = 512;
+  const MAX_SOURCE = 2048; // huge photos are scaled down once, so moving stays smooth
+  const BOX = 0.8; // the crop square's share of the stage
+  const stage = cropDialog.querySelector('[data-crop-stage]');
+  const canvas = cropDialog.querySelector('[data-crop-canvas]');
+  const previews = [...cropDialog.querySelectorAll('[data-crop-preview]')];
+  const zoomInput = cropDialog.querySelector('[data-crop-zoom]');
+  const errorBox = cropDialog.querySelector('[data-crop-error]');
+  const saveButton = cropDialog.querySelector('[data-crop-save]');
+  const MAX_ZOOM = Number(zoomInput.max) || 5;
 
-  fileInput.addEventListener('change', () => {
-    showError('');
-    reset();
-    const file = fileInput.files && fileInput.files[0];
-    if (!file) return;
-    if (!AVATAR_TYPES.includes(file.type)) {
-      showError('Use a JPG, PNG or WebP image.');
-      fileInput.value = '';
-      return;
+  let source = null; // canvas holding the (possibly scaled down) picture
+  let form = null;
+  let state = { rotation: 0, zoom: 1, cx: 0, cy: 0 }; // crop centre in rotated-picture pixels
+  let frame = 0;
+
+  const showCropError = (message) => {
+    errorBox.textContent = message;
+    errorBox.hidden = !message;
+  };
+  // Picture size after rotation.
+  const dims = () => (state.rotation % 180 === 0 ? { w: source.width, h: source.height } : { w: source.height, h: source.width });
+  // Side of the crop square, in rotated-picture pixels.
+  const side = () => {
+    const { w, h } = dims();
+    return Math.min(w, h) / state.zoom;
+  };
+  const clampState = () => {
+    const { w, h } = dims();
+    const half = side() / 2;
+    state.zoom = Math.min(MAX_ZOOM, Math.max(1, state.zoom));
+    state.cx = Math.min(w - half, Math.max(half, state.cx));
+    state.cy = Math.min(h - half, Math.max(half, state.cy));
+  };
+  // Draws the picture so the crop square fills a box of boxSize, centred on the canvas.
+  function paint(ctx, size, boxSize, background) {
+    const k = boxSize / side();
+    const { w, h } = dims();
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (background) {
+      ctx.fillStyle = background;
+      ctx.fillRect(0, 0, size, size);
+    } else {
+      ctx.clearRect(0, 0, size, size);
     }
-    if (file.size > AVATAR_MAX) {
-      showError('The picture must be 5 MB or smaller.');
-      fileInput.value = '';
-      return;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.translate(size / 2, size / 2);
+    ctx.scale(k, k);
+    ctx.translate(-state.cx, -state.cy);
+    ctx.translate(w / 2, h / 2);
+    ctx.rotate((state.rotation * Math.PI) / 180);
+    ctx.drawImage(source, -source.width / 2, -source.height / 2);
+    ctx.restore();
+  }
+  function render() {
+    frame = 0;
+    if (!source) return;
+    clampState();
+    zoomInput.value = String(state.zoom);
+    const css = stage.clientWidth || 300;
+    const dpr = window.devicePixelRatio || 1;
+    const px = Math.round(css * dpr);
+    if (canvas.width !== px) {
+      canvas.width = px;
+      canvas.height = px;
     }
-    url = URL.createObjectURL(file);
-    img.onload = () => {
-      natural = { w: img.naturalWidth, h: img.naturalHeight };
-      zoom.value = '1';
-      zoomLevel = 1;
-      cropBox.hidden = false;
-      const f = frameSize();
-      const s = scale();
-      pos = { x: (f - natural.w * s) / 2, y: (f - natural.h * s) / 2 };
-      draw();
-    };
-    img.onerror = () => {
-      showError('That file could not be read as a picture.');
-      fileInput.value = '';
-      reset();
-    };
-    img.src = url;
-  });
-
-  // Zoom around the centre of the frame.
-  zoom.addEventListener('input', () => {
-    if (!natural.w) return;
-    const f = frameSize();
-    const before = scale();
-    const cx = (f / 2 - pos.x) / before;
-    const cy = (f / 2 - pos.y) / before;
-    zoomLevel = Number(zoom.value) || 1;
-    const after = scale();
-    pos = { x: f / 2 - cx * after, y: f / 2 - cy * after };
-    draw();
-  });
-
-  let drag = null;
-  frame.addEventListener('pointerdown', (e) => {
-    if (!natural.w) return;
-    drag = { x: e.clientX, y: e.clientY, start: { ...pos } };
-    frame.setPointerCapture(e.pointerId);
-    frame.classList.add('is-dragging');
-  });
-  frame.addEventListener('pointermove', (e) => {
-    if (!drag) return;
-    pos = { x: drag.start.x + e.clientX - drag.x, y: drag.start.y + e.clientY - drag.y };
-    draw();
-  });
-  const endDrag = () => {
-    drag = null;
-    frame.classList.remove('is-dragging');
+    paint(canvas.getContext('2d'), px, px * BOX, '#F5F5F7');
+    previews.forEach((p) => paint(p.getContext('2d'), p.width, p.width, '#FFFFFF'));
+  }
+  const queueRender = () => {
+    if (!frame) frame = requestAnimationFrame(render);
   };
-  frame.addEventListener('pointerup', endDrag);
-  frame.addEventListener('pointercancel', endDrag);
-  frame.addEventListener('keydown', (e) => {
-    const step = e.shiftKey ? 30 : 8;
-    const moves = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
-    if (!moves[e.key] || !natural.w) return;
+  const resetState = () => {
+    const { w, h } = { w: source.width, h: source.height };
+    state = { rotation: 0, zoom: 1, cx: w / 2, cy: h / 2 };
+    queueRender();
+  };
+  // Stage pixels -> rotated-picture pixels.
+  const toPicture = () => side() / ((stage.clientWidth || 300) * BOX);
+
+  // Loads the file (with its EXIF rotation applied) into a canvas of at most MAX_SOURCE.
+  async function loadSource(file) {
+    let bitmap;
+    if (window.createImageBitmap) {
+      try {
+        bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      } catch (err) {
+        bitmap = null;
+      }
+    }
+    if (!bitmap) {
+      bitmap = await new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(img);
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error('unreadable'));
+        };
+        img.src = url;
+      });
+    }
+    const w = bitmap.naturalWidth || bitmap.width;
+    const h = bitmap.naturalHeight || bitmap.height;
+    const fit = Math.min(1, MAX_SOURCE / Math.max(w, h));
+    const out = document.createElement('canvas');
+    out.width = Math.max(1, Math.round(w * fit));
+    out.height = Math.max(1, Math.round(h * fit));
+    const ctx = out.getContext('2d');
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bitmap, 0, 0, out.width, out.height);
+    if (bitmap.close) bitmap.close();
+    return out;
+  }
+
+  function closeCrop() {
+    if (cropDialog.open) cropDialog.close();
+  }
+  cropDialog.addEventListener('close', () => {
+    if (form && !form.dataset.uploading) {
+      const input = form.querySelector('[data-avatar-file]');
+      if (input) input.value = '';
+    }
+    source = null;
+    showCropError('');
+  });
+
+  document.querySelectorAll('[data-avatar-form]').forEach((avatarForm) => {
+    const input = avatarForm.querySelector('[data-avatar-file]');
+    const formError = avatarForm.querySelector('[data-avatar-error]');
+    // The popup's Save uploads; the form's own Save button is only for no-JavaScript use.
+    const submit = avatarForm.querySelector('[data-avatar-submit]');
+    if (submit) submit.hidden = true;
+    input.required = false;
+    input.addEventListener('change', async () => {
+      if (formError) formError.hidden = true;
+      const file = input.files && input.files[0];
+      if (!file) return;
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+        if (formError) {
+          formError.textContent = 'Use a JPG, PNG or WebP image.';
+          formError.hidden = false;
+        }
+        input.value = '';
+        return;
+      }
+      form = avatarForm;
+      try {
+        source = await loadSource(file);
+      } catch (err) {
+        if (formError) {
+          formError.textContent = 'That file could not be read as a picture.';
+          formError.hidden = false;
+        }
+        input.value = '';
+        return;
+      }
+      saveButton.disabled = false;
+      cropDialog.showModal();
+      resetState();
+      stage.focus();
+    });
+  });
+
+  cropDialog.querySelectorAll('[data-crop-cancel]').forEach((b) => b.addEventListener('click', closeCrop));
+  // A click on the backdrop (outside the popup) cancels.
+  cropDialog.addEventListener('click', (e) => { if (e.target === cropDialog) closeCrop(); });
+  cropDialog.querySelector('[data-crop-reset]').addEventListener('click', () => source && resetState());
+  cropDialog.querySelector('[data-crop-rotate]').addEventListener('click', () => {
+    if (!source) return;
+    // Turn 90° clockwise, keeping the same part of the picture in the middle.
+    const { h } = dims();
+    state = { ...state, rotation: (state.rotation + 90) % 360, cx: h - state.cy, cy: state.cx };
+    queueRender();
+  });
+  zoomInput.addEventListener('input', () => {
+    state.zoom = Number(zoomInput.value) || 1;
+    queueRender();
+  });
+  stage.addEventListener('wheel', (e) => {
+    if (!source) return;
     e.preventDefault();
-    pos = { x: pos.x + moves[e.key][0], y: pos.y + moves[e.key][1] };
-    draw();
+    state.zoom *= Math.exp(-e.deltaY * 0.0015);
+    queueRender();
+  }, { passive: false });
+
+  // One pointer drags; two pointers (touch) pinch to zoom.
+  const pointers = new Map();
+  let pinch = null;
+  stage.addEventListener('pointerdown', (e) => {
+    if (!source) return;
+    try {
+      stage.setPointerCapture(e.pointerId);
+    } catch (err) {
+      // Not capturable (e.g. the pointer already ended): moves still arrive on the stage.
+    }
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    stage.classList.add('is-dragging');
+    if (pointers.size === 2) {
+      const [a, b] = [...pointers.values()];
+      pinch = { dist: Math.hypot(a.x - b.x, a.y - b.y) || 1, zoom: state.zoom };
+    }
   });
-  form.addEventListener('reset', () => {
-    showError('');
-    reset();
+  stage.addEventListener('pointermove', (e) => {
+    const last = pointers.get(e.pointerId);
+    if (!last || !source) return;
+    const now = { x: e.clientX, y: e.clientY };
+    pointers.set(e.pointerId, now);
+    if (pointers.size >= 2 && pinch) {
+      const [a, b] = [...pointers.values()];
+      state.zoom = pinch.zoom * ((Math.hypot(a.x - b.x, a.y - b.y) || 1) / pinch.dist);
+    } else if (pointers.size === 1) {
+      const scale = toPicture();
+      state.cx -= (now.x - last.x) * scale;
+      state.cy -= (now.y - last.y) * scale;
+    }
+    queueRender();
   });
-});
+  const endPointer = (e) => {
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (!pointers.size) stage.classList.remove('is-dragging');
+  };
+  stage.addEventListener('pointerup', endPointer);
+  stage.addEventListener('pointercancel', endPointer);
+  stage.addEventListener('keydown', (e) => {
+    if (!source) return;
+    const step = (e.shiftKey ? 40 : 10) * toPicture();
+    const moves = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    if (moves[e.key]) {
+      state.cx += moves[e.key][0];
+      state.cy += moves[e.key][1];
+    } else if (e.key === '+' || e.key === '=') state.zoom *= 1.1;
+    else if (e.key === '-') state.zoom /= 1.1;
+    else return;
+    e.preventDefault();
+    queueRender();
+  });
+  window.addEventListener('resize', () => cropDialog.open && queueRender());
+
+  saveButton.addEventListener('click', async () => {
+    if (!source || !form) return;
+    showCropError('');
+    saveButton.disabled = true;
+    const out = document.createElement('canvas');
+    out.width = OUTPUT;
+    out.height = OUTPUT;
+    clampState();
+    paint(out.getContext('2d'), OUTPUT, OUTPUT, '#FFFFFF');
+    const blob = await new Promise((resolve) => out.toBlob(resolve, 'image/jpeg', 0.9));
+    if (!blob) {
+      showCropError('The picture could not be prepared. Try another one.');
+      saveButton.disabled = false;
+      return;
+    }
+    const data = new FormData(form);
+    data.set('file', blob, 'avatar.jpg');
+    form.dataset.uploading = '1';
+    try {
+      // redirect: 'manual' leaves the server's success / error message for the page we
+      // go back to (following the redirect here would use it up).
+      const res = await fetch(form.action, { method: 'POST', body: data, credentials: 'same-origin', redirect: 'manual' });
+      if (res.type !== 'opaqueredirect' && !res.ok) throw new Error(String(res.status));
+      const target = new URL(form.dataset.back || window.location.pathname, window.location.href);
+      if (target.pathname === window.location.pathname && target.search === window.location.search) {
+        window.location.hash = target.hash;
+        window.location.reload();
+      } else {
+        window.location.href = target.href;
+      }
+    } catch (err) {
+      delete form.dataset.uploading;
+      showCropError('The upload failed. Check your connection and try again.');
+      saveButton.disabled = false;
+    }
+  });
+}

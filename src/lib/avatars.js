@@ -1,5 +1,7 @@
-// Profile pictures. Uploaded as JPG, PNG or WebP (max 5 MB), cropped to the square
-// the user chose (or the centre), resized to 256 x 256 and re-encoded as WebP, which
+// Profile pictures. The browser crops the picture in a popup and uploads a 512 x 512
+// JPG (public/js/app.js); without JavaScript the original JPG, PNG or WebP is sent.
+// Either way the server checks it (max 5 MB), takes the centre square (or crop_x /
+// crop_y / crop_size if sent), resizes to 256 x 256 and re-encodes as WebP, which
 // also drops any metadata. Stored in uploads/avatars and served only to signed-in
 // users via /avatars/:name. People without a picture get a coloured circle with
 // their initials.

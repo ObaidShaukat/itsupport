@@ -141,7 +141,7 @@ Each ticket page has a **Reminders** panel listing pending reminders (soonest fi
 
 - **Users page:** add people, and edit anyone with the pencil: display name, email / username (use the person's email address, as emails are sent to it), password, and email signature, each with its own Save and Cancel. Clicking outside the popup or pressing Esc closes it without saving.
 - **My profile:** click your name or picture in the sidebar or top bar. You can change:
-  - **Profile picture:** upload a JPG, PNG or WebP (up to 5 MB), drag and zoom to choose the square, and save. It is resized to 256 × 256 and shown in the sidebar, top bar, comments, history, the Users list and created / updated by columns. Without a picture you get a coloured circle with your initials. Remove picture takes it away.
+  - **Profile picture:** choose a JPG, PNG or WebP (phone photos are fine) and a Crop picture popup opens: drag to move, zoom with the slider, mouse wheel or a pinch, rotate 90°, or reset, with a live preview of the round picture. Save uploads just the cropped square (a 512 × 512 JPG); Cancel, Esc or a click outside cancels. It is stored at 256 × 256 and shown in the sidebar, top bar, comments, history, the Users list and created / updated by columns. Without a picture you get a coloured circle with your initials. Remove picture takes it away.
   - **Display name and job title:** the job title shows under your name on your profile and in the Users list, and `{job_title}` in your signature is replaced by it.
   - **Reminder notifications:** Popup only, Email only, or Both (default).
   - **Date format:** "7 Oct 2026" (default) or "07/10/2026", used for every date the portal shows you. Times are 24-hour UK time.

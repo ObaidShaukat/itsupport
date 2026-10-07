@@ -1,0 +1,35 @@
+<%#
+  Shared "Crop picture" popup for profile picture forms ([data-avatar-form]); driven by
+  public/js/app.js. Drag to move, slider / mouse wheel / pinch to zoom, rotate, reset,
+  live preview. Save uploads a 512 x 512 JPG; Cancel, Esc or a click outside cancels.
+%>
+<dialog class="dialog crop-dialog" data-crop-dialog aria-labelledby="crop-title">
+  <div class="dialog-head">
+    <h2 id="crop-title">Crop picture</h2>
+    <button type="button" class="icon-btn" data-crop-cancel aria-label="Cancel" title="Cancel"><%- icon('x') %></button>
+  </div>
+  <div class="crop-body">
+    <div class="crop-stage" data-crop-stage tabindex="0" aria-label="Picture to crop. Drag or use the arrow keys to move it, + and - to zoom.">
+      <canvas data-crop-canvas></canvas>
+      <div class="crop-mask" aria-hidden="true"></div>
+    </div>
+    <div class="crop-side">
+      <span class="muted small">Preview</span>
+      <canvas class="crop-preview" data-crop-preview width="96" height="96" aria-label="Preview of the profile picture"></canvas>
+      <canvas class="crop-preview crop-preview-small" data-crop-preview width="32" height="32" aria-hidden="true"></canvas>
+    </div>
+  </div>
+  <div class="crop-controls">
+    <label class="crop-zoom">
+      <span class="muted small">Zoom</span>
+      <input type="range" min="1" max="5" step="0.01" value="1" data-crop-zoom aria-label="Zoom">
+    </label>
+    <button type="button" class="btn btn-small" data-crop-rotate title="Rotate 90°"><span aria-hidden="true">↻</span><span>Rotate 90°</span></button>
+    <button type="button" class="btn btn-small btn-ghost" data-crop-reset>Reset</button>
+  </div>
+  <p class="field-error small" data-crop-error hidden></p>
+  <div class="form-actions">
+    <button type="button" class="btn btn-primary" data-crop-save><%- icon('upload') %><span>Save</span></button>
+    <button type="button" class="btn btn-ghost" data-crop-cancel>Cancel</button>
+  </div>
+</dialog>

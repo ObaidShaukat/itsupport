@@ -1,36 +1,24 @@
 <%#
-  Profile picture: upload (JPG / PNG / WebP, max 5 MB) with a square crop chosen in the
-  browser (drag to move, slider to zoom), and Remove. person: { id, name, avatar_file };
-  action: form URL (e.g. /profile/avatar); the remove form posts to action + '/delete'.
-  The server crops to the chosen square (or the centre) and resizes to 256 x 256.
+  Profile picture: choose a file, crop it in the popup (views/partials/crop-dialog.ejs,
+  public/js/app.js) and Save, which uploads only the cropped 512 x 512 JPG. Without
+  JavaScript the file is uploaded as chosen and the server uses its centre square.
+  person: { id, name, avatar_file }; action: form URL (e.g. /profile/avatar); Remove
+  posts to action + '/delete'. The server stores a 256 x 256 WebP.
 %>
 <div class="avatar-upload" data-avatar-upload>
   <div class="avatar-upload-current">
     <%- avatar(person, 'lg') %>
-    <div class="muted small">JPG, PNG or WebP, up to 5 MB.<br>Shown as a 256 × 256 square.</div>
+    <div class="muted small">JPG, PNG or WebP. Phone photos are fine: you crop the picture before it is saved.</div>
   </div>
-  <form method="post" action="<%= action %>" enctype="multipart/form-data" class="form" data-avatar-form>
+  <form method="post" action="<%= action %>" enctype="multipart/form-data" class="form" data-avatar-form data-back="<%= action.startsWith('/profile') ? '/profile#picture' : '/users' %>">
     <%- csrfField %>
-    <input type="hidden" name="crop_x" value="">
-    <input type="hidden" name="crop_y" value="">
-    <input type="hidden" name="crop_size" value="">
     <label class="field">
       <span>Choose a picture</span>
       <input type="file" name="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" required data-avatar-file>
     </label>
-    <div class="avatar-crop" data-avatar-crop hidden>
-      <div class="avatar-crop-frame" data-crop-frame tabindex="0" aria-label="Drag to choose the part of the picture to show. Arrow keys move it.">
-        <img alt="" data-crop-image draggable="false">
-      </div>
-      <label class="field avatar-zoom">
-        <span>Zoom</span>
-        <input type="range" min="1" max="4" step="0.01" value="1" data-crop-zoom>
-      </label>
-      <p class="muted small">Drag the picture to choose what shows in the circle.</p>
-    </div>
     <p class="field-error small" data-avatar-error hidden></p>
     <div class="form-actions">
-      <button type="submit" class="btn btn-primary"><%- icon('upload') %><span>Save picture</span></button>
+      <button type="submit" class="btn btn-primary" data-avatar-submit><%- icon('upload') %><span>Save picture</span></button>
       <% if (person.avatar_file) { %>
         <button type="submit" class="btn btn-ghost" formaction="<%= action %>/delete" formenctype="application/x-www-form-urlencoded" formnovalidate>Remove picture</button>
       <% } %>

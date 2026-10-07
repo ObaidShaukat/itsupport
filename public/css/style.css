@@ -1600,33 +1600,50 @@ html { scroll-behavior: smooth; }
 
 .avatar-upload { display: grid; gap: 1rem; }
 .avatar-upload-current { display: flex; align-items: center; gap: 1rem; }
-.avatar-crop { display: grid; gap: 0.6rem; justify-items: start; }
-.avatar-crop-frame {
-  position: relative;
-  width: 220px;
-  height: 220px;
-  overflow: hidden;
-  border-radius: var(--radius-sm);
-  background: repeating-conic-gradient(#EEE 0% 25%, #FFF 0% 50%) 50% / 16px 16px;
-  cursor: grab;
-  touch-action: none;
-}
-.avatar-crop-frame.is-dragging { cursor: grabbing; }
-.avatar-crop-frame:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
-.avatar-crop-frame img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; pointer-events: none; }
-/* The circle that will be shown; the corners are dimmed. */
-.avatar-crop-frame::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  box-shadow: 0 0 0 999px rgba(32, 13, 108, 0.45);
-  outline: 2px solid rgba(255, 255, 255, 0.9);
-  pointer-events: none;
-}
-.avatar-zoom { width: 220px; }
-.avatar-zoom input { width: 100%; accent-color: var(--blue); }
 .field-error { color: var(--red); margin: 0; }
 
 .session-list .row.is-current { background: var(--blue-soft); border-radius: var(--radius-sm); }
 .session-agent { max-width: 52ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- Crop picture popup ---- */
+
+.dialog.crop-dialog { width: min(560px, calc(100vw - 1rem)); max-height: calc(100vh - 1rem); overflow-y: auto; }
+.crop-dialog .form-actions { justify-content: flex-end; }
+.crop-body { display: flex; gap: 1rem; align-items: flex-start; margin: 1rem 0 0.75rem; }
+.crop-stage {
+  position: relative;
+  flex: 1;
+  max-width: 400px;
+  aspect-ratio: 1;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: #F5F5F7;
+  cursor: grab;
+  touch-action: none; /* drag and pinch are handled in app.js */
+  user-select: none;
+}
+.crop-stage.is-dragging { cursor: grabbing; }
+.crop-stage:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+.crop-stage canvas { display: block; width: 100%; height: 100%; }
+/* The square crop box (80% of the stage) with the circle that will be shown; outside is dimmed. */
+.crop-mask {
+  position: absolute;
+  inset: 10%;
+  border-radius: 50%;
+  box-shadow: 0 0 0 999px rgba(32, 13, 108, 0.5);
+  pointer-events: none;
+}
+.crop-mask::after { content: ''; position: absolute; inset: 0; border: 2px dashed rgba(255, 255, 255, 0.85); border-radius: 0; }
+.crop-mask::before { content: ''; position: absolute; inset: 0; border: 2px solid #FFFFFF; border-radius: 50%; }
+.crop-side { display: grid; gap: 0.5rem; justify-items: center; flex: none; }
+.crop-preview { width: 96px; height: 96px; border-radius: 50%; box-shadow: 0 0 0 3px var(--surface), 0 4px 14px rgba(32, 13, 108, 0.2); background: #FFFFFF; }
+.crop-preview.crop-preview-small { width: 32px; height: 32px; box-shadow: 0 0 0 2px var(--surface), 0 2px 6px rgba(32, 13, 108, 0.2); }
+.crop-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.crop-zoom { display: flex; align-items: center; gap: 0.5rem; flex: 1; min-width: 180px; }
+.crop-zoom input { flex: 1; accent-color: var(--blue); }
+
+@media (max-width: 520px) {
+  .crop-body { flex-direction: column; align-items: stretch; }
+  .crop-stage { max-width: none; }
+  .crop-side { grid-auto-flow: column; align-items: center; justify-content: start; }
+}
