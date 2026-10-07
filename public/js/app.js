@@ -944,3 +944,245 @@ function enhanceCombobox(native) {
 }
 
 document.querySelectorAll('[data-combobox]').forEach(enhanceCombobox);
+
+// ---- Email: signatures, recipient chips and the Send report popup ----
+
+// Rough browser-side clean-up of signature HTML for the editor and preview (the server
+// sanitises properly with sanitize-html before saving and sending). Parsed with
+// DOMParser, which never runs scripts or loads anything.
+function cleanSignatureHtml(html) {
+  const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+  doc.querySelectorAll('script, style, link, meta, title, iframe, object, embed, form, input, button, textarea, select, base')
+    .forEach((node) => node.remove());
+  doc.querySelectorAll('*').forEach((node) => {
+    [...node.attributes].forEach((attr) => {
+      const name = attr.name.toLowerCase();
+      const value = attr.value.trim().toLowerCase();
+      if (name.startsWith('on') || ((name === 'href' || name === 'src') && /^(javascript|vbscript):/.test(value))) {
+        node.removeAttribute(attr.name);
+      }
+    });
+  });
+  return doc.body.innerHTML;
+}
+
+// Shows signature HTML in a shadow root, so its styles cannot leak into the page.
+function renderSignature(host, html) {
+  const root = host.shadowRoot || host.attachShadow({ mode: 'open' });
+  root.innerHTML = '<style>:host{display:block;font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000;overflow-wrap:anywhere}'
+    + 'img{max-width:100%;height:auto}a{color:#0563C1}</style>'
+    + (cleanSignatureHtml(html) || '<span style="color:#6E6E73">No signature</span>');
+}
+
+document.querySelectorAll('[data-signature-view]').forEach((host) => {
+  const template = host.querySelector('template[data-signature-html]');
+  renderSignature(host, template ? template.innerHTML : '');
+});
+
+// Signature editor: rich text (bold, italic, link, image by URL, line break) or
+// "Paste HTML". The textarea is always the submitted field.
+document.querySelectorAll('[data-signature-editor]').forEach((editor) => {
+  const toolbar = editor.querySelector('[data-sig-toolbar]');
+  const area = editor.querySelector('[data-sig-area]');
+  const source = editor.querySelector('[data-sig-source]');
+  const previewWrap = editor.querySelector('[data-sig-preview-wrap]');
+  const preview = editor.querySelector('[data-sig-preview]');
+  const modeButton = editor.querySelector('[data-sig-mode]');
+  let htmlMode = false;
+
+  const refresh = () => renderSignature(preview, source.value);
+  const loadArea = () => {
+    area.innerHTML = cleanSignatureHtml(source.value);
+    refresh();
+  };
+  const setMode = (html) => {
+    htmlMode = html;
+    if (!html) loadArea();
+    area.hidden = html;
+    source.hidden = !html;
+    modeButton.setAttribute('aria-pressed', String(html));
+    modeButton.textContent = html ? 'Back to editor' : 'Paste HTML';
+    toolbar.querySelectorAll('[data-sig-cmd]').forEach((b) => { b.disabled = html; });
+    (html ? source : area).focus();
+  };
+
+  toolbar.hidden = false;
+  previewWrap.hidden = false;
+  area.hidden = false;
+  source.hidden = true;
+  loadArea();
+
+  area.addEventListener('input', () => {
+    source.value = area.innerHTML;
+    refresh();
+  });
+  source.addEventListener('input', refresh);
+  modeButton.addEventListener('click', () => setMode(!htmlMode));
+  // Keep the text selection when a toolbar button is pressed.
+  toolbar.addEventListener('mousedown', (e) => {
+    if (e.target.closest('[data-sig-cmd]')) e.preventDefault();
+  });
+  toolbar.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-sig-cmd]');
+    if (!button || htmlMode) return;
+    area.focus();
+    const cmd = button.dataset.sigCmd;
+    if (cmd === 'bold' || cmd === 'italic') document.execCommand(cmd);
+    else if (cmd === 'clear') document.execCommand('removeFormat');
+    else if (cmd === 'break') {
+      if (!document.execCommand('insertLineBreak')) document.execCommand('insertHTML', false, '<br>');
+    } else if (cmd === 'link') {
+      const url = (window.prompt('Link address (https://…, mailto: or tel:)', 'https://') || '').trim();
+      if (!/^(https?:\/\/\S+|mailto:\S+|tel:[+\d\s()-]+)$/i.test(url)) return;
+      const selection = window.getSelection();
+      if (selection && !selection.isCollapsed) document.execCommand('createLink', false, url);
+      else document.execCommand('insertHTML', false, `<a href="${escapeHtml(url)}">${escapeHtml(url.replace(/^(mailto|tel):/i, ''))}</a>`);
+    } else if (cmd === 'image') {
+      const url = (window.prompt('Image address (https://…)', 'https://') || '').trim();
+      if (!/^https:\/\/\S+$/i.test(url)) return;
+      document.execCommand('insertImage', false, url);
+    }
+    source.value = area.innerHTML;
+    refresh();
+  });
+  // Cancel / Esc / click outside reset the form: show the saved signature again.
+  const form = editor.closest('form');
+  if (form) {
+    form.addEventListener('reset', () => setTimeout(() => {
+      if (htmlMode) setMode(false);
+      else loadArea();
+    }));
+    form.addEventListener('submit', () => {
+      if (!htmlMode) source.value = area.innerHTML;
+    });
+  }
+});
+
+// Email recipient chips: <input data-email-tokens list="..."> holding "a@x.com, b@y.com".
+// Enter, comma, semicolon, Tab or leaving the field turns the typed address into a chip;
+// Backspace in the empty field removes the last one. The original input (now hidden)
+// is what gets submitted.
+const EMAIL_RE = /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:"]+$/;
+function enhanceEmailTokens(original) {
+  const box = document.createElement('div');
+  box.className = 'token-input';
+  const typing = document.createElement('input');
+  typing.type = 'email';
+  typing.autocomplete = 'off';
+  typing.placeholder = original.placeholder || '';
+  if (original.getAttribute('list')) typing.setAttribute('list', original.getAttribute('list'));
+  typing.setAttribute('aria-label', original.closest('label')?.querySelector('span')?.textContent.trim() || 'Email addresses');
+  const required = original.required;
+  original.required = false;
+  original.type = 'hidden';
+  original.after(box);
+  box.appendChild(typing);
+
+  let tokens = [];
+  const sync = () => {
+    original.value = tokens.join(', ');
+    box.classList.toggle('has-tokens', tokens.length > 0);
+  };
+  const chip = (email) => {
+    const span = document.createElement('span');
+    span.className = 'token';
+    span.textContent = email;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'token-remove';
+    remove.setAttribute('aria-label', `Remove ${email}`);
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      tokens = tokens.filter((t) => t !== email);
+      span.remove();
+      sync();
+      typing.focus();
+    });
+    span.appendChild(remove);
+    box.insertBefore(span, typing);
+  };
+  // Adds every valid address in text; anything invalid stays in the field, marked.
+  const take = (text) => {
+    const bad = [];
+    String(text).split(/[\s,;]+/).map((p) => p.trim().replace(/^<|>$/g, '')).filter(Boolean).forEach((part) => {
+      const email = part.toLowerCase();
+      if (!EMAIL_RE.test(email)) bad.push(part);
+      else if (!tokens.includes(email)) {
+        tokens.push(email);
+        chip(email);
+      }
+    });
+    typing.value = bad.join(', ');
+    typing.classList.toggle('is-invalid', bad.length > 0);
+    typing.title = bad.length ? 'Not a valid email address' : '';
+    sync();
+    return bad.length === 0;
+  };
+  take(original.value);
+
+  typing.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ',' || e.key === ';' || (e.key === 'Tab' && typing.value.trim())) && typing.value.trim()) {
+      e.preventDefault();
+      take(typing.value);
+    } else if (e.key === 'Enter') {
+      e.preventDefault(); // Enter in an empty field does not submit the popup
+    } else if (e.key === 'Backspace' && !typing.value && tokens.length) {
+      const last = tokens.pop();
+      box.querySelectorAll('.token').forEach((t) => { if (t.firstChild.textContent === last) t.remove(); });
+      sync();
+    }
+  });
+  typing.addEventListener('input', () => {
+    typing.classList.remove('is-invalid');
+    // A suggestion picked from the list is added straight away.
+    const list = typing.list;
+    if (list && [...list.options].some((o) => o.value === typing.value)) take(typing.value);
+  });
+  typing.addEventListener('blur', () => { if (typing.value.trim()) take(typing.value); });
+  box.addEventListener('click', (e) => { if (e.target === box) typing.focus(); });
+
+  // Called before submit: adds anything still typed; false when invalid or required and empty.
+  original.flushTokens = () => {
+    const ok = typing.value.trim() ? take(typing.value) : true;
+    if (!ok) {
+      typing.focus();
+      return false;
+    }
+    if (required && !tokens.length) {
+      typing.classList.add('is-invalid');
+      typing.title = 'Add at least one email address';
+      typing.focus();
+      return false;
+    }
+    return true;
+  };
+}
+document.querySelectorAll('input[data-email-tokens]').forEach(enhanceEmailTokens);
+
+// Send report popup. With "My report" showing, it starts from the page preview so any
+// edits made there are kept; otherwise from the user's own report rendered with it.
+const sendDialog = document.querySelector('[data-send-dialog]');
+if (sendDialog && typeof sendDialog.showModal === 'function') {
+  const sendForm = sendDialog.querySelector('[data-send-form]');
+  const sendPreview = sendDialog.querySelector('[data-send-preview]');
+  document.querySelectorAll('[data-send-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (sendDialog.hasAttribute('data-copy-page') && reportPreview) sendPreview.innerHTML = reportPreview.innerHTML;
+      sendDialog.showModal();
+      const first = sendDialog.querySelector('.token-input input, input[name="subject"]');
+      if (first) first.focus();
+    });
+  });
+  sendDialog.querySelectorAll('[data-send-close]').forEach((b) => b.addEventListener('click', () => sendDialog.close()));
+  // A click on the backdrop (outside the popup) closes it without sending.
+  sendDialog.addEventListener('click', (e) => { if (e.target === sendDialog) sendDialog.close(); });
+  sendForm.addEventListener('submit', (e) => {
+    const tokenInputs = [...sendForm.querySelectorAll('input[data-email-tokens]')];
+    if (!tokenInputs.every((input) => !input.flushTokens || input.flushTokens())) {
+      e.preventDefault();
+      return;
+    }
+    sendForm.querySelector('[data-send-report]').value = JSON.stringify(readPreview(sendPreview));
+    sendForm.querySelectorAll('button[type="submit"]').forEach((b) => { b.disabled = true; });
+  });
+}

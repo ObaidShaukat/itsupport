@@ -81,7 +81,11 @@ router.post('/:id', async (req, res) => {
       'UPDATE reminders SET note = ?, for_user_id = ?, remind_at = ?, snoozed_until = NULL, updated_by = ? WHERE id = ?',
       [form.note, form.forUserId, form.remindAt, req.user.id, r.id]
     );
-    if (changes.includes('time') || changes.includes('for')) await clearReminderNotifications(conn, { reminderId: r.id });
+    if (changes.includes('time') || changes.includes('for')) {
+      // Notify (popup and email) again at the new time / for the new person.
+      await conn.query('UPDATE reminders SET email_sent_at = NULL WHERE id = ?', [r.id]);
+      await clearReminderNotifications(conn, { reminderId: r.id });
+    }
     await logActivity(conn, req.user, reminderEntry(r, 'updated',
       withNote(`Edited a reminder for ${form.forName} on ${fmt(form.remindAt)}`, form.note), changes));
     return { r, changed: true };
@@ -109,7 +113,7 @@ router.post('/:id/snooze', async (req, res) => {
   const r = await transaction(async (conn) => {
     const reminder = await lockedReminder(conn, req);
     if (!until || reminder.status === 'done') return { ...reminder, invalid: true };
-    await conn.query('UPDATE reminders SET snoozed_until = ?, updated_by = ? WHERE id = ?', [until, req.user.id, reminder.id]);
+    await conn.query('UPDATE reminders SET snoozed_until = ?, email_sent_at = NULL, updated_by = ? WHERE id = ?', [until, req.user.id, reminder.id]);
     await clearReminderNotifications(conn, { reminderId: reminder.id });
     await logActivity(conn, req.user, reminderEntry(reminder, 'updated',
       withNote(`Snoozed a reminder for ${SNOOZES[choice]} (until ${fmt(until)})`, reminder.note), ['snooze']));

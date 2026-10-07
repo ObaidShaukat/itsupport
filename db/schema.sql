@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS users (
   display_name VARCHAR(100) NULL,
   -- Last Daily Report "View" choice: 'me', 'all' or a user id.
   report_view VARCHAR(20) NULL,
+  -- Sanitised HTML signature added to Daily Reports this user emails.
+  email_signature MEDIUMTEXT NULL,
+  -- Last recipients of the emailed Daily Report (comma-separated), pre-filled next time.
+  report_to VARCHAR(1000) NULL,
+  report_cc VARCHAR(1000) NULL,
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'admin',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -254,11 +259,11 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_id INT UNSIGNED NULL,
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
-                   'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'inv_person', 'inv_asset', 'inv_stock',
+                   'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
                    'inv_access', 'inv_shared', 'inv_setting', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
-              'reopened', 'deleted', 'uploaded', 'completed') NOT NULL,
+              'reopened', 'deleted', 'uploaded', 'completed', 'sent') NOT NULL,
   subject VARCHAR(255) NULL,
   summary TEXT NOT NULL,
   changes VARCHAR(255) NULL,
@@ -555,6 +560,8 @@ CREATE TABLE IF NOT EXISTS reminders (
   for_user_id INT UNSIGNED NOT NULL,
   status ENUM('pending', 'done') NOT NULL DEFAULT 'pending',
   snoozed_until DATETIME NULL,
+  -- When the reminder email went out for the current due time; cleared by snooze / edit.
+  email_sent_at DATETIME NULL,
   created_by INT UNSIGNED NULL,
   updated_by INT UNSIGNED NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -594,6 +601,25 @@ CREATE TABLE IF NOT EXISTS notifications (
   CONSTRAINT fk_notifications_task FOREIGN KEY (task_id) REFERENCES tasks (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Every email the portal tries to send (src/lib/mailer.js): reminders and Daily Reports.
+CREATE TABLE IF NOT EXISTS email_log (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NULL,
+  kind VARCHAR(30) NOT NULL,
+  to_addresses VARCHAR(1000) NOT NULL,
+  cc_addresses VARCHAR(1000) NULL,
+  subject VARCHAR(255) NOT NULL,
+  status ENUM('sent', 'failed') NOT NULL,
+  error VARCHAR(1000) NULL,
+  message_id VARCHAR(255) NULL,
+  reminder_id INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_email_log_user (user_id, kind, created_at),
+  KEY idx_email_log_reminder (reminder_id),
+  CONSTRAINT fk_email_log_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Daily Report wording, edited on the Settings page.
 -- Actions: template uses {client} and {subjects}; phrase_type picks which issue phrase fills {subjects}.
 CREATE TABLE IF NOT EXISTS report_actions (
@@ -625,9 +651,9 @@ ALTER TABLE ticket_history
 
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
-                          'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'inv_person', 'inv_asset', 'inv_stock',
+                          'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
                    'inv_access', 'inv_shared', 'inv_setting', 'manual') NOT NULL;
 
 ALTER TABLE activity_log
   MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
-              'reopened', 'deleted', 'uploaded', 'completed') NOT NULL;
+              'reopened', 'deleted', 'uploaded', 'completed', 'sent') NOT NULL;

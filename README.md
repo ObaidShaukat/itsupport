@@ -47,6 +47,11 @@ Fill in:
 | `COOKIE_SECURE` | `true` when users reach the portal over HTTPS |
 | `TRUST_PROXY` | `true` when running behind nginx, IIS or another reverse proxy |
 | `UPLOAD_DIR` | Optional. Folder for uploaded files. Defaults to `uploads/` in the app folder |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Mail server for reminder emails and sent reports. Port 587 uses STARTTLS (465 uses TLS) |
+| `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` | Address and name emails are sent from (e.g. `it@cleartwo.co.uk`, `Cleartwo IT Support`) |
+| `APP_URL` | Address of the portal, e.g. `https://support.cleartwo.co.uk`, used for the "Open ticket" button in reminder emails |
+
+If any of the SMTP or `MAIL_FROM_EMAIL` settings is missing, email is turned off: the portal keeps working, reminders still pop up, and Send report explains what to add. Restart the portal after changing `.env`.
 
 `.env` is git-ignored. Never commit it.
 
@@ -123,12 +128,18 @@ Cleartwo's own people, equipment and accounts, not linked to clients. The Invent
 Each ticket page has a **Reminders** panel listing pending reminders (soonest first) and done ones. You can add, edit, delete and mark them done.
 
 - **Adding a reminder:** write a note, choose who it is for (yourself by default) and pick a time: In 1 hour, This afternoon (15:00), Tomorrow morning (09:00), Next Monday (09:00) or Custom. Times are UK time (Europe/London) and stored in UTC.
-- **When it is due:** in the portal only for now. The browser checks every 60 seconds. A due reminder pops up as a toast with the ticket number, title, client and note, an Open ticket link, and Done or Snooze (10 minutes, 1 hour, tomorrow 09:00). It stays until you action it, and a short soft sound plays once. Reminders appear when that person next has the portal open; there is no background job.
+- **When it is due:** the reminder's user gets an email (once per due time, and again after a snooze ends) with the note, due time, ticket and client and an Open ticket button, as long as their username is their email address and email is set up. Reminders that fell due more than a day ago are not emailed late. In the portal, the browser checks every 60 seconds. A due reminder pops up as a toast with the ticket number, title, client and note, an Open ticket link, and Done or Snooze (10 minutes, 1 hour, tomorrow 09:00). It stays until you action it, and a short soft sound plays once. The popup appears when that person next has the portal open; the email is sent by the server within a minute of the due time.
 - **Bell:** the bell in the top bar shows how many reminders are due, grouped as Due now, Missed (due before today) and Upcoming (next 7 days). Click one to open its ticket.
 - **Ticket lists:** a small bell next to the title marks tickets with a pending reminder; hover it for the next reminder time.
 - **History, not the report:** adding, editing, snoozing, completing and deleting reminders is in the ticket's History and on `/activity`, but never on the Daily Report.
-- **Later channels:** due reminders are written to the `notifications` table, whose `channel` column leaves room for email or Teams.
+- **Channels:** due reminders are written to the `notifications` table (whose `channel` column leaves room for Teams) and emailed. Every email is recorded in `email_log`.
 - **Old Tasks:** the Tasks page has been removed. Its `tasks` table is left in the database, unused. Run `npm run migrate` after updating to create the `reminders` table and the `notifications.reminder_id` column.
+
+## Users, My profile and email signatures
+
+- **Users page:** add people, and edit anyone with the pencil: display name, email / username (use the person's email address, as emails are sent to it), password, and email signature, each with its own Save and Cancel. Clicking outside the popup or pressing Esc closes it without saving.
+- **My profile:** click your name in the sidebar or top bar to change your own display name, email signature and password (your current password is needed).
+- **Email signatures:** use the editor (bold, italic, links, line breaks, images by URL) or choose **Paste HTML** to paste a signature copied from Outlook, with a live preview underneath. Signatures are cleaned before saving (no scripts or styles) and are added to the bottom of Daily Reports you send.
 
 ## Activity log and Daily Report
 
@@ -136,8 +147,10 @@ Every create, update and delete (tickets, comments, client services, steps, note
 
 - **Log work:** the button in the top bar of every page records manual work: an optional client, a description and a date (default today). Each user can edit or delete their own entries from the Daily Report page.
 - **Daily Report** (`/report`): pick a day (default today), step back and forward, or choose a date range (up to 62 days, grouped by day). It shows your own report by default. Use **View** to see All team or one other person; the last choice is remembered. People with nothing to report that day are left out, both on the page and when copying.
-- **Display names:** each user can have a display name (Users page). It is shown everywhere a user appears: report headings ("Obaid's Work:"), tickets, reminders, notes, history and created/updated columns. A blank display name shows the username. The report is built only from the activity log. The chosen UK date (or range) is converted to a UTC start and end and matched against when each action happened, so an old ticket or article edited today shows up today. Manual Log work entries use the date that was picked. Each user's work is one bullet per item, grouped by client, for example "Provided IT support to Abel regarding Test: replaced the toner.", "Completed Create new tenant as part of Emails setup for Abel." or "Updated the knowledge base article 'Outlook not syncing': revised the issue description.", and ends with "Other IT related tasks." Deletes, unticked steps and user-admin changes are left out of the report but listed on `/activity`.
-- **Report wording:** built from what was typed, one bullet per entry. Log work: "{text} for {client}." Ticket comments: "Provided IT support to {client} regarding {comment}." Notes: "{note} for {client} ({service})." Client services read "Commenced / Completed … for {client}", using the service's optional *Wording in the Daily Report*. Lines are tidied (capitalised, one full stop, "setup" becomes "Set up", no semicolons, no repeated client name) and ordered client services, tickets, log work, knowledge base, then "Other IT related tasks."
+- **Display names:** each user can have a display name (Users page or My profile). It is shown everywhere a user appears: report headings ("Obaid's Work:"), tickets, reminders, notes, history and created/updated columns. A blank display name shows the username. The report is built only from the activity log. The chosen UK date (or range) is converted to a UTC start and end and matched against when each action happened, so an old article edited today shows up today. Manual Log work entries use the date that was picked. Each user's work is one bullet per item, grouped by client, for example "Completed Create new tenant as part of Emails setup for Abel." or "Updated the knowledge base article 'Outlook not syncing': revised the issue description.", and ends with "Other IT related tasks." Deletes, unticked steps and user-admin changes are left out of the report but listed on `/activity`.
+- **What is on the report:** only Log work entries, client services (started, steps completed, notes, completed) and General IT Support articles (created, edited). Ticket activity (comments, status, priority, reminders) is not on the report; it is still in the activity log and each ticket's history.
+- **Report wording:** built from what was typed, one bullet per entry. Log work: "{text} for {client}." Notes: "{note} for {client} ({service})." Client services read "Commenced / Completed … for {client}", using the service's optional *Wording in the Daily Report*. Lines are tidied (capitalised, one full stop, "setup" becomes "Set up", no semicolons, no repeated client name) and ordered client services, log work, General IT Support, then "Other IT related tasks."
+- **Send report:** emails your own report for the chosen date(s). The popup has To (several addresses, with suggestions from people you have sent to before and all portal users), optional CC, a subject like "EOD 7 October" and the report, which you can edit before sending. It goes out as Calibri 11pt with your bold "{Name}'s Work:" heading, real bullets and your email signature. It is sent from "{your name}" <your address> when that is an @cleartwo.co.uk address, otherwise from `MAIL_FROM_EMAIL` with replies going to you. You are always copied in. Your recipients are remembered for next time, and the page shows "Sent to … at 17:32" for that date. Sends are in the activity log but not on the report.
 - **Copy buttons:** the report is shown in an editable preview. "Copy for email" copies what you see as Calibri 11pt with bold names and real bullets for Outlook, falling back to plain text. "Copy plain text" gives "- " bullets. Browsers only allow full clipboard access over HTTPS. Over plain http a fallback is used that works in current browsers.
 - **Activity log page** (`/activity`, linked from the report): the raw log for one day, filterable by user and type, to check what was recorded.
 - **Times:** every timestamp is set by MySQL (`NOW()` / `CURRENT_TIMESTAMP`) on connections running at time_zone +00:00, so they are stored in UTC. They are always shown in UK time (Europe/London), and report and `/activity` dates are UK days converted to UTC ranges. Timestamps saved before the UTC change were in the server's local time and were left as they are, so some older ones may show up to an hour out.
@@ -174,9 +187,9 @@ index.js              App entry: middleware, sessions, routes
 pm2.config.cjs        PM2 process definition
 db/schema.sql         Table definitions (npm run migrate)
 scripts/              migrate, seed and create-user scripts
-src/routes/           auth, dashboard, users, services (+ tutorials), clients, tickets, kb, files, activity (log work), report
+src/routes/           auth, dashboard, users, profile, services (+ tutorials), clients, tickets, reminders, notifications, kb, files, activity (log work), report
 src/middleware/       login check and CSRF protection
-src/lib/              helpers (ordering, Mermaid flowcharts, fonts, validation)
+src/lib/              helpers (ordering, Mermaid flowcharts, fonts, validation, mailer, report emails, signatures)
 views/                EJS templates
 public/               CSS, JS, fonts, images
 uploads/              uploaded files (git-ignored, created automatically)

@@ -2,7 +2,9 @@
 // UTC start/end and automatic entries are matched on created_at (when the action
 // happened). Manual "Log work" entries are matched on the date the user picked.
 // Each user gets a "<User>'s Work:" list with one bullet per entry, built from what
-// was typed (Log work text, comment text, note text), see userLines() below.
+// was typed (Log work text, note text), see userLines() below. Only Log work, client
+// services and General IT Support (KB) articles are reported; ticket activity
+// (comments, status, priority, reminders) stays in the activity log and ticket history.
 const { pool } = require('../db');
 const { londonDate, londonDayStart } = require('./activity');
 
@@ -93,13 +95,9 @@ const forClient = withClient;
 
 // ---- Bullets ----
 
-// One user's day: one bullet per entry, in this order: client services, tickets,
-// log work, knowledge base, then always "Other IT related tasks.".
+// One user's day: one bullet per entry, in this order: client services, log work,
+// General IT Support (knowledge base), then always "Other IT related tasks.".
 //   Log work:         the typed text with the client put in (see withClient); no client: as typed.
-//   Ticket comment:   the typed comment with the client put in (see withClient).
-//                     Empty comment: "Provided IT support to {client} regarding {ticket title}."
-//   Ticket created / status changed without a comment from this user:
-//                     "Provided IT support to {client} regarding {title}."
 //   Note:             the typed note with the client put in, then " ({service})".
 //   Client services:  "Commenced {service} for {client}." / "Completed {steps} as part of
 //                     {service} for {client}." / "Completed {service} for {client}."
@@ -107,12 +105,11 @@ const forClient = withClient;
 //   Knowledge base:   "Documented a solution for '{title}' in the knowledge base." /
 //                     "Updated the knowledge base article '{title}'."
 // Typed text never gets a prefix of ours; withClient() only inserts the client. Exact duplicate
-// lines are removed. Deletes, unticked steps, reopenings, ticket reminders and
-// client/user/catalogue changes are left out (they are listed on /activity).
+// lines are removed. All ticket activity, deletes, unticked steps, reopenings, sent
+// reports and client/user/catalogue changes are left out (they are listed on /activity).
 function userLines(rows) {
   const section = () => ({ items: [], byKey: new Map() });
-  const sections = { services: section(), tickets: section(), logwork: section(), kb: section() };
-  const commentedTickets = new Set();
+  const sections = { services: section(), logwork: section(), kb: section() };
 
   // Adds an item once per key; later rows for the same key update it in place.
   const item = (sec, key, create) => {
@@ -137,18 +134,6 @@ function userLines(rows) {
         if (text) push(sections.logwork, forClient(text, client));
         break;
       }
-      case 'ticket_comment': {
-        if (!client) break;
-        commentedTickets.add(row.entity_id);
-        const comment = snippet(row.summary);
-        if (comment) push(sections.tickets, withClient(comment, client));
-        else if (subject) push(sections.tickets, `Provided IT support to ${client} regarding ${subject}`);
-        break;
-      }
-      case 'ticket':
-        if (!client || !subject) break;
-        item(sections.tickets, `ticket:${row.entity_id}`, () => ({ ticketId: row.entity_id, client, title: subject }));
-        break;
       case 'note': {
         if (!client) break;
         const text = snippet(row.summary);
@@ -170,9 +155,6 @@ function userLines(rows) {
         if (step && !steps.steps.some((x) => x.toLowerCase() === step.toLowerCase())) steps.steps.push(step);
         break;
       }
-      case 'reminder':
-        // Reminders are history only (ticket History, /activity), never report lines.
-        break;
       case 'kb_article': {
         const a = item(sections.kb, `kb:${row.entity_id}`, () => ({ kb: true, created: false }));
         a.title = subject;
@@ -180,15 +162,12 @@ function userLines(rows) {
         break;
       }
       default:
+        // Tickets, comments, reminders, sent reports, users, ...: not on the report.
         break;
     }
   }
 
   const render = (entry) => {
-    if (entry.ticketId !== undefined) {
-      // Comment bullets already cover tickets this user commented on.
-      return commentedTickets.has(entry.ticketId) ? null : sentence(`Provided IT support to ${entry.client} regarding ${entry.title}`);
-    }
     if (entry.steps) {
       return entry.steps.length ? sentence(`Completed ${joinAnd(entry.steps)} as part of ${entry.phrase} for ${entry.client}`) : null;
     }
@@ -202,7 +181,7 @@ function userLines(rows) {
 
   const seen = new Set();
   const lines = [];
-  for (const sec of [sections.services, sections.tickets, sections.logwork, sections.kb]) {
+  for (const sec of [sections.services, sections.logwork, sections.kb]) {
     for (const entry of sec.items) {
       const line = render(entry);
       if (line && !seen.has(line.toLowerCase())) {

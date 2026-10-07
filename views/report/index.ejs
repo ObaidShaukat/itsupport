@@ -7,9 +7,18 @@
   <div class="actions">
     <a href="/activity?date=<%= from %><%= view === 'me' ? `&user=${currentUser.id}` : view !== 'all' ? `&user=${view}` : '' %>" class="btn btn-ghost"><%- icon('clock') %><span>Activity log</span></a>
     <button type="button" class="btn" data-copy="text" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy plain text</span></button>
-    <button type="button" class="btn btn-primary" data-copy="html" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy for email</span></button>
+    <button type="button" class="btn" data-copy="html" <%= report.days.length ? '' : 'disabled' %>><%- icon('copy') %><span>Copy for email</span></button>
+    <button type="button" class="btn btn-primary" data-send-open <%= ownReport.days.length ? '' : 'disabled' %> title="<%= ownReport.days.length ? 'Email your report' : 'You have nothing to report for these dates' %>"><%- icon('mail') %><span>Send report</span></button>
   </div>
 </header>
+
+<% if (send.sends.length) { %>
+  <div class="report-sent" role="status">
+    <% for (const s of send.sends) { %>
+      <p><%- icon('check-circle') %> <span><%= s.summary %> at <%= new Date(s.created_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/London' }) %><%= from !== to ? ` (${s.activity_date})` : '' %>.</span></p>
+    <% } %>
+  </div>
+<% } %>
 
 <section class="card report-controls">
   <div class="report-nav">
@@ -125,5 +134,70 @@
     </ul>
   <% } %>
 </section>
+
+<%# Send report popup: the signed-in user's own report for these dates. %>
+<dialog class="dialog send-dialog" data-send-dialog aria-labelledby="send-title" <%= view === 'me' ? 'data-copy-page' : '' %>>
+  <form method="post" action="/report/send" class="form" data-send-form>
+    <%- csrfField %>
+    <input type="hidden" name="from" value="<%= from %>">
+    <input type="hidden" name="to" value="<%= to %>">
+    <input type="hidden" name="report" value="" data-send-report>
+    <div class="dialog-head">
+      <h2 id="send-title">Send report</h2>
+      <button type="button" class="icon-btn" aria-label="Close" title="Close" data-send-close><%- icon('x') %></button>
+    </div>
+    <% if (!send.status.enabled) { %>
+      <div class="flash flash-error" role="alert"><%= send.status.message %></div>
+    <% } else if (!send.senderEmail) { %>
+      <div class="flash flash-error" role="alert">Your username is not an email address, so the report cannot be sent from you. Ask for it to be changed on the Users page.</div>
+    <% } else { %>
+      <p class="muted small send-from">
+        From <strong><%= currentUser.name %></strong> &lt;<%= send.senderEmail.endsWith(send.ourDomain) ? send.senderEmail : 'the portal address' %>&gt;, replies to <%= send.senderEmail %>. You are always copied in.
+      </p>
+    <% } %>
+    <label class="field">
+      <span>To</span>
+      <input type="text" name="to_emails" value="<%= send.to %>" required autocomplete="off" list="report-recipients" data-email-tokens placeholder="Type an email and press Enter">
+    </label>
+    <label class="field">
+      <span>CC <span class="muted">(optional)</span></span>
+      <input type="text" name="cc_emails" value="<%= send.cc %>" autocomplete="off" list="report-recipients" data-email-tokens placeholder="Type an email and press Enter">
+    </label>
+    <datalist id="report-recipients">
+      <% for (const r of send.suggestions) { %><option value="<%= r.email %>"><%= r.label %></option><% } %>
+    </datalist>
+    <label class="field">
+      <span>Subject</span>
+      <input type="text" name="subject" value="<%= send.subject %>" required maxlength="200">
+    </label>
+    <div class="field">
+      <span>Message <span class="muted">(click to edit)</span></span>
+      <div class="report-preview send-preview" contenteditable="true" spellcheck="true" data-send-preview>
+        <% for (const day of ownReport.days) { %>
+          <div class="report-day" data-report-day>
+            <% if (ownReport.multiDay) { %><h2 class="report-day-title" data-report-day-title><%= day.label %></h2><% } %>
+            <% for (const u of day.users) { %>
+              <div class="report-user" data-report-user>
+                <h3 data-report-heading><%= u.heading %></h3>
+                <ul><% for (const line of u.lines) { %><li><%= line %></li><% } %></ul>
+              </div>
+            <% } %>
+          </div>
+        <% } %>
+      </div>
+      <% if (send.hasSignature) { %>
+        <div class="send-signature" data-signature-view>
+          <template data-signature-html><%- send.signature %></template>
+        </div>
+      <% } else { %>
+        <p class="muted small">No email signature yet. <a href="/profile#signature">Add one on My profile</a>.</p>
+      <% } %>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" <%= send.status.enabled && send.senderEmail ? '' : 'disabled' %>><%- icon('mail') %><span>Send</span></button>
+      <button type="button" class="btn btn-ghost" data-send-close>Cancel</button>
+    </div>
+  </form>
+</dialog>
 
 <%- include('../partials/foot') %>

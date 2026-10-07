@@ -1,0 +1,67 @@
+<%- include('../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>My profile</h1>
+    <p class="muted">Signed in as <%= me.username %><%= email ? '' : ' (not an email address, so you cannot email reports)' %>.</p>
+  </div>
+</header>
+
+<div class="grid-2 grid-wide-left">
+  <div>
+    <section class="card" id="signature">
+      <h2>Email signature</h2>
+      <p class="muted small">Added to the bottom of Daily Reports you email. Use the toolbar, or choose Paste HTML to paste a signature copied from Outlook.</p>
+      <form method="post" action="/profile/signature" class="form">
+        <%- csrfField %>
+        <%- include('../partials/signature-editor', { value: me.email_signature }) %>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save signature</button>
+          <button type="reset" class="btn btn-ghost">Cancel</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div>
+    <section class="card">
+      <h2>Display name</h2>
+      <form method="post" action="/profile" class="form">
+        <%- csrfField %>
+        <label class="field">
+          <span>Display name</span>
+          <input type="text" name="display_name" value="<%= me.display_name || '' %>" maxlength="100" placeholder="<%= me.username %>">
+          <small class="muted">Shown on reports, tickets and history. Leave blank to show your username.</small>
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="reset" class="btn btn-ghost">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card" id="password">
+      <h2>Password</h2>
+      <form method="post" action="/profile/password" class="form">
+        <%- csrfField %>
+        <label class="field">
+          <span>Current password</span>
+          <input type="password" name="current_password" required autocomplete="current-password">
+        </label>
+        <label class="field">
+          <span>New password</span>
+          <input type="password" name="password" required minlength="8" autocomplete="new-password">
+          <small class="muted">At least 8 characters.</small>
+        </label>
+        <label class="field">
+          <span>Confirm new password</span>
+          <input type="password" name="confirm_password" required minlength="8" autocomplete="new-password">
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Change password</button>
+          <button type="reset" class="btn btn-ghost">Cancel</button>
+        </div>
+      </form>
+    </section>
+  </div>
+</div>
+<%- include('../partials/foot') %>

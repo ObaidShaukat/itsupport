@@ -11,6 +11,7 @@
 //   setting                            -> (no longer written) old report action/issue changes
 //   task                               -> (no longer written) old Tasks feature
 //   reminder                           -> ticket id (ticket reminders; never on the Daily Report)
+//   report                             -> null; action 'sent' when a user emails their Daily Report
 //   inv_person / inv_asset / inv_stock / inv_access / inv_shared -> that inventory record
 //   inv_setting                        -> lists, categories and custom fields
 // related_person_id ties an inventory entry to the person it concerns (their timeline).
@@ -23,9 +24,9 @@
 // activity_date is the UK date of the action (or the date picked for manual work).
 const { pool } = require('../db');
 
-const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder',
+const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report',
   'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting', 'manual'];
-const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed'];
+const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed', 'sent'];
 
 const ACTION_LABELS = {
   created: 'Created',
@@ -38,6 +39,7 @@ const ACTION_LABELS = {
   deleted: 'Deleted',
   uploaded: 'Uploaded',
   completed: 'Completed',
+  sent: 'Sent',
 };
 
 // Today's date in the UK as YYYY-MM-DD. Report days follow UK time.

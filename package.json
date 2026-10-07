@@ -31,6 +31,7 @@
     "marked": "^18.0.14",
     "multer": "^2.4.0",
     "mysql2": "^3.24.5",
+    "nodemailer": "^10.0.15",
     "sanitize-html": "^2.18.0"
   }
 }

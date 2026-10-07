@@ -2,7 +2,7 @@
 <header class="page-head">
   <div>
     <h1>Users</h1>
-    <p class="muted">People who can sign in to the portal.</p>
+    <p class="muted">People who can sign in to the portal. To change your own details, use <a href="/profile">My profile</a>.</p>
   </div>
 </header>
 
@@ -19,14 +19,15 @@
             <strong><%= u.display_name || u.username %></strong>
             <% if (u.id === currentUser.id) { %><span class="badge badge-you">You</span><% } %>
             <div class="muted small"><%= u.username %></div>
-            <div class="muted small"><%= u.role %> · added <%= fmtDate(u.created_at) %></div>
+            <div class="muted small"><%= u.role %> · added <%= fmtDate(u.created_at) %><%= u.email_signature ? ' · has an email signature' : '' %></div>
           </div>
           <div class="row-actions">
             <details class="edit">
               <summary class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></summary>
-              <div class="edit-panel">
+              <div class="edit-panel edit-panel-wide">
                 <form method="post" action="/users/<%= u.id %>" class="form">
                   <%- csrfField %>
+                  <h3 class="edit-section">Details</h3>
                   <label class="field">
                     <span>Display name</span>
                     <input type="text" name="display_name" value="<%= u.display_name || '' %>" maxlength="100" placeholder="<%= u.username %>">
@@ -42,12 +43,22 @@
                 </form>
                 <form method="post" action="/users/<%= u.id %>/password" class="form">
                   <%- csrfField %>
+                  <h3 class="edit-section">Password</h3>
                   <label class="field">
                     <span>New password</span>
                     <input type="password" name="password" required minlength="8" autocomplete="new-password">
                   </label>
                   <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Reset password</button>
+                    <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                  </div>
+                </form>
+                <form method="post" action="/users/<%= u.id %>/signature" class="form">
+                  <%- csrfField %>
+                  <h3 class="edit-section">Email signature</h3>
+                  <%- include('../partials/signature-editor', { value: u.email_signature }) %>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save signature</button>
                     <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
                   </div>
                 </form>
@@ -81,6 +92,11 @@
         <input type="password" name="password" required minlength="8" autocomplete="new-password">
         <small class="muted">At least 8 characters.</small>
       </label>
+      <div class="field">
+        <span>Email signature <span class="muted">(optional)</span></span>
+        <%- include('../partials/signature-editor', { value: '' }) %>
+        <small class="muted">Added to the bottom of Daily Reports this user emails.</small>
+      </div>
       <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add user</span></button>
     </form>
   </section>

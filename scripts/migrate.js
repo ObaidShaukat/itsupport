@@ -10,6 +10,10 @@ const config = require('../src/config');
 const ADDED_COLUMNS = [
   ['users', 'display_name', 'VARCHAR(100) NULL AFTER username'],
   ['users', 'report_view', 'VARCHAR(20) NULL AFTER display_name'],
+  ['users', 'email_signature', 'MEDIUMTEXT NULL AFTER report_view'],
+  ['users', 'report_to', 'VARCHAR(1000) NULL AFTER email_signature'],
+  ['users', 'report_cc', 'VARCHAR(1000) NULL AFTER report_to'],
+  ['reminders', 'email_sent_at', 'DATETIME NULL AFTER snoozed_until'],
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
   // Inventory entries also point at the person they concern (person timeline).
   ['activity_log', 'related_person_id', 'INT UNSIGNED NULL AFTER changes'],

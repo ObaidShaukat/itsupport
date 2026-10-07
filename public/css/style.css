@@ -1483,3 +1483,77 @@ html { scroll-behavior: smooth; }
 /* Lists inside the Log work dialog must not be clipped. */
 .dialog { overflow: visible; }
 .combobox.is-invalid .combobox-input { border-color: var(--red); box-shadow: 0 0 0 3px rgba(196, 40, 28, 0.15); }
+
+/* ---- Email: send report, signatures, My profile ---- */
+
+.nav a.whoami { display: block; padding: 0.35rem 0.8rem; margin-bottom: 0.25rem; font-size: 0.85rem; color: rgba(255, 255, 255, 0.75); box-shadow: none; }
+.nav a.whoami:hover { color: #FFFFFF; }
+.nav a.whoami.active { background: rgba(255, 255, 255, 0.12); color: #FFFFFF; }
+.topbar-profile .icon { color: var(--purple); }
+
+.report-sent { display: grid; gap: 0.25rem; margin: 0 0 1rem; padding: 0.7rem 1rem; border-radius: var(--radius); background: var(--green-soft); color: var(--green); font-size: 0.9rem; }
+.report-sent p { margin: 0; display: flex; gap: 0.4rem; align-items: flex-start; }
+.report-sent .icon { flex: none; width: 16px; height: 16px; margin-top: 0.15rem; }
+
+.dialog.send-dialog { width: min(720px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow-y: auto; }
+.send-dialog .form { gap: 0.9rem; }
+.send-from { margin: 0; }
+.send-preview { max-height: 45vh; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.8rem 1rem; background: var(--surface); }
+.send-signature { margin-top: 0.6rem; padding: 0.6rem 1rem; border: 1px dashed var(--border); border-radius: var(--radius-sm); }
+.send-dialog .form-actions { justify-content: flex-end; position: sticky; bottom: -1.5rem; background: var(--surface); padding: 0.75rem 0 0.25rem; }
+
+.token-input {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  min-height: 2.6rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: text;
+}
+.token-input:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(3, 144, 215, 0.15); }
+.token-input input { flex: 1; min-width: 12rem; border: 0; outline: 0; padding: 0.3rem 0.2rem; background: transparent; font: inherit; box-shadow: none; }
+.token-input input.is-invalid { color: var(--red); }
+.token { display: inline-flex; align-items: center; gap: 0.2rem; padding: 0.15rem 0.3rem 0.15rem 0.6rem; border-radius: 999px; background: var(--blue-soft); color: var(--indigo); font-size: 0.85rem; font-weight: 600; }
+.token-remove { border: 0; background: none; cursor: pointer; color: var(--muted); font-size: 1rem; line-height: 1; padding: 0 0.2rem; border-radius: 999px; }
+.token-remove:hover { color: var(--red); }
+
+.edit-panel.edit-panel-wide { width: min(680px, calc(100vw - 2rem)); max-height: min(80vh, 820px); overflow-y: auto; }
+.edit-section { margin: 0 0 0.25rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--purple); }
+
+.sig-editor { display: grid; gap: 0.5rem; }
+.sig-toolbar { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.sig-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 2.1rem;
+  height: 2.1rem;
+  padding: 0 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--indigo);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+.sig-tool .icon { width: 15px; height: 15px; }
+.sig-tool:hover:not(:disabled) { border-color: var(--purple); color: var(--purple); }
+.sig-tool:disabled { opacity: 0.45; cursor: default; }
+.sig-tool.sig-mode { margin-left: auto; }
+.sig-tool.sig-mode[aria-pressed="true"] { background: var(--blue); border-color: var(--blue); color: #FFFFFF; }
+.sig-area, .sig-source { min-height: 8rem; max-height: 22rem; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0.6rem 0.75rem; background: var(--surface); }
+.sig-area:focus { outline: 0; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(3, 144, 215, 0.15); }
+.sig-area img { max-width: 100%; height: auto; }
+.sig-source { font-family: Consolas, "Courier New", monospace; font-size: 0.82rem; width: 100%; resize: vertical; }
+.sig-preview-wrap { display: grid; gap: 0.3rem; }
+.sig-preview { padding: 0.7rem 0.9rem; border: 1px dashed var(--border); border-radius: var(--radius-sm); background: #FFFFFF; min-height: 3rem; }
+
+@media (max-width: 700px) {
+  .topbar-profile { display: none; }
+  .token-input input { min-width: 8rem; }
+}

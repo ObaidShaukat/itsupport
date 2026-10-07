@@ -3,6 +3,7 @@ const { pool } = require('../db');
 const { str, requireId, flash } = require('../lib/http');
 const { validateUsername, validatePassword, hashPassword } = require('../lib/users');
 const { logActivity } = require('../lib/activity');
+const { readSignature } = require('../lib/signature');
 
 const logUser = (req, id, action, username, summary) => logActivity(null, req.user, {
   type: 'user', id, action, subject: username, summary,
@@ -15,7 +16,7 @@ const password = (value) => (typeof value === 'string' ? value : '');
 const displayName = (value) => str(value, 100) || null;
 
 router.get('/', async (req, res) => {
-  const [users] = await pool.query("SELECT id, username, display_name, role, created_at FROM users ORDER BY COALESCE(NULLIF(display_name, ''), username)");
+  const [users] = await pool.query("SELECT id, username, display_name, email_signature, role, created_at FROM users ORDER BY COALESCE(NULLIF(display_name, ''), username)");
   res.render('users/index', { title: 'Users', users });
 });
 
@@ -23,7 +24,8 @@ router.post('/', async (req, res) => {
   const username = str(req.body.username, 101);
   const display = displayName(req.body.display_name);
   const pass = password(req.body.password);
-  const problem = validateUsername(username) || validatePassword(pass);
+  const signature = readSignature(req.body.email_signature);
+  const problem = validateUsername(username) || validatePassword(pass) || signature.error;
   if (problem) {
     flash(req, 'error', problem);
     return res.redirect('/users');
@@ -31,7 +33,10 @@ router.post('/', async (req, res) => {
 
   const hash = await hashPassword(pass);
   try {
-    const [result] = await pool.query('INSERT INTO users (username, display_name, password_hash, role) VALUES (?, ?, ?, ?)', [username, display, hash, 'admin']);
+    const [result] = await pool.query(
+      'INSERT INTO users (username, display_name, email_signature, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+      [username, display, signature.html, hash, 'admin']
+    );
     await logUser(req, result.insertId, 'created', display || username, `Added user ${display ? `${display} (${username})` : username}`);
   } catch (err) {
     if (err.code !== 'ER_DUP_ENTRY') throw err;
@@ -90,6 +95,28 @@ router.post('/:id/password', async (req, res) => {
     await logUser(req, id, 'updated', user.username, `Reset the password for ${user.username}`);
   }
   flash(req, result.affectedRows ? 'success' : 'error', result.affectedRows ? 'Password reset.' : 'That user no longer exists.');
+  res.redirect('/users');
+});
+
+router.post('/:id/signature', async (req, res) => {
+  const id = requireId(req.params.id);
+  const signature = readSignature(req.body.email_signature);
+  if (signature.error) {
+    flash(req, 'error', signature.error);
+    return res.redirect('/users');
+  }
+  const [[user]] = await pool.query("SELECT COALESCE(NULLIF(display_name, ''), username) AS name, email_signature FROM users WHERE id = ?", [id]);
+  if (!user) {
+    flash(req, 'error', 'That user no longer exists.');
+    return res.redirect('/users');
+  }
+  if ((user.email_signature || null) === signature.html) {
+    flash(req, 'success', 'No changes.');
+    return res.redirect('/users');
+  }
+  await pool.query('UPDATE users SET email_signature = ? WHERE id = ?', [signature.html, id]);
+  await logUser(req, id, 'updated', user.name, `${signature.html ? 'Updated' : 'Removed'} the email signature for ${user.name}`);
+  flash(req, 'success', 'Email signature saved.');
   res.redirect('/users');
 });
 

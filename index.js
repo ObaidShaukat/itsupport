@@ -15,6 +15,8 @@ const { detectFonts } = require('./src/lib/fonts');
 const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./src/lib/tickets');
 const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
 const { ASSET_STATUSES, CONNECTIONS } = require('./src/lib/inventory');
+const { mailStatus } = require('./src/lib/mailer');
+const { sendDueReminderEmails } = require('./src/lib/reminders');
 
 if (!config.sessionSecret) {
   console.error('SESSION_SECRET is not set in .env');
@@ -37,7 +39,8 @@ app.use(helmet({
       // Mermaid writes inline styles into the SVGs it renders.
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-      imgSrc: ["'self'", 'data:'],
+      // https: so email signature images (linked by URL) show in the signature preview.
+      imgSrc: ["'self'", 'data:', 'https:'],
       // Leave http as http if the portal is reached without TLS.
       upgradeInsecureRequests: null,
     },
@@ -128,6 +131,7 @@ const NAV_PREFIXES = [
   ['/tickets', 'tickets'],
   ['/services', 'services'], ['/categories', 'services'], ['/steps', 'services'],
   ['/users', 'users'],
+  ['/profile', 'profile'],
   ['/kb', 'kb'],
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
   ['/inventory', 'inventory'],
@@ -157,6 +161,7 @@ app.use(async (req, res, next) => {
 
 app.use('/', require('./src/routes/dashboard'));
 app.use('/users', require('./src/routes/users'));
+app.use('/profile', require('./src/routes/profile'));
 app.use('/tickets', require('./src/routes/tickets'));
 app.use(require('./src/routes/services'));
 app.use(require('./src/routes/clients'));
@@ -193,3 +198,22 @@ const server = app.listen(PORT, () => {
 });
 // Allow up to an hour per request so large uploads (up to 500 MB) are not cut off.
 server.requestTimeout = 60 * 60 * 1000;
+
+// Reminder emails: every minute, email each newly due reminder to its user (once per
+// due time, see src/lib/reminders.js). Without SMTP settings this does nothing.
+const mail = mailStatus();
+if (!mail.enabled) console.warn(mail.message);
+let emailing = false;
+async function emailDueReminders() {
+  if (emailing) return;
+  emailing = true;
+  try {
+    await sendDueReminderEmails();
+  } catch (err) {
+    console.error('Reminder emails failed:', err.message);
+  } finally {
+    emailing = false;
+  }
+}
+setTimeout(emailDueReminders, 15 * 1000).unref();
+setInterval(emailDueReminders, 60 * 1000).unref();

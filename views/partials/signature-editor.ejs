@@ -1,0 +1,24 @@
+<%#
+  Email signature editor. value: saved (sanitised) HTML. The textarea is the real field
+  (HTML source); public/js/app.js adds the rich text editor (bold, italic, link, image by
+  URL, line break), a "Paste HTML" mode and a live preview. Saved HTML is sanitised again
+  on the server (src/lib/signature.js).
+%>
+<div class="sig-editor" data-signature-editor>
+  <div class="sig-toolbar" role="toolbar" aria-label="Signature formatting" data-sig-toolbar hidden>
+    <button type="button" class="sig-tool" data-sig-cmd="bold" title="Bold" aria-label="Bold"><b>B</b></button>
+    <button type="button" class="sig-tool" data-sig-cmd="italic" title="Italic" aria-label="Italic"><i>I</i></button>
+    <button type="button" class="sig-tool" data-sig-cmd="link" title="Link" aria-label="Insert link"><%- icon('link') %></button>
+    <button type="button" class="sig-tool" data-sig-cmd="image" title="Image by URL" aria-label="Insert image by URL"><%- icon('upload') %><span>Image</span></button>
+    <button type="button" class="sig-tool" data-sig-cmd="break" title="Line break" aria-label="Insert line break">↵</button>
+    <button type="button" class="sig-tool" data-sig-cmd="clear" title="Clear formatting" aria-label="Clear formatting"><%- icon('x') %></button>
+    <button type="button" class="sig-tool sig-mode" data-sig-mode aria-pressed="false">Paste HTML</button>
+  </div>
+  <div class="sig-area" contenteditable="true" spellcheck="true" aria-label="Email signature" data-sig-area hidden></div>
+  <textarea name="email_signature" rows="6" maxlength="1000000" class="sig-source" data-sig-source
+    placeholder="Type your signature, or paste HTML (e.g. copied from Outlook)"><%= locals.value || '' %></textarea>
+  <div class="sig-preview-wrap" data-sig-preview-wrap hidden>
+    <span class="muted small">Preview</span>
+    <div class="sig-preview" data-sig-preview></div>
+  </div>
+</div>
