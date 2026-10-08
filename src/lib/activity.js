@@ -12,9 +12,13 @@
 //   task                               -> (no longer written) old Tasks feature
 //   reminder                           -> ticket id (ticket reminders; never on the Daily Report)
 //   report                             -> null; action 'sent' when a user emails their Daily Report
-//   inv_person / inv_asset / inv_stock / inv_access / inv_shared -> that inventory record
-//   inv_setting                        -> lists, categories and custom fields
-// related_person_id ties an inventory entry to the person it concerns (their timeline).
+//   inv_person / inv_asset / inv_stock / inv_access / inv_shared / inv_setting -> old inventory
+//                                         (no longer written; the module was rebuilt)
+//   inv_record                         -> inventory record id (employee, writer, account, ...)
+//   inv_item                           -> stock item id
+//   inv_config                         -> tabs, fields and stock categories (no id)
+//   inv_secret                         -> record id; a password / PIN was revealed or copied
+// related_person_id ties an inventory entry to the employee record it concerns (their History).
 //   manual                             -> null
 // client_name and subject (ticket title, service name, ...) are snapshots, so the
 // log still reads correctly after the record is renamed or deleted. changes lists
@@ -25,8 +29,10 @@
 const { pool } = require('../db');
 
 const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report',
-  'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting', 'manual'];
-const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed', 'sent'];
+  'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting',
+  'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'manual'];
+const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed', 'sent',
+  'assigned', 'returned', 'viewed', 'copied'];
 
 const ACTION_LABELS = {
   created: 'Created',
@@ -40,6 +46,10 @@ const ACTION_LABELS = {
   uploaded: 'Uploaded',
   completed: 'Completed',
   sent: 'Sent',
+  assigned: 'Assigned',
+  returned: 'Returned',
+  viewed: 'Revealed',
+  copied: 'Copied',
 };
 
 // Today's date in the UK as YYYY-MM-DD. Report days follow UK time.

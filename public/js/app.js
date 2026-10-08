@@ -17,6 +17,8 @@ document.addEventListener('submit', (event) => {
   event.preventDefault();
   pendingForm = form;
   confirmDialog.querySelector('.confirm-message').textContent = message;
+  // The confirm button says "Delete" unless the form names its action (data-confirm-ok).
+  confirmDialog.querySelector('[data-confirm-ok]').textContent = form.dataset.confirmOk || 'Delete';
   confirmDialog.showModal();
   confirmDialog.querySelector('[data-confirm-cancel]').focus();
 });
@@ -628,7 +630,7 @@ document.querySelectorAll('[data-reminder-when]').forEach((box) => {
   });
 });
 
-// ---- Inventory ----
+// ---- Drag-and-drop lists ----
 
 // Generic drag-and-drop ordering: <ul data-sortable-list data-order-url="..."
 // data-order-extra="key=value"> with <li data-id>; saves order=<ids> on drop.
@@ -667,44 +669,6 @@ document.querySelectorAll('[data-sortable-list]').forEach((list) => {
       }
     },
   });
-});
-
-// Custom fields limited to one category show only when that category is chosen.
-document.querySelectorAll('[data-cf-scope]').forEach((form) => {
-  const select = form.querySelector('[data-cf-category-select]');
-  const sync = () => {
-    form.querySelectorAll('[data-cf-category]').forEach((field) => {
-      const show = select && select.value === field.dataset.cfCategory;
-      field.hidden = !show;
-      field.querySelectorAll('input, select, textarea').forEach((input) => { input.disabled = !show; });
-    });
-  };
-  if (select) select.addEventListener('change', sync);
-  sync();
-});
-
-// Asset form: "Sold to / Sold date" only matter when the status is Sold.
-document.querySelectorAll('[data-sold-toggle]').forEach((select) => {
-  const fields = select.form && select.form.querySelector('[data-sold-fields]');
-  if (!fields) return;
-  const sync = () => { fields.hidden = select.value !== 'sold'; };
-  select.addEventListener('change', sync);
-  sync();
-});
-
-// Custom field form: options box only for dropdowns; warn as soon as a label looks
-// like a credential (the server refuses those labels anyway).
-document.querySelectorAll('[data-field-form]').forEach((form) => {
-  const type = form.querySelector('[data-field-type]');
-  const options = form.querySelector('[data-options-field]');
-  const label = form.querySelector('[data-credential-check]');
-  const warning = form.querySelector('[data-credential-warning]');
-  const syncType = () => { if (options) options.hidden = type.value !== 'select'; };
-  const syncLabel = () => { if (warning) warning.hidden = !/pass|\bpin\b/i.test(label.value); };
-  type.addEventListener('change', syncType);
-  label.addEventListener('input', syncLabel);
-  syncType();
-  syncLabel();
 });
 
 // Selects marked data-autosubmit submit their form when changed (e.g. Daily Report View).
@@ -1514,4 +1478,306 @@ document.addEventListener('mouseover', (event) => {
     const text = cell.textContent.replace(/\s+/g, ' ').trim();
     if (text) cell.title = text;
   }
+});
+
+// ---- Inventory grids ----
+// [data-grid] tables (views/inventory/_grid.ejs): search, click a header to sort, a filter
+// row, CSV export of the rows shown, drag a field header to reorder (saved for everyone at
+// data-order-url), drag a header edge to resize (saved per user), click a row to open it.
+// Password / PIN cells only ever hold "••••••" here, so exports never contain them.
+const invToken = () => document.querySelector('meta[name="csrf-token"]')?.content || '';
+const invPost = (url, data) => fetch(url, {
+  method: 'POST',
+  headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({ _csrf: invToken(), ...data }),
+  credentials: 'same-origin',
+}).then((r) => r.json().catch(() => ({ ok: false })).then((d) => ({ status: r.status, ...d }))).catch(() => ({ ok: false }));
+
+function csvValue(value) {
+  const s = String(value ?? '');
+  const safe = /^[=+\-@]/.test(s) ? `'${s}` : s; // no formulas when opened in Excel
+  return /[",\r\n]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+}
+
+document.querySelectorAll('[data-grid]').forEach((root) => {
+  const table = root.querySelector('table.grid');
+  if (!table) return;
+  const tbody = table.tBodies[0];
+  const headRow = table.tHead.rows[0];
+  const filterRow = root.querySelector('[data-grid-filters]');
+  const search = root.querySelector('[data-grid-search]');
+  const count = root.querySelector('[data-grid-count]');
+  const emptyMsg = root.querySelector('[data-grid-empty]');
+  const status = root.querySelector('[data-grid-status]');
+  const rows = [...tbody.rows];
+  const colIndex = (key) => [...headRow.cells].findIndex((th) => th.dataset.col === key);
+  const say = (msg, isError) => {
+    if (!status) return;
+    status.textContent = msg;
+    status.classList.toggle('is-error', Boolean(isError));
+    status.hidden = !msg;
+    if (msg && !isError) setTimeout(() => { status.hidden = true; }, 2000);
+  };
+  const setTableWidth = () => {
+    const total = [...table.querySelectorAll('colgroup col')].reduce((n, c) => n + (parseFloat(c.style.width) || 0), 0);
+    table.style.width = `${total}px`;
+  };
+
+  // Open the record when a row (not a link or button in it) is clicked, or Enter pressed.
+  tbody.addEventListener('click', (e) => {
+    if (e.target.closest('a, button, input, select, label, .secret')) return;
+    const tr = e.target.closest('tr[data-href]');
+    if (tr) window.location.href = tr.dataset.href;
+  });
+  tbody.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && e.target.matches('tr[data-href]')) window.location.href = e.target.dataset.href;
+  });
+
+  // Search + per-column filters.
+  function apply() {
+    const q = (search ? search.value : '').trim().toLowerCase();
+    const filters = [...root.querySelectorAll('[data-grid-filter]')]
+      .map((el) => ({ i: colIndex(el.dataset.gridFilter), v: el.value.trim().toLowerCase(), exact: el.tagName === 'SELECT' }))
+      .filter((f) => f.v && f.i >= 0);
+    let shown = 0;
+    for (const tr of rows) {
+      let ok = !q || [...tr.cells].some((td) => (td.dataset.x || '').toLowerCase().includes(q));
+      for (const f of filters) {
+        if (!ok) break;
+        const text = ((tr.cells[f.i] && tr.cells[f.i].dataset.f) || '').toLowerCase();
+        ok = f.exact ? text === f.v : text.includes(f.v);
+      }
+      tr.hidden = !ok;
+      if (ok) shown += 1;
+    }
+    if (count) count.textContent = `${shown} ${shown === 1 ? 'row' : 'rows'}${shown !== rows.length ? ` of ${rows.length}` : ''}`;
+    if (emptyMsg) emptyMsg.hidden = shown > 0;
+  }
+  if (search) search.addEventListener('input', apply);
+  root.querySelectorAll('[data-grid-filter]').forEach((el) => el.addEventListener('input', apply));
+
+  const filterToggle = root.querySelector('[data-grid-filter-toggle]');
+  if (filterToggle && filterRow) {
+    filterToggle.addEventListener('click', () => {
+      const show = filterRow.hidden;
+      filterRow.hidden = !show;
+      filterToggle.setAttribute('aria-pressed', String(show));
+      if (!show) {
+        filterRow.querySelectorAll('input, select').forEach((el) => { el.value = ''; });
+        apply();
+      } else {
+        const first = filterRow.querySelector('input, select');
+        if (first) first.focus();
+      }
+    });
+  }
+
+  // Sort by a column (click again to reverse). Empty values always go last.
+  let sorted = { key: null, dir: 1 };
+  root.querySelectorAll('[data-grid-sort]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const key = button.dataset.gridSort;
+      sorted = { key, dir: sorted.key === key ? -sorted.dir : 1 };
+      const i = colIndex(key);
+      const type = headRow.cells[i].dataset.sortType;
+      const val = (tr) => (tr.cells[i] && tr.cells[i].dataset.v) || '';
+      rows.sort((a, b) => {
+        const x = val(a);
+        const y = val(b);
+        if (!x || !y) return Number(!x) - Number(!y);
+        if (type === 'number') return (parseFloat(x) - parseFloat(y)) * sorted.dir;
+        return x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' }) * sorted.dir;
+      });
+      rows.forEach((tr) => tbody.appendChild(tr));
+      [...headRow.cells].forEach((th, j) => {
+        th.setAttribute('aria-sort', j === i ? (sorted.dir > 0 ? 'ascending' : 'descending') : 'none');
+        const arrow = th.querySelector('.sort-arrow');
+        if (arrow) arrow.textContent = j === i ? (sorted.dir > 0 ? '▲' : '▼') : '↕';
+      });
+    });
+  });
+
+  // CSV of the rows shown, columns in their current order.
+  const csvButton = root.querySelector('[data-grid-csv]');
+  if (csvButton) {
+    csvButton.addEventListener('click', () => {
+      const head = [...headRow.cells].map((th) => th.title || th.textContent.trim());
+      const lines = [head, ...rows.filter((tr) => !tr.hidden).map((tr) => [...tr.cells].map((td) => td.dataset.x || ''))];
+      const csv = `﻿${lines.map((l) => l.map(csvValue).join(',')).join('\r\n')}`;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      a.download = `${root.dataset.csvName || 'export'}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    });
+  }
+
+  // Resize: drag the right edge of a header. Saved for this user.
+  root.querySelectorAll('[data-grid-resize]').forEach((handle) => {
+    handle.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const th = handle.closest('th');
+      const key = th.dataset.col;
+      const col = [...table.querySelectorAll('colgroup col')].find((c) => c.dataset.col === key);
+      if (!col) return;
+      const startX = e.clientX;
+      const startW = parseFloat(col.style.width) || th.offsetWidth;
+      const wasDraggable = th.draggable;
+      th.draggable = false;
+      try { handle.setPointerCapture(e.pointerId); } catch (err) { /* moves still arrive */ }
+      root.classList.add('is-resizing');
+      const move = (ev) => {
+        col.style.width = `${Math.max(50, Math.min(800, startW + ev.clientX - startX))}px`;
+        setTableWidth();
+      };
+      const up = async () => {
+        handle.removeEventListener('pointermove', move);
+        th.draggable = wasDraggable;
+        root.classList.remove('is-resizing');
+        const width = Math.round(parseFloat(col.style.width));
+        if (width !== Math.round(startW)) {
+          const res = await invPost('/inventory/widths', { key, width });
+          if (!res.ok) say('The width could not be saved.', true);
+        }
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', up, { once: true });
+      handle.addEventListener('pointercancel', up, { once: true });
+    });
+  });
+
+  // Reorder: drag a field header onto another. Saved for everyone.
+  const orderUrl = root.dataset.orderUrl;
+  if (orderUrl) {
+    let dragKey = null;
+    const moveColumn = (from, to) => {
+      const parents = [table.querySelector('colgroup'), headRow, filterRow, ...tbody.rows].filter(Boolean);
+      for (const parent of parents) {
+        const cells = parent.children;
+        const node = cells[from];
+        const target = cells[to];
+        if (!node || !target) continue;
+        if (to > from) parent.insertBefore(node, target.nextSibling);
+        else parent.insertBefore(node, target);
+      }
+    };
+    headRow.querySelectorAll('th[data-field-id]').forEach((th) => {
+      th.addEventListener('dragstart', (e) => {
+        dragKey = th.dataset.col;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragKey);
+        th.classList.add('is-dragging');
+      });
+      th.addEventListener('dragend', () => {
+        th.classList.remove('is-dragging');
+        headRow.querySelectorAll('.is-drop-target').forEach((x) => x.classList.remove('is-drop-target'));
+      });
+      th.addEventListener('dragover', (e) => {
+        if (!dragKey || dragKey === th.dataset.col) return;
+        e.preventDefault();
+        th.classList.add('is-drop-target');
+      });
+      th.addEventListener('dragleave', () => th.classList.remove('is-drop-target'));
+      th.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        th.classList.remove('is-drop-target');
+        const from = colIndex(dragKey);
+        const to = colIndex(th.dataset.col);
+        dragKey = null;
+        if (from < 0 || to < 0 || from === to) return;
+        moveColumn(from, to);
+        const order = [...headRow.querySelectorAll('th[data-field-id]')].map((x) => x.dataset.fieldId).join(',');
+        say('Saving column order…');
+        const res = await invPost(orderUrl, { order });
+        if (res.ok) say('Column order saved.');
+        else {
+          say(`${res.error || 'The column order could not be saved.'} Reloading…`, true);
+          setTimeout(() => window.location.reload(), 1500);
+        }
+      });
+    });
+  }
+  apply();
+});
+
+// Password / PIN: reveal (eye) shows the value for 30 seconds; copy puts it on the
+// clipboard without showing it. Every reveal and copy is logged on the server.
+document.addEventListener('click', async (e) => {
+  const button = e.target.closest && e.target.closest('[data-secret-reveal], [data-secret-copy]');
+  if (!button) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const box = button.closest('[data-secret]');
+  const valueEl = box.querySelector('[data-secret-value]');
+  const isCopy = button.hasAttribute('data-secret-copy');
+  const hide = () => {
+    clearTimeout(box.hideTimer);
+    valueEl.textContent = '••••••';
+    box.classList.remove('is-revealed', 'is-error');
+  };
+  if (!isCopy && box.classList.contains('is-revealed')) {
+    hide();
+    return;
+  }
+  button.disabled = true;
+  const res = await invPost('/inventory/secret', { record_id: box.dataset.record, field_id: box.dataset.field, action: isCopy ? 'copy' : 'reveal' });
+  button.disabled = false;
+  clearTimeout(box.hideTimer);
+  if (!res.ok) {
+    valueEl.textContent = res.error || 'Could not load it.';
+    box.classList.add('is-error');
+    box.hideTimer = setTimeout(hide, 5000);
+    return;
+  }
+  if (isCopy) {
+    try {
+      await copyPlain(res.value);
+      valueEl.textContent = 'Copied';
+    } catch (err) {
+      valueEl.textContent = 'Copy blocked';
+    }
+    box.hideTimer = setTimeout(hide, 1500);
+    return;
+  }
+  valueEl.textContent = res.value;
+  box.classList.add('is-revealed');
+  box.hideTimer = setTimeout(hide, 30000);
+});
+
+// Add multiple stock items: one serial / asset number row per item.
+document.querySelectorAll('[data-multi-form]').forEach((form) => {
+  const qty = form.querySelector('[data-multi-quantity]');
+  const list = form.querySelector('[data-multi-rows]');
+  if (!qty || !list) return;
+  const sync = () => {
+    const n = Math.min(200, Math.max(1, Number.parseInt(qty.value, 10) || 1));
+    while (list.children.length < n) {
+      const i = list.children.length + 1;
+      const li = document.createElement('li');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.name = 'serials';
+      input.maxLength = 150;
+      input.placeholder = `Item ${i}`;
+      input.setAttribute('aria-label', `Serial / asset number ${i}`);
+      li.appendChild(input);
+      list.appendChild(li);
+    }
+    while (list.children.length > n) list.lastElementChild.remove();
+  };
+  qty.addEventListener('input', sync);
+  sync();
+});
+
+// Columns form: the options box only matters for dropdowns.
+document.querySelectorAll('[data-field-form]').forEach((form) => {
+  const type = form.querySelector('[data-field-type]');
+  const options = form.querySelector('[data-options-field]');
+  if (!type || !options) return;
+  const sync = () => { options.hidden = type.value !== 'dropdown'; };
+  type.addEventListener('change', sync);
+  sync();
 });

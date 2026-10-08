@@ -1,0 +1,21 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="<%= scope.url %>">Columns · <%= scope.name %></a></p>
+    <h1>Delete the column "<%= field.label %>"?</h1>
+  </div>
+</header>
+<section class="card card-narrow">
+  <% if (count) { %>
+    <div class="flash flash-error" role="alert"><strong><%= count %> <%= count === 1 ? 'record has' : 'records have' %> data in this column.</strong> It is deleted with the column and cannot be brought back.</div>
+  <% } else { %>
+    <p>No records have data in this column.</p>
+  <% } %>
+  <p class="muted">If you only want it out of the way, edit the column and untick "Visible" instead.</p>
+  <form method="post" action="/inventory/fields/<%= field.id %>/delete" class="form-actions">
+    <%- csrfField %>
+    <button type="submit" class="btn btn-danger"><%- icon('trash') %><span>Delete column<%= count ? ` and ${count} value${count === 1 ? '' : 's'}` : '' %></span></button>
+    <a href="<%= scope.url %>" class="btn btn-ghost">Cancel</a>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

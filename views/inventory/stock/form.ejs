@@ -1,47 +1,132 @@
 <%- include('../../partials/head') %>
+<%
+  // item: null for a new item. input: typed or saved values (brand, model, ...); values: extra fields by id.
+  const isNew = !item;
+  const action = isNew ? '/inventory/stock' : `/inventory/stock/${item.id}`;
+%>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/stock">Stock</a></p>
-    <h1><%= item.id ? 'Edit stock item' : 'Add stock item' %></h1>
+    <p class="crumbs"><a href="/inventory/stock">Stock</a><% if (!isNew) { %> / <a href="/inventory/stock?category=<%= item.category_id %>"><%= item.category_name %></a><% } %></p>
+    <h1><%= isNew ? 'Add stock item' : title %></h1>
+    <% if (!isNew) { %>
+      <p class="emp-status">
+        <span class="stock-status stock-status-<%= item.status %>"><%= stockStatuses[item.status] %></span>
+        <% if (item.employee_id) { %><span>with <a href="/inventory/r/<%= item.employee_id %>" class="person"><%- avatar({ name: item.employee_name }, 'xs') %><%= item.employee_name %></a></span><% } %>
+      </p>
+    <% } %>
   </div>
+  <% if (!isNew) { %>
+    <div class="actions">
+      <%- include('../../partials/delete', { action: `/inventory/stock/${item.id}/delete`, confirm: `Delete ${title}? Its history stays in the activity log.`, text: 'Delete' }) %>
+    </div>
+  <% } %>
 </header>
-<%- include('../_tabs') %>
+<%- include('_nav', { active: 'items' }) %>
 
-<section class="card card-narrow">
-  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
-  <form method="post" action="<%= item.id ? `/inventory/stock/${item.id}` : '/inventory/stock' %>" class="form" data-cf-scope>
-    <%- csrfField %>
-    <div class="form-row">
-      <label class="field">
-        <span>Category</span>
-        <select name="category_id" data-cf-category-select>
-          <option value="">Choose…</option>
-          <% for (const c of stockCategories) { %><option value="<%= c.id %>" <%= item.category_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
-        </select>
-      </label>
-      <label class="field">
-        <span>Connection</span>
-        <select name="connection">
-          <% for (const [k, label] of Object.entries(invConnections)) { %><option value="<%= k %>" <%= item.connection === k ? 'selected' : '' %>><%= label %></option><% } %>
-        </select>
-      </label>
+<% if (!category) { %>
+  <section class="card"><p class="empty">Add a stock category first. <a href="/inventory/stock/categories">Categories</a></p></section>
+<% } else { %>
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+    <% if (isNew) { %>
+      <form method="get" action="/inventory/stock/new" class="form inv-category-pick">
+        <label class="field">
+          <span>Category</span>
+          <select name="category" data-autosubmit>
+            <% for (const c of categories) { %><option value="<%= c.id %>" <%= c.id === category.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+          </select>
+        </label>
+        <noscript><button type="submit" class="btn btn-small">Change</button></noscript>
+      </form>
+    <% } %>
+    <form method="post" action="<%= action %>" class="form" autocomplete="off">
+      <%- csrfField %>
+      <% if (isNew) { %>
+        <input type="hidden" name="category_id" value="<%= category.id %>">
+      <% } else { %>
+        <label class="field">
+          <span>Category</span>
+          <select name="category_id">
+            <% for (const c of categories) { %><option value="<%= c.id %>" <%= c.id === category.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+          </select>
+          <small class="muted">Changing the category removes the extra field values of the old one.</small>
+        </label>
+      <% } %>
+      <div class="form-row">
+        <label class="field"><span>Brand</span><input type="text" name="brand" value="<%= input.brand || '' %>" maxlength="100"></label>
+        <label class="field"><span>Model</span><input type="text" name="model" value="<%= input.model || '' %>" maxlength="150"></label>
+      </div>
+      <div class="form-row">
+        <label class="field"><span>Serial / asset number</span><input type="text" name="serial" value="<%= input.serial || '' %>" maxlength="150"></label>
+        <label class="field">
+          <span>Status</span>
+          <select name="status">
+            <% for (const [k, label] of Object.entries(stockStatuses)) { %>
+              <% if (k === 'assigned' && (isNew || !item.employee_id)) continue; %>
+              <option value="<%= k %>" <%= (input.status || 'available') === k ? 'selected' : '' %>><%= label %></option>
+            <% } %>
+          </select>
+          <% if (!isNew && item.employee_id) { %><small class="muted">Choosing another status returns it from <%= item.employee_name %>.</small><% } %>
+        </label>
+      </div>
+      <% const extra = category.fields.filter((f) => f.visible); %>
+      <% if (extra.length) { %>
+        <div class="inv-form-grid">
+          <% for (const f of extra) { %>
+            <div class="<%= f.field_type === 'longtext' ? 'span-2' : '' %>"><%- include('../_field-input', { field: f, value: values[f.id] }) %></div>
+          <% } %>
+        </div>
+      <% } %>
+      <label class="field"><span>Notes</span><textarea name="notes" rows="3" maxlength="5000"><%= input.notes || '' %></textarea></label>
+      <% if (isNew) { %>
+        <label class="field">
+          <span>Assign to <span class="muted">(optional)</span></span>
+          <select name="employee_id" data-combobox>
+            <option value="">Keep in stock</option>
+            <% for (const e of employees) { %><option value="<%= e.id %>"><%= e.name %></option><% } %>
+          </select>
+        </label>
+      <% } %>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save</button>
+        <% if (isNew) { %><button type="submit" name="again" value="1" class="btn">Save and add another</button><% } %>
+        <a href="<%= isNew ? '/inventory/stock' : `/inventory/stock?category=${item.category_id}` %>" class="btn btn-ghost">Cancel</a>
+      </div>
+    </form>
+  </section>
+
+  <% if (!isNew) { %>
+    <div>
+      <section class="card">
+        <h2>Assignment</h2>
+        <% if (item.employee_id) { %>
+          <p>Assigned to <a href="/inventory/r/<%= item.employee_id %>"><strong><%= item.employee_name %></strong></a>.</p>
+          <form method="post" action="/inventory/stock/<%= item.id %>/unassign" class="inline" data-confirm="Return this item to stock?" data-confirm-ok="Return">
+            <%- csrfField %>
+            <button type="submit" class="btn">Return to stock</button>
+          </form>
+        <% } else if (item.status === 'available') { %>
+          <form method="post" action="/inventory/stock/<%= item.id %>/assign" class="form">
+            <%- csrfField %>
+            <label class="field">
+              <span>Assign to</span>
+              <select name="employee_id" required data-combobox>
+                <option value="">Choose an employee…</option>
+                <% for (const e of employees) { %><option value="<%= e.id %>"><%= e.name %></option><% } %>
+              </select>
+            </label>
+            <div><button type="submit" class="btn btn-primary">Assign</button></div>
+          </form>
+        <% } else { %>
+          <p class="muted">Only available items can be assigned. Set the status to Available first.</p>
+        <% } %>
+      </section>
+      <section class="card">
+        <%- include('../../partials/history', { entries: history, open: true }) %>
+      </section>
     </div>
-    <div class="form-row">
-      <label class="field"><span>Brand</span><input type="text" name="brand" value="<%= item.brand || '' %>" maxlength="100"></label>
-      <label class="field"><span>Model / description *</span><input type="text" name="model" value="<%= item.model || '' %>" required maxlength="255"></label>
-    </div>
-    <label class="field"><span>Location</span><input type="text" name="location" value="<%= item.location || '' %>" maxlength="150" placeholder="e.g. Office store room"></label>
-    <div class="form-row">
-      <label class="field"><span>Total quantity</span><input type="number" name="total_qty" value="<%= item.total_qty ?? 0 %>" min="0" required></label>
-      <label class="field"><span>Damaged</span><input type="number" name="damaged_qty" value="<%= item.damaged_qty ?? 0 %>" min="0"></label>
-    </div>
-    <% if (item.id) { %><p class="muted small"><%= item.assigned_qty || 0 %> currently assigned to people.</p><% } %>
-    <%- include('../_cf-inputs', { fields, values }) %>
-    <label class="field"><span>Notes</span><textarea name="notes" rows="3" maxlength="5000"><%= item.notes || '' %></textarea></label>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary"><%= item.id ? 'Save' : 'Add stock item' %></button>
-      <a href="<%= item.id ? `/inventory/stock/${item.id}` : '/inventory/stock' %>" class="btn btn-ghost">Cancel</a>
-    </div>
-  </form>
-</section>
+  <% } %>
+</div>
+<% } %>
 <%- include('../../partials/foot') %>

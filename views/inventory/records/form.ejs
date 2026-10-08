@@ -1,0 +1,37 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/t/<%= tab.id %>"><%= tab.name %></a><% if (record) { %> / <a href="/inventory/r/<%= record.id %>"><%= recordTitle %></a><% } %></p>
+    <h1><%= record ? `Edit ${recordTitle}` : `Add to ${tab.name}` %></h1>
+  </div>
+</header>
+<%- include('../_tabs', { active: tab.id }) %>
+
+<section class="card">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <% const plain = fields.filter((f) => f.field_type !== 'access'); const access = fields.filter((f) => f.field_type === 'access'); %>
+  <form method="post" action="<%= action %>" class="form" autocomplete="off">
+    <%- csrfField %>
+    <div class="inv-form-grid">
+      <% for (const f of plain) { %>
+        <div class="<%= f.field_type === 'longtext' ? 'span-2' : '' %>">
+          <%- include('../_field-input', { field: f, value: input[f.id], secretSet: record && record.secretsSet && record.secretsSet[f.id] }) %>
+        </div>
+      <% } %>
+    </div>
+    <% if (access.length) { %>
+      <fieldset class="inv-access-set">
+        <legend>Access</legend>
+        <div class="inv-access-grid">
+          <% for (const f of access) { %><%- include('../_field-input', { field: f, value: input[f.id] }) %><% } %>
+        </div>
+      </fieldset>
+    <% } %>
+    <% if (!fields.length) { %><p class="empty">This tab has no visible columns yet. <a href="/inventory/t/<%= tab.id %>/columns">Add columns</a>.</p><% } %>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="<%= back %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

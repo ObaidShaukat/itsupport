@@ -1,0 +1,28 @@
+<%# Column form fields (add and edit). f: the field or null; types: { key: label }. %>
+<label class="field">
+  <span>Name</span>
+  <input type="text" name="label" value="<%= f ? f.label : '' %>" required maxlength="100">
+</label>
+<div class="form-row">
+  <label class="field">
+    <span>Type</span>
+    <select name="field_type" data-field-type>
+      <% for (const [key, label] of Object.entries(types)) { %>
+        <option value="<%= key %>" <%= (f ? f.field_type : 'text') === key ? 'selected' : '' %>><%= label %></option>
+      <% } %>
+    </select>
+  </label>
+  <label class="field">
+    <span>Column width (px)</span>
+    <input type="text" inputmode="numeric" name="width" value="<%= f ? f.width : 160 %>" maxlength="3">
+  </label>
+</div>
+<label class="field" data-options-field>
+  <span>Options <span class="muted">(one per line)</span></span>
+  <textarea name="options" rows="4"><%= f && f.options ? f.options : '' %></textarea>
+</label>
+<div class="form-actions">
+  <label class="checkbox-field"><input type="checkbox" name="required" value="1" <%= f && f.required ? 'checked' : '' %>> <span>Required</span></label>
+  <input type="hidden" name="visible" value="0">
+  <label class="checkbox-field"><input type="checkbox" name="visible" value="1" <%= !f || f.visible ? 'checked' : '' %>> <span>Visible</span></label>
+</div>

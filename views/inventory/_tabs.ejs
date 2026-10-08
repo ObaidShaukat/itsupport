@@ -1,5 +1,13 @@
-<nav class="tabs inv-tabs" aria-label="Inventory sections">
-  <% for (const t of invTabs) { %>
-    <a href="<%= t.href %>" class="<%= t.key === invTab ? 'active' : '' %>" <%- t.key === invTab ? 'aria-current="page"' : '' %>><%= t.label %></a>
+<%#
+  Inventory tab bar. active: the current tab id, or 'settings'. Tabs come from
+  res.locals.invTabs (src/routes/inventory/index.js).
+%>
+<nav class="tabs inv-tabs" aria-label="Inventory">
+  <% for (const t of (locals.invTabs || [])) { %>
+    <a href="<%= t.href %>" class="<%= locals.active === t.id ? 'active' : '' %>"><%= t.name %></a>
   <% } %>
+  <a href="/inventory/settings/tabs" class="inv-tabs-settings <%= locals.active === 'settings' ? 'active' : '' %>" title="Inventory tabs settings"><%- icon('sliders') %><span>Tabs</span></a>
 </nav>
+<% if (locals.invKey && !invKey.ok) { %>
+  <div class="flash flash-info" role="status"><%- icon('lock') %> <%= invKey.message %> Add a 64-character hex ENCRYPTION_KEY to .env and restart the portal.</div>
+<% } %>

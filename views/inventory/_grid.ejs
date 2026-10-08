@@ -1,0 +1,65 @@
+<%#
+  Inventory table with search, sort (click a header), filter row, CSV export, drag a
+  field header to reorder (orderUrl, saved for everyone) and drag a header edge to resize
+  (saved per user). Rows open their record (row.href). Behaviour: "Inventory grids" in
+  public/js/app.js. columns, rows, csvName, orderUrl, empty.
+%>
+<% const totalWidth = columns.reduce((n, c) => n + c.width, 0); %>
+<div class="grid-card card" data-grid data-csv-name="<%= csvName %>" <% if (locals.orderUrl) { %>data-order-url="<%= orderUrl %>"<% } %>>
+  <div class="grid-toolbar">
+    <label class="search-field grid-search">
+      <%- icon('search') %>
+      <span class="visually-hidden">Search</span>
+      <input type="search" placeholder="Search" autocomplete="off" data-grid-search>
+    </label>
+    <button type="button" class="btn btn-small" data-grid-filter-toggle aria-pressed="false"><%- icon('sliders') %><span>Filter</span></button>
+    <button type="button" class="btn btn-small" data-grid-csv><%- icon('download') %><span>CSV</span></button>
+    <span class="muted small grid-count" data-grid-count><%= rows.length %> <%= rows.length === 1 ? 'row' : 'rows' %></span>
+    <span class="small grid-status" data-grid-status hidden></span>
+  </div>
+  <% if (!rows.length) { %>
+    <p class="empty"><%= locals.empty || 'Nothing here yet.' %></p>
+  <% } else { %>
+    <div class="grid-wrap">
+      <table class="grid" style="width: <%= totalWidth %>px">
+        <colgroup>
+          <% for (const c of columns) { %><col data-col="<%= c.key %>" style="width: <%= c.width %>px"><% } %>
+        </colgroup>
+        <thead>
+          <tr>
+            <% for (const [i, c] of columns.entries()) { %>
+              <th data-col="<%= c.key %>" data-sort-type="<%= c.sort %>" <%= c.fieldId && locals.orderUrl ? `data-field-id=${c.fieldId} draggable=true` : '' %> class="<%= c.align === 'right' ? 'right' : '' %>" title="<%= c.label %>">
+                <button type="button" class="grid-sort" data-grid-sort="<%= c.key %>"><span><%= c.label %></span><span class="sort-arrow" aria-hidden="true">↕</span></button>
+                <span class="grid-resize" data-grid-resize aria-hidden="true"></span>
+              </th>
+            <% } %>
+          </tr>
+          <tr class="grid-filters" data-grid-filters hidden>
+            <% for (const [i, c] of columns.entries()) { %>
+              <th>
+                <% if (c.filter.type === 'select') { %>
+                  <select data-grid-filter="<%= c.key %>" aria-label="Filter <%= c.label %>">
+                    <option value="">Any</option>
+                    <% for (const o of c.filter.options) { %><option value="<%= o %>"><%= o %></option><% } %>
+                  </select>
+                <% } else { %>
+                  <input type="search" data-grid-filter="<%= c.key %>" placeholder="Filter" aria-label="Filter <%= c.label %>">
+                <% } %>
+              </th>
+            <% } %>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const row of rows) { %>
+            <tr data-href="<%= row.href %>" tabindex="0" aria-label="Open <%= row.title %>">
+              <% for (const [i, cell] of row.cells.entries()) { %>
+                <td class="<%= columns[i] && columns[i].align === 'right' ? 'right' : '' %>" data-v="<%= cell.sort %>" data-x="<%= cell.text %>" data-f="<%= cell.filterText !== undefined ? cell.filterText : cell.text %>"><%- include('_cell', { cell }) %></td>
+              <% } %>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <p class="empty" data-grid-empty hidden>No rows match.</p>
+  <% } %>
+</div>

@@ -1,0 +1,51 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Stock breakdown</h1>
+    <p class="muted">Category, brand and model with how many there are and who is using them (sold and disposed items are left out). Laptops, desktops and Macs are grouped Windows / Apple; mice by connection type.</p>
+  </div>
+  <div class="actions">
+    <a href="/inventory/stock/report.csv" class="btn"><%- icon('download') %><span>CSV</span></a>
+    <a href="/inventory/stock/report.xlsx" class="btn btn-primary"><%- icon('download') %><span>Excel</span></a>
+  </div>
+</header>
+<%- include('_nav', { active: 'report' }) %>
+
+<%- include('../../partials/search', { target: '#breakdown', placeholder: 'Search category, brand, model or person' }) %>
+<div id="breakdown" class="breakdown">
+  <% const withItems = report.filter((c) => c.total); %>
+  <% if (!withItems.length) { %><p class="empty card">No stock yet.</p><% } %>
+  <% for (const cat of withItems) { %>
+    <section class="card breakdown-cat" data-filter-group>
+      <div class="card-head">
+        <h2 data-filter-label><%= cat.name %></h2>
+        <span class="chip chip-category"><%= cat.total %> in total</span>
+      </div>
+      <div class="table-wrap">
+        <table class="table breakdown-table">
+          <thead><tr><th class="w-20">Brand</th><th>Model</th><th class="num w-num">Quantity</th><th class="num w-num">Available</th><th class="w-25">Employees using it</th></tr></thead>
+          <tbody>
+            <% for (const g of cat.groups) { %>
+              <% if (g.name) { %><tr class="group-row"><td colspan="5"><%= g.name %> <span class="muted">· <%= g.total %></span></td></tr><% } %>
+              <% for (const b of g.brands) { %>
+                <% for (const [i, m] of b.models.entries()) { %>
+                  <tr data-filter-item data-search="<%= cat.name %> <%= g.name || '' %> <%= b.brand %> <%= m.model %> <%= m.employees.join(' ') %>">
+                    <td><%= i === 0 ? b.brand : '' %></td>
+                    <td><%= m.model %></td>
+                    <td class="num"><%= m.quantity %></td>
+                    <td class="num"><%= m.available || '' %></td>
+                    <td title="<%= m.employees.join(', ') %>"><%= m.employees.join(', ') || '—' %></td>
+                  </tr>
+                <% } %>
+                <tr class="total-row"><td><%= b.brand %> total</td><td></td><td class="num"><%= b.total %></td><td></td><td></td></tr>
+              <% } %>
+            <% } %>
+            <tr class="grand-row"><td><%= cat.name %> total</td><td></td><td class="num"><%= cat.total %></td><td></td><td></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% } %>
+  <p class="empty" data-filter-empty hidden>Nothing matches your search.</p>
+</div>
+<%- include('../../partials/foot') %>

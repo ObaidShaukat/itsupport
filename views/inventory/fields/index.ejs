@@ -1,0 +1,62 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="<%= scope.back %>"><%= scope.kind === 'tab' ? scope.name : 'Stock categories' %></a></p>
+    <h1>Columns · <%= scope.name %></h1>
+    <p class="muted"><%= scope.kind === 'tab' ? 'The fields every record in this tab has.' : `Extra fields for ${scope.name} items, shown on the item, in Stock when filtered to ${scope.name}, and in employee profiles.` %> Drag to reorder (also possible by dragging the column headers in the table).</p>
+  </div>
+  <div class="actions"><a href="<%= scope.back %>" class="btn"><%- icon('left') %><span>Back</span></a></div>
+</header>
+<% if (scope.kind === 'tab') { %><%- include('../_tabs', { active: scope.id }) %><% } %>
+
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <h2>Columns</h2>
+    <% if (!fields.length) { %>
+      <p class="empty">No columns yet. Add one.</p>
+    <% } else { %>
+      <ul class="rows field-list" data-sortable-list data-order-url="<%= scope.kind === 'tab' ? `/inventory/t/${scope.id}/columns/order` : `/inventory/stock/categories/${scope.id}/fields/order` %>">
+        <% for (const f of fields) { %>
+          <li class="row <%= f.visible ? '' : 'is-hidden-field' %>" data-id="<%= f.id %>">
+            <span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span>
+            <div class="row-main">
+              <strong><%= f.label %></strong>
+              <% if (f.required) { %><span class="chip">Required</span><% } %>
+              <% if (!f.visible) { %><span class="chip">Hidden</span><% } %>
+              <% if (f.role === 'title') { %><span class="chip chip-category" title="Used as the record's name">Name</span><% } %>
+              <div class="muted small"><%= types[f.field_type] || f.field_type %> · <%= f.width %>px · <%= counts[f.id] || 0 %> with data</div>
+            </div>
+            <div class="row-actions">
+              <details class="edit">
+                <summary class="icon-btn" title="Edit" aria-label="Edit <%= f.label %>"><%- icon('edit') %></summary>
+                <div class="edit-panel">
+                  <form method="post" action="/inventory/fields/<%= f.id %>" class="form" data-field-form>
+                    <%- csrfField %>
+                    <%- include('_form-fields', { f, types }) %>
+                    <div class="form-actions">
+                      <button type="submit" class="btn btn-primary">Save</button>
+                      <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              </details>
+              <a href="/inventory/fields/<%= f.id %>/delete" class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete <%= f.label %>"><%- icon('trash') %></a>
+            </div>
+          </li>
+        <% } %>
+      </ul>
+      <p class="small" data-reorder-status role="status" hidden></p>
+    <% } %>
+  </section>
+
+  <section class="card">
+    <h2>Add a column</h2>
+    <form method="post" action="<%= scope.url %>" class="form" data-field-form>
+      <%- csrfField %>
+      <%- include('_form-fields', { f: null, types }) %>
+      <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add column</span></button></div>
+    </form>
+  </section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script>
+<%- include('../../partials/foot') %>

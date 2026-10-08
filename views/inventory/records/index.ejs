@@ -1,0 +1,21 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1><%= tab.name %></h1>
+    <p class="muted">
+      <% if (tab.kind === 'employees') { %>Active employees. Click a row to open the profile.<% } else if (tab.kind === 'ex_employees') { %>Employees marked inactive, with the date they left. Their records stay as they were.<% } else { %>Click a row to open it.<% } %>
+    </p>
+  </div>
+  <div class="actions">
+    <a href="/inventory/t/<%= data.id %>/columns" class="btn"><%- icon('sliders') %><span>Columns</span></a>
+    <% if (tab.kind !== 'ex_employees') { %>
+      <a href="/inventory/t/<%= data.id %>/new" class="btn btn-primary"><%- icon('plus') %><span><%= tab.kind === 'employees' ? 'Add employee' : 'Add' %></span></a>
+    <% } %>
+  </div>
+</header>
+<%- include('../_tabs', { active: tab.id }) %>
+<%- include('../_grid', {
+  columns, rows, orderUrl, csvName: tab.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+  empty: tab.kind === 'ex_employees' ? 'No ex employees.' : `Nothing in ${tab.name} yet.`,
+}) %>
+<%- include('../../partials/foot') %>

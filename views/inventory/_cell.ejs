@@ -1,0 +1,26 @@
+<%#
+  One grid cell's content. cell: { kind, value, text, ... } from src/lib/inventory/grid.js
+  or the stock list. Plain text unless the kind needs a link, badge or secret.
+%>
+<% const v = cell.value; %>
+<% if (cell.kind === 'secret') { %>
+  <%- include('_secret', { recordId: cell.recordId, field: cell.field, hasSecret: cell.hasSecret }) %>
+<% } else if (cell.kind === 'access') { %>
+  <span class="access-badge <%= cell.granted ? 'is-granted' : '' %>"><%= cell.granted ? 'Granted' : 'Not granted' %></span>
+<% } else if (cell.kind === 'stock_status') { %>
+  <span class="stock-status stock-status-<%= v %>"><%= cell.text %></span>
+<% } else if (cell.kind === 'employee') { %>
+  <% if (v) { %><a href="/inventory/r/<%= cell.id %>" class="person"><%- avatar({ name: v }, 'xs') %><%= v %></a><% } else { %><span class="muted">—</span><% } %>
+<% } else if (!v) { %>
+  <span class="muted">—</span>
+<% } else if (cell.kind === 'email') { %>
+  <a href="mailto:<%= v %>"><%= v %></a>
+<% } else if (cell.kind === 'phone') { %>
+  <a href="tel:<%= v.replace(/[^0-9+]/g, '') %>"><%= v %></a>
+<% } else if (cell.kind === 'link') { %>
+  <a href="<%= v %>" target="_blank" rel="noopener noreferrer"><%= v.replace(/^https?:\/\//, '') %></a>
+<% } else if (cell.kind === 'date') { %>
+  <%= fmtDay(v) %>
+<% } else { %>
+  <%= v %>
+<% } %>

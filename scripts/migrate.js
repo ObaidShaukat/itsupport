@@ -1,9 +1,11 @@
-// Creates any missing tables from db/schema.sql, then adds any columns that newer
-// versions introduced to existing tables. Safe to run repeatedly. Usage: npm run migrate
+// Adds any columns that newer versions introduced to existing tables, creates any missing
+// tables from db/schema.sql, then runs one-time steps (recorded in schema_migrations, so
+// each runs once, e.g. the inventory rebuild). Safe to run repeatedly. Usage: npm run migrate
 const fs = require('fs');
 const path = require('path');
 const mysql = require('mysql2/promise');
 const config = require('../src/config');
+const { installDefaults } = require('../src/lib/inventory/defaults');
 
 // [table, column, definition] for columns added after a table was first released.
 // MySQL has no "ADD COLUMN IF NOT EXISTS", so each is checked first.
@@ -37,6 +39,37 @@ const ADDED_COLUMNS = [
   ]),
 ];
 
+// The old inventory (people, assets, stock, access, shared accounts, offboarding, custom
+// fields). Dropped with their data when the module was rebuilt; children before parents.
+const OLD_INVENTORY_TABLES = [
+  'custom_field_values', 'custom_fields', 'inv_offboarding_items', 'inv_shared_accounts', 'inv_access',
+  'inv_stock_assignments', 'inv_stock', 'inv_asset_assignments', 'inv_assets', 'inv_people',
+  'inv_apps', 'inv_categories', 'inv_teams', 'inv_companies',
+];
+
+// [name, async (conn) => {}] run once each, in order, after schema.sql.
+const ONE_TIME_STEPS = [
+  ['inventory_v2_reset', async (conn) => {
+    await conn.query('SET FOREIGN_KEY_CHECKS = 0');
+    try {
+      // Table names come from the fixed list above, never from input.
+      for (const table of OLD_INVENTORY_TABLES) await conn.query(`DROP TABLE IF EXISTS \`${table}\``);
+    } finally {
+      await conn.query('SET FOREIGN_KEY_CHECKS = 1');
+    }
+  }],
+  ['inventory_v2_defaults', async (conn) => {
+    await conn.beginTransaction();
+    try {
+      await installDefaults(conn);
+      await conn.commit();
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    }
+  }],
+];
+
 async function main() {
   const sql = fs.readFileSync(path.join(__dirname, '..', 'db', 'schema.sql'), 'utf8');
   const conn = await mysql.createConnection({ ...config.db, multipleStatements: true });
@@ -58,6 +91,15 @@ async function main() {
       console.log(`Added column ${table}.${column}.`);
     }
     await conn.query(sql);
+
+    // One-time steps, recorded in schema_migrations so they never run twice.
+    for (const [name, step] of ONE_TIME_STEPS) {
+      const [[done]] = await conn.query('SELECT name FROM schema_migrations WHERE name = ?', [name]);
+      if (done) continue;
+      await step(conn);
+      await conn.query('INSERT INTO schema_migrations (name) VALUES (?)', [name]);
+      console.log(`Ran one-time step ${name}.`);
+    }
     console.log('Migration complete.');
   } finally {
     await conn.end();

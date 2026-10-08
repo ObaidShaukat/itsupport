@@ -1,0 +1,25 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/settings/tabs">Inventory tabs</a></p>
+    <h1>Delete the tab "<%= tab.name %>"?</h1>
+  </div>
+</header>
+<section class="card card-narrow">
+  <div class="flash flash-error" role="alert">
+    <% if (count) { %><strong>This deletes <%= count %> record<%= count === 1 ? '' : 's' %></strong>, all their data (including saved passwords) and the tab's columns.<% } else { %>The tab has no records. Its columns are deleted with it.<% } %>
+    This cannot be undone.
+  </div>
+  <form method="post" action="/inventory/settings/tabs/<%= tab.id %>/delete" class="form">
+    <%- csrfField %>
+    <label class="field">
+      <span>Type the tab name to confirm: <strong><%= tab.name %></strong></span>
+      <input type="text" name="confirm_name" required autocomplete="off">
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-danger"><%- icon('trash') %><span>Delete tab</span></button>
+      <a href="/inventory/settings/tabs" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

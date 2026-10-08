@@ -1,0 +1,68 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/stock">Stock</a></p>
+    <h1>Add multiple items</h1>
+    <p class="muted">Same category, brand and model. One row per item for its serial / asset number. Extra field values apply to all of them.</p>
+  </div>
+</header>
+<%- include('_nav', { active: 'items' }) %>
+
+<% if (!category) { %>
+  <section class="card"><p class="empty">Add a stock category first. <a href="/inventory/stock/categories">Categories</a></p></section>
+<% } else { %>
+<section class="card">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <form method="get" action="/inventory/stock/multiple" class="form inv-category-pick">
+    <label class="field">
+      <span>Category</span>
+      <select name="category" data-autosubmit>
+        <% for (const c of categories) { %><option value="<%= c.id %>" <%= c.id === category.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+      </select>
+    </label>
+    <noscript><button type="submit" class="btn btn-small">Change</button></noscript>
+  </form>
+  <form method="post" action="/inventory/stock/multiple" class="form" autocomplete="off" data-multi-form>
+    <%- csrfField %>
+    <input type="hidden" name="category_id" value="<%= category.id %>">
+    <div class="form-row">
+      <label class="field"><span>Brand</span><input type="text" name="brand" value="<%= input.brand || '' %>" maxlength="100"></label>
+      <label class="field"><span>Model</span><input type="text" name="model" value="<%= input.model || '' %>" maxlength="150"></label>
+    </div>
+    <div class="form-row">
+      <label class="field">
+        <span>Quantity</span>
+        <input type="text" inputmode="numeric" name="quantity" value="<%= input.quantity || 2 %>" maxlength="3" required data-multi-quantity>
+      </label>
+      <label class="field">
+        <span>Status</span>
+        <select name="status">
+          <% for (const [k, label] of Object.entries(stockStatuses)) { if (k === 'assigned') continue; %>
+            <option value="<%= k %>" <%= (input.status || 'available') === k ? 'selected' : '' %>><%= label %></option>
+          <% } %>
+        </select>
+      </label>
+    </div>
+    <% const extra = category.fields.filter((f) => f.visible); %>
+    <% if (extra.length) { %>
+      <div class="inv-form-grid">
+        <% for (const f of extra) { %><div class="<%= f.field_type === 'longtext' ? 'span-2' : '' %>"><%- include('../_field-input', { field: f, value: values[f.id] }) %></div><% } %>
+      </div>
+    <% } %>
+    <label class="field"><span>Notes <span class="muted">(all items)</span></span><textarea name="notes" rows="2" maxlength="5000"><%= input.notes || '' %></textarea></label>
+    <div class="field">
+      <span>Serial / asset numbers</span>
+      <ol class="serial-rows" data-multi-rows>
+        <% const serials = [].concat(input.serials || []); for (let i = 0; i < Number(input.quantity || 2); i++) { %>
+          <li><input type="text" name="serials" value="<%= serials[i] || '' %>" maxlength="150" aria-label="Serial / asset number <%= i + 1 %>" placeholder="Item <%= i + 1 %>"></li>
+        <% } %>
+      </ol>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Add items</button>
+      <a href="/inventory/stock?category=<%= category.id %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<% } %>
+<%- include('../../partials/foot') %>

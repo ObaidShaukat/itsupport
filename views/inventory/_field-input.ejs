@@ -1,0 +1,39 @@
+<%#
+  Form input for one inventory field (name f_<id>). field; value: plain value to show;
+  secretSet: true when a password / PIN is already saved (left blank = keep it).
+%>
+<% const name = `f_${field.id}`; const val = locals.value || ''; %>
+<% if (field.field_type === 'access') { %>
+  <label class="switch-field">
+    <input type="checkbox" name="<%= name %>" value="granted" <%= val === 'granted' ? 'checked' : '' %>>
+    <span class="switch" aria-hidden="true"></span>
+    <span><%= field.label %></span>
+  </label>
+<% } else { %>
+  <div class="field">
+    <span id="lbl_<%= field.id %>"><%= field.label %><% if (field.required) { %> <span class="req" title="Required">*</span><% } %></span>
+    <% if (field.field_type === 'longtext') { %>
+      <textarea name="<%= name %>" aria-labelledby="lbl_<%= field.id %>" rows="3" maxlength="10000" <%= field.required ? 'required' : '' %>><%= val %></textarea>
+    <% } else if (field.field_type === 'dropdown') { %>
+      <select name="<%= name %>" aria-labelledby="lbl_<%= field.id %>" <%= field.required ? 'required' : '' %>>
+        <option value="">—</option>
+        <% for (const o of field.optionList) { %><option value="<%= o %>" <%= o === val ? 'selected' : '' %>><%= o %></option><% } %>
+      </select>
+    <% } else if (field.field_type === 'password' || field.field_type === 'pin') { %>
+      <input type="password" name="<%= name %>" aria-labelledby="lbl_<%= field.id %>" maxlength="500" autocomplete="new-password" spellcheck="false"
+        <%= field.field_type === 'pin' ? 'inputmode=numeric' : '' %>
+        placeholder="<%= locals.secretSet ? 'Saved (encrypted). Type to replace' : 'Encrypted when saved' %>"
+        <%= field.required && !locals.secretSet ? 'required' : '' %>>
+      <% if (locals.secretSet) { %>
+        <label class="checkbox-field small"><input type="checkbox" name="clear_<%= field.id %>" value="1"> <span>Remove the saved <%= field.label %></span></label>
+      <% } %>
+    <% } else { %>
+      <input
+        type="<%= { email: 'email', phone: 'tel', number: 'text', date: 'date', link: 'url' }[field.field_type] || 'text' %>"
+        name="<%= name %>" aria-labelledby="lbl_<%= field.id %>" value="<%= val %>" maxlength="1000"
+        <%= field.field_type === 'number' ? 'inputmode=decimal' : '' %>
+        <%= field.field_type === 'link' ? 'placeholder=https://' : '' %>
+        <%= field.required ? 'required' : '' %>>
+    <% } %>
+  </div>
+<% } %>

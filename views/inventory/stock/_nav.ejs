@@ -1,0 +1,9 @@
+<%# Stock views. active: 'items' | 'summary' | 'report' | 'categories'. %>
+<% const stockTab = (locals.invTabs || []).find((t) => t.kind === 'stock'); %>
+<%- include('../_tabs', { active: stockTab ? stockTab.id : null }) %>
+<nav class="filters stock-nav" aria-label="Stock views">
+  <a href="/inventory/stock" class="<%= active === 'items' ? 'active' : '' %>">Items</a>
+  <a href="/inventory/stock/summary" class="<%= active === 'summary' ? 'active' : '' %>">Summary</a>
+  <a href="/inventory/stock/report" class="<%= active === 'report' ? 'active' : '' %>">Breakdown</a>
+  <a href="/inventory/stock/categories" class="<%= active === 'categories' ? 'active' : '' %>">Categories</a>
+</nav>

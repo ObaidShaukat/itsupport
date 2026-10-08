@@ -1,0 +1,63 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Inventory tabs</h1>
+    <p class="muted">Drag to change the order (for everyone). Employees, Ex Employees and Stock can be renamed and moved but not deleted.</p>
+  </div>
+</header>
+<%- include('../_tabs', { active: 'settings' }) %>
+
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <h2>Tabs</h2>
+    <ul class="rows step-list" data-sortable-list data-order-url="/inventory/settings/tabs/order">
+      <% for (const t of tabs) { %>
+        <li class="row" data-id="<%= t.id %>">
+          <span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span>
+          <div class="row-main">
+            <strong><%= t.name %></strong>
+            <div class="muted small">
+              <%= { employees: 'Active employees', ex_employees: 'Inactive employees', stock: 'Stock items and reports', records: 'Simple tab' }[t.kind] %>
+              <% if (t.kind === 'records' || t.kind === 'employees') { %> · <%= counts[t.id] || 0 %> record<%= (counts[t.id] || 0) === 1 ? '' : 's' %><% } %>
+            </div>
+          </div>
+          <div class="row-actions">
+            <% if (t.kind !== 'stock') { %><a href="/inventory/t/<%= t.id %>/columns" class="btn btn-small btn-ghost">Columns</a><% } %>
+            <details class="edit">
+              <summary class="icon-btn" title="Rename" aria-label="Rename <%= t.name %>"><%- icon('edit') %></summary>
+              <div class="edit-panel">
+                <form method="post" action="/inventory/settings/tabs/<%= t.id %>" class="form">
+                  <%- csrfField %>
+                  <label class="field"><span>Name</span><input type="text" name="name" value="<%= t.name %>" required maxlength="60"></label>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            <% if (deletable(t)) { %>
+              <a href="/inventory/settings/tabs/<%= t.id %>/delete" class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete <%= t.name %>"><%- icon('trash') %></a>
+            <% } %>
+          </div>
+        </li>
+      <% } %>
+    </ul>
+    <p class="small" data-reorder-status role="status" hidden></p>
+  </section>
+
+  <section class="card">
+    <h2>Add tab</h2>
+    <form method="post" action="/inventory/settings/tabs" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Name</span>
+        <input type="text" name="name" required maxlength="60" placeholder="e.g. Software licences">
+      </label>
+      <p class="muted small">A new tab starts with a "Name" column. You add the rest of its columns next.</p>
+      <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add tab</span></button></div>
+    </form>
+  </section>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script>
+<%- include('../../partials/foot') %>

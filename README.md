@@ -2,7 +2,7 @@
 
 Cleartwo IT support portal: clients, service checklists with flowcharts and tutorials, tickets, a General IT Support knowledge base, an activity log and a Daily Report.
 
-Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads), marked (Markdown) and exceljs (inventory import). It runs under PM2.
+Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads), marked (Markdown), exceljs (stock report Excel export), nodemailer (email) and sharp (profile pictures). It runs under PM2.
 
 ## Server setup
 
@@ -52,6 +52,7 @@ Fill in:
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Mail server for reminder emails and sent reports. Port 587 uses STARTTLS (465 uses TLS) |
 | `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` | Address and name emails are sent from (e.g. `it@cleartwo.co.uk`, `Cleartwo IT Support`) |
 | `APP_URL` | Address of the portal, e.g. `https://support.cleartwo.co.uk`, used for the "Open ticket" button in reminder emails |
+| `ENCRYPTION_KEY` | 64 hex characters used to encrypt inventory passwords and PINs. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and keep a safe copy: if it is lost or changed, saved passwords cannot be read |
 
 If any of the SMTP or `MAIL_FROM_EMAIL` settings is missing, email is turned off: the portal keeps working, reminders still pop up, and Send report explains what to add. Restart the portal after changing `.env`.
 
@@ -65,7 +66,7 @@ npm run seed
 npm run create-user -- admin 'a-strong-password' Admin
 ```
 
-- `migrate` creates any missing tables (from `db/schema.sql`). It is safe to re-run after every update.
+- `migrate` creates any missing tables (from `db/schema.sql`) and runs one-time steps recorded in `schema_migrations` (such as the inventory rebuild, which drops the old inventory tables once). It is safe to re-run after every update.
 - `seed` adds the default service categories, services and steps. It is safe to run more than once: anything that already exists is left alone.
 - `create-user` adds a user with a bcrypt-hashed password. The optional last argument is their display name. Users only live in the database. Add more from the Users page once you're signed in. The password is visible in your shell history, so clear it or reset the password from the Users page afterwards.
 
@@ -112,18 +113,18 @@ Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set w
 
 ## Inventory (internal)
 
-Cleartwo's own people, equipment and accounts, not linked to clients. The Inventory section has these tabs: People, Former Employees, Assets, Stock, Access, Reports, Import, and Lists & fields.
+Cleartwo's own staff, accounts and kit, not linked to clients. Rebuilt in October 2026: the first `npm run migrate` after updating **drops the old inventory tables and their data** (people, assets, stock, access, shared accounts, offboarding, custom fields) and installs the new defaults. This happens once only. Take a database backup first if you want to keep the old data.
 
-- **No credentials, ever:** passwords, PINs and keys are never stored. Accounts only record that they exist, with a "Credentials stored in 1Password" flag and an optional 1Password item link. Custom fields whose label contains "password", "pass" or "PIN" are refused.
-- **People:** name, email, company, team, role, phone, start date and notes. Each person's page shows their assets, stock items, accounts, asset history and a full timeline.
-- **Leaving:** "Mark as left" asks for the leaving date and builds an offboarding checklist from what the person holds. Ticking an item applies it: returned assets become Spare, returned stock goes back to available, and revoked accounts become Removed with the date. Left people move to Former Employees with all history kept, and can be reactivated.
-- **Assets:** one record per item, with an automatic tag (C2-0001, …), status (In use, Spare, Repair, Damaged, Sold, Disposed), assign / unassign / reassign, and assignment history.
-- **Stock:** counted items. Available = total − assigned − damaged, calculated automatically.
-- **Categories** are marked Asset or Stock. They, plus companies, teams and apps, are editable under Lists & fields, and `npm run seed` adds the defaults.
-- **Custom fields:** add, edit, reorder (drag and drop), hide or delete fields for People, Assets, Stock, Access and Shared accounts, without code. They appear on forms, detail pages and lists, can be filtered and searched, and are included in CSV exports.
-- **Reports:** counts by category, model and status, spare and broken assets, low stock, people with no laptop, and CSV exports.
-- **Import (one-time):** upload the inventory `.xlsx`, check the preview and its warnings, then confirm. Columns whose header contains "Password", "Pass" or "PIN" are skipped before any value in them is read. The uploaded file is deleted straight after it is read. People are matched by name and assets by serial number. `*.xlsx` is git-ignored.
-- Every inventory action is logged in the activity log. Inventory is internal admin and does not appear in the Daily Report.
+- **Tabs:** Employees, Stock, Writers, Ex Employees and Old Accounts, shown as tabs and under Inventory in the sidebar. **Tabs** (Settings) adds simple tabs with their own columns; tabs can be renamed and dragged into a new order, and added tabs, Writers and Old Accounts can be deleted (you type the name to confirm).
+- **Columns:** every tab (and every stock category) has its own fields: text, long text, email, phone, number, date, link, dropdown (editable options), password, PIN and access toggle (Granted / Not granted). **Columns** adds, renames, changes the type, hides / shows, marks required, sets the default width or deletes them (the delete page says how many records have data).
+- **Tables:** search, sort by any column, a filter row, CSV export of what is shown, sticky header. Drag a column header onto another to reorder (saved for everyone); drag a header's right edge to resize (saved for you). Click a row to open it.
+- **Passwords and PINs** are encrypted with AES-256-GCM using `ENCRYPTION_KEY` from `.env` and never stored or logged in plain text. They show as •••••• with an eye (show for 30 seconds) and a copy button; every reveal and copy is logged with the user, field and record. Without a valid key, password fields cannot be saved or shown and the Inventory says why. CSV exports never contain them.
+- **Employees:** User-ID, Name, Email, Password, PIN, Gmail-ID, Gmail Password, Mac Local User, Mac User Pass, Apple Cloud ID, Apple Cloud Password, and access toggles for 1Password, Claude, Cleartwo@gmail.com, ChatGPT and Canva (add more, e.g. CRM, as Access columns). Only active employees are listed.
+- **Employee profile:** header with initials, name, User-ID, email, status, Active switch and Edit; Details; Access switches; Equipment (every stock category, with what is assigned and its details, or "Not assigned" with an Assign picker of available items, searchable by brand, model or serial; Unassign returns the item to stock); Equipment held (everything returned, with dates); History.
+- **Leaving:** switching Active off asks for the leaving date and confirms. The employee moves to **Ex Employees** with every field kept (passwords and access included), and everything assigned goes back to stock (status Available) while the profile keeps it under Equipment held. Ex employee profiles are read-only, with **Reactivate**.
+- **Stock:** every physical item is one record (laptops, desktops and Macs too): category, brand, model, serial / asset number, status (Available, Assigned, Repair, Damaged, Sold, Disposed), who has it, notes and the category's extra fields. **Add item** (optionally assigning it straight away) and **Add multiple** (same brand and model, one serial per row). Views: **Items** (filter by category, status, brand, assigned or not), **Summary** (per category: total, assigned, available, repair / damaged, sold / disposed), **Breakdown** (Category > Brand > Model with quantity and who uses it, brand and category totals; laptops, desktops and Macs grouped Windows / Apple, mice by connection type; CSV and Excel export) and **Categories** (add, rename, reorder, delete when empty, extra fields, report grouping). New categories, brands and models appear in profiles and reports automatically.
+- **Writers** (User, Official-ID, Password, Contact, Gmail-ID, Gmail Password) and **Old Accounts** (User, Gmail-ID, Password, Status: Active / Deleted / Verify) are simple tabs with flexible columns, not linked to stock.
+- Every inventory change is in the activity log and the record's History. Inventory never appears on the Daily Report.
 
 ## Ticket reminders
 

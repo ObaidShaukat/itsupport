@@ -1,0 +1,198 @@
+<%- include('../partials/head') %>
+<%
+  const userId = userIdField ? values.get(userIdField.id)?.value : null;
+  const email = emailField ? values.get(emailField.id)?.value : null;
+  const detailFields = fields.filter((f) => f.visible && f.field_type !== 'access');
+  const accessFields = fields.filter((f) => f.visible && f.field_type === 'access');
+  const back = `/inventory/r/${record.id}`;
+%>
+<p class="crumbs"><a href="/inventory/t/<%= tab.id %>"><%= tab.name %></a><% if (readOnly) { %> / Ex employee<% } %></p>
+
+<section class="card emp-head <%= readOnly ? 'is-inactive' : '' %>">
+  <%- avatar({ name: title }, 'lg') %>
+  <div class="emp-id">
+    <h1><%= title %></h1>
+    <p class="emp-sub">
+      <% if (userId) { %><span><%- icon('tag') %> <%= userId %></span><% } %>
+      <% if (email) { %><a href="mailto:<%= email %>"><%- icon('mail') %> <%= email %></a><% } %>
+    </p>
+    <p class="emp-status">
+      <span class="status-pill <%= readOnly ? 'is-inactive' : 'is-active' %>"><%= readOnly ? 'Inactive' : 'Active' %></span>
+      <% if (readOnly && record.leaving_date) { %><span class="muted small">Left <%= fmtDay(record.leaving_date) %></span><% } %>
+    </p>
+  </div>
+  <div class="emp-actions">
+    <% if (readOnly) { %>
+      <form method="post" action="/inventory/r/<%= record.id %>/reactivate" class="inline">
+        <%- csrfField %>
+        <button type="submit" class="btn btn-primary"><%- icon('check-circle') %><span>Reactivate</span></button>
+      </form>
+    <% } else { %>
+      <details class="edit edit-right">
+        <summary class="btn"><span class="switch is-on" aria-hidden="true"></span><span>Active</span></summary>
+        <div class="edit-panel">
+          <form method="post" action="/inventory/r/<%= record.id %>/deactivate" class="form" data-confirm="Mark <%= title %> as inactive? They move to Ex Employees and everything assigned to them goes back to stock." data-confirm-ok="Mark inactive">
+            <%- csrfField %>
+            <h3 class="edit-section">Mark as inactive</h3>
+            <label class="field">
+              <span>Leaving date</span>
+              <input type="date" name="leaving_date" value="<%= today %>" required>
+            </label>
+            <p class="muted small">All their fields stay as they are. Assigned equipment is returned to stock and listed under "Equipment held".</p>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-danger">Mark inactive</button>
+              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+            </div>
+          </form>
+        </div>
+      </details>
+      <a href="/inventory/r/<%= record.id %>/edit" class="btn btn-primary"><%- icon('edit') %><span>Edit</span></a>
+    <% } %>
+    <%- include('../partials/delete', { action: `/inventory/r/${record.id}/delete`, confirm: `Delete ${title} completely? Their details and history go; assigned items return to stock. This cannot be undone.`, label: 'Delete employee' }) %>
+  </div>
+</section>
+<%- include('_tabs', { active: readOnly ? (invTabs.find((t) => t.kind === 'ex_employees') || {}).id : tab.id }) %>
+
+<div class="emp-grid">
+  <section class="card" id="details">
+    <h2>Details</h2>
+    <dl class="inv-details">
+      <% for (const f of detailFields) { %><%- include('_field-value', { field: f, v: values.get(f.id), recordId: record.id }) %><% } %>
+    </dl>
+  </section>
+
+  <section class="card" id="access">
+    <h2>Access</h2>
+    <% if (!accessFields.length) { %>
+      <p class="empty">No access columns. <a href="/inventory/t/<%= tab.id %>/columns">Add one</a> (type "Access").</p>
+    <% } else { %>
+      <ul class="access-list">
+        <% for (const f of accessFields) { const on = values.get(f.id)?.value === 'granted'; %>
+          <li>
+            <span><%= f.label %></span>
+            <% if (readOnly) { %>
+              <span class="access-badge <%= on ? 'is-granted' : '' %>"><%= on ? 'Granted' : 'Not granted' %></span>
+            <% } else { %>
+              <form method="post" action="/inventory/r/<%= record.id %>/access" class="inline">
+                <%- csrfField %>
+                <input type="hidden" name="field_id" value="<%= f.id %>">
+                <input type="hidden" name="value" value="<%= on ? '' : 'granted' %>">
+                <input type="hidden" name="back" value="<%= back %>#access">
+                <button type="submit" class="switch-btn" role="switch" aria-checked="<%= on %>" title="<%= on ? 'Granted: click to remove' : 'Not granted: click to grant' %>">
+                  <span class="switch <%= on ? 'is-on' : '' %>" aria-hidden="true"></span>
+                  <span class="switch-label"><%= on ? 'Granted' : 'Not granted' %></span>
+                </button>
+              </form>
+            <% } %>
+          </li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+
+<section class="section" id="equipment">
+  <div class="section-head">
+    <h2>Equipment</h2>
+    <a href="/inventory/stock" class="link-more">Stock <%- icon('arrow-right') %></a>
+  </div>
+  <div class="equip-grid">
+    <% for (const c of equipment) { %>
+      <article class="card equip <%= c.items.length ? 'has-items' : '' %>">
+        <div class="equip-head">
+          <h3><%= c.name %></h3>
+          <% if (!readOnly) { %>
+            <details class="edit edit-right">
+              <summary class="btn btn-small <%= c.items.length ? 'btn-ghost' : '' %>"><%- icon('plus') %><span><%= c.items.length ? 'Assign another' : 'Assign' %></span></summary>
+              <div class="edit-panel equip-picker" id="pick-<%= c.id %>">
+                <h3 class="edit-section">Available <%= c.name %></h3>
+                <% if (!c.available.length) { %>
+                  <p class="empty small">Nothing available in stock. <a href="/inventory/stock/new?category=<%= c.id %>">Add an item</a>.</p>
+                <% } else { %>
+                  <label class="search-field">
+                    <%- icon('search') %><span class="visually-hidden">Search <%= c.name %></span>
+                    <input type="search" data-filter="#pick-<%= c.id %>" placeholder="Brand, model or serial" autocomplete="off">
+                  </label>
+                  <ul class="pick-list">
+                    <% for (const i of c.available) { %>
+                      <li data-filter-item data-search="<%= [i.brand, i.model, i.serial].filter(Boolean).join(' ') %>">
+                        <div>
+                          <strong><%= [i.brand, i.model].filter(Boolean).join(' ') || 'Item' %></strong>
+                          <div class="muted small"><%= i.serial || 'No serial' %></div>
+                        </div>
+                        <form method="post" action="/inventory/r/<%= record.id %>/assign" class="inline">
+                          <%- csrfField %>
+                          <input type="hidden" name="item_id" value="<%= i.id %>">
+                          <button type="submit" class="btn btn-small btn-primary">Assign</button>
+                        </form>
+                      </li>
+                    <% } %>
+                  </ul>
+                  <p class="empty small" data-filter-empty hidden>No match.</p>
+                <% } %>
+              </div>
+            </details>
+          <% } %>
+        </div>
+        <% if (!c.items.length) { %>
+          <p class="equip-none">Not assigned</p>
+        <% } else { %>
+          <% for (const i of c.items) { %>
+            <div class="equip-item">
+              <div class="equip-item-head">
+                <a href="/inventory/stock/<%= i.id %>"><strong><%= [i.brand, i.model].filter(Boolean).join(' ') || 'Item' %></strong></a>
+                <% if (!readOnly) { %>
+                  <form method="post" action="/inventory/stock/<%= i.id %>/unassign" class="inline" data-confirm="Return this <%= c.name.toLowerCase() %> to stock?" data-confirm-ok="Return">
+                    <%- csrfField %>
+                    <input type="hidden" name="back" value="<%= back %>#equipment">
+                    <button type="submit" class="btn btn-small btn-ghost" title="Return to stock">Unassign</button>
+                  </form>
+                <% } %>
+              </div>
+              <dl class="equip-facts">
+                <div><dt>Serial / asset no.</dt><dd><%= i.serial || '—' %></dd></div>
+                <% for (const f of c.fields.filter((x) => x.visible)) { const v = i.values.get(f.id); if (!v || !v.value) continue; %>
+                  <div class="<%= f.field_type === 'longtext' ? 'span-2' : '' %>"><dt><%= f.label %></dt><dd class="<%= f.field_type === 'longtext' ? 'pre-line' : '' %>"><%= v.value %></dd></div>
+                <% } %>
+              </dl>
+            </div>
+          <% } %>
+        <% } %>
+      </article>
+    <% } %>
+  </div>
+</section>
+
+<section class="section" id="held">
+  <div class="section-head"><h2>Equipment held</h2></div>
+  <div class="card">
+    <% if (!pastAssignments.length) { %>
+      <p class="empty">Nothing returned yet.</p>
+    <% } else { %>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th class="w-md">Category</th><th class="w-md">Brand</th><th>Model</th><th class="w-md">Serial / asset no.</th><th class="w-sm">From</th><th class="w-sm">To</th></tr></thead>
+          <tbody>
+            <% for (const a of pastAssignments) { %>
+              <tr>
+                <td><%= a.category_name || '—' %></td>
+                <td><%= a.brand || '—' %></td>
+                <td><% if (a.item_id) { %><a href="/inventory/stock/<%= a.item_id %>"><%= a.model || '—' %></a><% } else { %><%= a.model || '—' %><% } %></td>
+                <td><%= a.serial || '—' %></td>
+                <td><%= fmtDay(a.assigned_on) %></td>
+                <td><%= fmtDay(a.returned_on) %></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</section>
+
+<section class="section" id="history">
+  <div class="card">
+    <%- include('../partials/history', { entries: history, open: true, label: 'History' }) %>
+  </div>
+</section>
+<%- include('../partials/foot') %>

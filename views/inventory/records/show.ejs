@@ -1,0 +1,31 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/t/<%= tab.id %>"><%= tab.name %></a></p>
+    <h1><%= title %></h1>
+    <p class="record-meta">
+      <span>Added<%= record.created_by_name ? ` by ${record.created_by_name}` : '' %> on <%= fmtDate(record.created_at) %></span>
+      <% if (record.updated_by_name) { %><span>Last updated by <%= record.updated_by_name %> on <%= fmtDate(record.updated_at) %></span><% } %>
+    </p>
+  </div>
+  <div class="actions">
+    <a href="/inventory/r/<%= record.id %>/edit" class="btn btn-primary"><%- icon('edit') %><span>Edit</span></a>
+    <%- include('../../partials/delete', { action: `/inventory/r/${record.id}/delete`, confirm: `Delete "${title}" from ${tab.name}? This cannot be undone.`, text: 'Delete' }) %>
+  </div>
+</header>
+<%- include('../_tabs', { active: tab.id }) %>
+
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <h2>Details</h2>
+    <dl class="inv-details">
+      <% for (const f of fields.filter((x) => x.visible)) { %>
+        <%- include('../_field-value', { field: f, v: values.get(f.id), recordId: record.id }) %>
+      <% } %>
+    </dl>
+  </section>
+  <section class="card">
+    <%- include('../../partials/history', { entries: history, open: true }) %>
+  </section>
+</div>
+<%- include('../../partials/foot') %>

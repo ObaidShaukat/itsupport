@@ -36,6 +36,11 @@
     <nav class="nav" aria-label="Main">
       <% for (const item of navItems) { %>
         <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>" title="<%= item.label %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
+        <% if (item.key === 'inventory' && locals.nav === 'inventory' && locals.invTabs) { %>
+          <div class="nav-sub">
+            <% for (const t of invTabs) { %><a href="<%= t.href %>" class="<%= (locals.currentPath || '').split('?')[0] === t.href ? 'active' : '' %>" title="<%= t.name %>"><span><%= t.name %></span></a><% } %>
+          </div>
+        <% } %>
       <% } %>
       <div class="nav-foot">
         <a href="/profile" class="whoami <%= locals.nav === 'profile' ? 'active' : '' %>" title="My profile"><%- avatar(currentUser, 'sm') %><span><%= currentUser.name || currentUser.username %></span></a>

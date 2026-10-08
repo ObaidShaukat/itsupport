@@ -14,7 +14,7 @@ const multipart = require('./src/middleware/multipart');
 const { detectFonts } = require('./src/lib/fonts');
 const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./src/lib/tickets');
 const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
-const { ASSET_STATUSES, CONNECTIONS } = require('./src/lib/inventory');
+const { STOCK_STATUSES, FIELD_TYPES } = require('./src/lib/inventory/fields');
 const { mailStatus } = require('./src/lib/mailer');
 const { sendDueReminderEmails } = require('./src/lib/reminders');
 const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
@@ -59,8 +59,8 @@ app.locals.fonts = fonts;
 app.locals.ticketStatuses = TICKET_STATUSES;
 app.locals.ticketPriorities = TICKET_PRIORITIES;
 app.locals.activityLabels = ACTION_LABELS;
-app.locals.invAssetStatuses = ASSET_STATUSES;
-app.locals.invConnections = CONNECTIONS;
+app.locals.stockStatuses = STOCK_STATUSES;
+app.locals.invFieldTypes = FIELD_TYPES;
 app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },
   { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },

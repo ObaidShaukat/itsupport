@@ -1,59 +1,51 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
-  <div><h1>Inventory</h1><p class="muted">Accessories counted by quantity. Available = total − assigned − damaged.</p></div>
+  <div>
+    <h1>Stock</h1>
+    <p class="muted">Every item, one row each. Click a row to edit, assign or return it.</p>
+  </div>
   <div class="actions">
-    <a href="/inventory/export/stock" class="btn"><%- icon('download') %><span>Export CSV</span></a>
-    <a href="/inventory/stock/new" class="btn btn-primary"><%- icon('plus') %><span>Add stock item</span></a>
+    <% if (category) { %><a href="/inventory/stock/categories/<%= category.id %>/fields" class="btn"><%- icon('sliders') %><span>Columns</span></a><% } %>
+    <a href="/inventory/stock/multiple<%= category ? `?category=${category.id}` : '' %>" class="btn"><%- icon('layers') %><span>Add multiple</span></a>
+    <a href="/inventory/stock/new<%= category ? `?category=${category.id}` : '' %>" class="btn btn-primary"><%- icon('plus') %><span>Add item</span></a>
   </div>
 </header>
-<%- include('../_tabs') %>
+<%- include('_nav', { active: 'items' }) %>
 
-<form method="get" class="card inv-filters">
+<form method="get" action="/inventory/stock" class="card inv-filters">
   <label class="field">
     <span>Category</span>
-    <select name="category">
+    <select name="category" data-autosubmit>
       <option value="">All categories</option>
-      <% for (const c of lists.categories.filter((c) => c.kind === 'stock')) { %><option value="<%= c.id %>" <%= categoryId === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+      <% for (const c of categories) { %><option value="<%= c.id %>" <%= category && category.id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
     </select>
   </label>
-  <%- include('../_cf-filters', { filterFields, activeFilters }) %>
-  <button type="submit" class="btn">Filter</button>
+  <label class="field">
+    <span>Status</span>
+    <select name="status" data-autosubmit>
+      <option value="">Any status</option>
+      <% for (const [k, label] of Object.entries(stockStatuses)) { %><option value="<%= k %>" <%= status === k ? 'selected' : '' %>><%= label %></option><% } %>
+    </select>
+  </label>
+  <label class="field">
+    <span>Brand</span>
+    <select name="brand" data-autosubmit>
+      <option value="">Any brand</option>
+      <% for (const b of brands) { %><option value="<%= b %>" <%= brand.toLowerCase() === b.toLowerCase() ? 'selected' : '' %>><%= b %></option><% } %>
+    </select>
+  </label>
+  <label class="field">
+    <span>Assigned</span>
+    <select name="holder" data-autosubmit>
+      <option value="">Assigned or not</option>
+      <option value="assigned" <%= holder === 'assigned' ? 'selected' : '' %>>Assigned to someone</option>
+      <option value="unassigned" <%= holder === 'unassigned' ? 'selected' : '' %>>Not assigned</option>
+    </select>
+  </label>
+  <noscript><button type="submit" class="btn">Apply</button></noscript>
+  <% if (category || status || brand || holder) { %><a href="/inventory/stock" class="btn btn-ghost btn-small">Clear</a><% } %>
 </form>
+<% if (!category) { %><p class="muted small">Choose a category to see its extra columns (e.g. Device name, Wi-Fi MAC for laptops).</p><% } %>
 
-<%- include('../../partials/search', { target: '#stock-list', placeholder: 'Search by category, brand or model' }) %>
-
-<section class="card" id="stock-list">
-  <% if (!stock.length) { %>
-    <p class="empty">No stock items<%= categoryId ? ' in this category' : ' yet' %>.</p>
-  <% } else { %>
-    <p class="empty" data-filter-empty hidden>Nothing matches your search.</p>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th class="w-md">Category</th><th>Brand / model</th><th class="w-sm">Connection</th><th class="w-md">Location</th>
-            <th class="num w-num">Total</th><th class="num w-num">Assigned</th><th class="num w-num">Damaged</th><th class="num w-num">Available</th>
-            <% for (const f of listFields) { %><th><%= f.label %></th><% } %>
-          </tr>
-        </thead>
-        <tbody>
-          <% for (const s of stock) { %>
-            <% const v = values.get(s.id) || {}; %>
-            <tr data-filter-item data-search="<%= [s.category_name, s.brand, s.model, s.location, ...Object.values(v)].filter(Boolean).join(' ') %>">
-              <td><%= s.category_name || '' %></td>
-              <td><a href="/inventory/stock/<%= s.id %>"><strong><%= [s.brand, s.model].filter(Boolean).join(' ') %></strong></a></td>
-              <td><%= invConnections[s.connection] %></td>
-              <td><%= s.location || '' %></td>
-              <td class="num"><%= s.total_qty %></td>
-              <td class="num"><%= s.assigned_qty %></td>
-              <td class="num"><%= s.damaged_qty || '' %></td>
-              <td class="num"><span class="<%= s.available_qty <= lowStock ? 'stock-low' : 'stock-ok' %>"><%= s.available_qty %></span></td>
-              <% for (const f of listFields) { %><td><%= f.field_type === 'boolean' ? (v[f.id] === 'yes' ? 'Yes' : v[f.id] === 'no' ? 'No' : '') : (v[f.id] || '') %></td><% } %>
-            </tr>
-          <% } %>
-        </tbody>
-      </table>
-    </div>
-  <% } %>
-</section>
+<%- include('../_grid', { columns, rows, orderUrl, csvName: `stock${category ? '-' + category.name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : ''}`, empty: 'No items match.' }) %>
 <%- include('../../partials/foot') %>

@@ -1,0 +1,14 @@
+<%#
+  Read-only display of one field on a record page. field, v ({ value, hasSecret } or
+  undefined), recordId.
+%>
+<div class="inv-detail">
+  <dt><%= field.label %></dt>
+  <dd>
+    <% if (field.field_type === 'password' || field.field_type === 'pin') { %>
+      <%- include('_secret', { recordId, field, hasSecret: Boolean(v && v.hasSecret) }) %>
+    <% } else { %>
+      <%- include('_cell', { cell: { kind: field.field_type === 'access' ? 'access' : field.field_type, value: v ? v.value : null, granted: Boolean(v && v.value === 'granted') } }) %>
+    <% } %>
+  </dd>
+</div>

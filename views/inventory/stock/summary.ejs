@@ -1,0 +1,41 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Stock summary</h1>
+    <p class="muted">Items per category. Click a number to see those items.</p>
+  </div>
+</header>
+<%- include('_nav', { active: 'summary' }) %>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Category</th><th class="num w-sm">Total</th><th class="num w-sm">Assigned</th><th class="num w-sm">Available</th>
+          <th class="num w-md">Repair / damaged</th><th class="num w-md">Sold / disposed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% const link = (r, q, n) => n ? `<a href="/inventory/stock?category=${r.id}${q}">${n}</a>` : '<span class="muted">0</span>'; %>
+        <% for (const r of rows) { %>
+          <tr>
+            <td><a href="/inventory/stock?category=<%= r.id %>"><strong><%= r.name %></strong></a></td>
+            <td class="num"><%- link(r, '', r.total) %></td>
+            <td class="num"><%- link(r, '&status=assigned', r.assigned) %></td>
+            <td class="num"><span class="<%= r.available ? 'stock-ok' : '' %>"><%- link(r, '&status=available', r.available) %></span></td>
+            <td class="num"><%- r.repair ? `<span class="stock-low">${r.repair}</span>` : '<span class="muted">0</span>' %></td>
+            <td class="num"><%- r.gone ? r.gone : '<span class="muted">0</span>' %></td>
+          </tr>
+        <% } %>
+        <tr class="total-row">
+          <td><strong>All categories</strong></td>
+          <td class="num"><strong><%= totals.total %></strong></td><td class="num"><strong><%= totals.assigned %></strong></td>
+          <td class="num"><strong><%= totals.available %></strong></td><td class="num"><strong><%= totals.repair %></strong></td>
+          <td class="num"><strong><%= totals.gone %></strong></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+<%- include('../../partials/foot') %>
