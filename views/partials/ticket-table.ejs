@@ -1,6 +1,8 @@
 <%#
   tickets: rows from listTickets(); controls.columns: sortable headers;
   filtered: true when a status/priority filter is applied.
+  Fixed column widths, one line per cell (full text in the tooltip), priority as a
+  flag at the start of the row, people as avatar + first name, delete on hover.
 %>
 <% if (!tickets.length) { %>
   <p class="empty">No tickets<%= locals.filtered ? ' match these filters' : '' %>.</p>
@@ -8,11 +10,19 @@
   <p class="empty" data-filter-empty hidden>No tickets match your search.</p>
   <div class="table-wrap">
     <table class="table table-tickets">
+      <colgroup>
+        <col class="col-flag"><col class="col-id"><col><col class="col-client"><col class="col-status">
+        <col class="col-person"><col class="col-person"><col class="col-updated"><col class="col-actions">
+      </colgroup>
       <thead>
         <tr>
           <% for (const col of controls.columns) { %>
-            <th aria-sort="<%= col.active ? (col.dir === 'asc' ? 'ascending' : 'descending') : 'none' %>">
-              <a href="<%= col.href %>" class="sort-link <%= col.active ? 'is-sorted' : '' %>"><%= col.label %><span class="sort-arrow" aria-hidden="true"><%= col.active ? (col.dir === 'asc' ? '▲' : '▼') : '↕' %></span></a>
+            <th aria-sort="<%= col.active ? (col.dir === 'asc' ? 'ascending' : 'descending') : 'none' %>" class="<%= col.key === 'updated' ? 'right' : '' %>">
+              <% if (col.key === 'priority') { %>
+                <a href="<%= col.href %>" class="sort-link sort-flag <%= col.active ? 'is-sorted' : '' %>" title="Sort by priority" aria-label="Sort by priority"><%- icon('flag') %></a>
+              <% } else { %>
+                <a href="<%= col.href %>" class="sort-link <%= col.active ? 'is-sorted' : '' %>"><%= col.label %><span class="sort-arrow" aria-hidden="true"><%= col.active ? (col.dir === 'asc' ? '▲' : '▼') : '↕' %></span></a>
+              <% } %>
             </th>
           <% } %>
           <th><span class="visually-hidden">Delete</span></th>
@@ -21,19 +31,19 @@
       <tbody>
         <% for (const t of tickets) { %>
           <tr class="ticket-row ticket-row-<%= t.priority %>" data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name %> <%= ticketStatuses[t.status] %> <%= ticketPriorities[t.priority] %> <%= t.created_by || '' %> <%= t.updated_by || '' %>">
+            <td class="cell-flag"><span class="priority-flag priority-dot-<%= t.priority %>" title="<%= ticketPriorities[t.priority] %> priority"><%- icon('flag') %><span class="visually-hidden"><%= ticketPriorities[t.priority] %> priority</span></span></td>
             <td class="muted"><%= t.id %></td>
-            <td>
+            <td title="<%= t.title %>">
               <a href="/tickets/<%= t.id %>"><%= t.title %></a>
               <% if (t.next_reminder_at) { %>
                 <a href="/tickets/<%= t.id %>#reminders" class="row-reminder" title="Next reminder: <%= fmtDate(t.next_reminder_at) %>" aria-label="Next reminder: <%= fmtDate(t.next_reminder_at) %>"><%- icon('bell') %></a>
               <% } %>
             </td>
-            <td><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td>
+            <td title="<%= t.client_name %>"><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td>
             <td><%- include('status', { status: t.status }) %></td>
-            <td class="nowrap"><span class="person"><%- avatar({ id: t.created_by_id, name: t.created_by }, 'xs') %><%= t.created_by || 'Deleted user' %></span></td>
-            <td class="nowrap"><% if (t.updated_by) { %><span class="person"><%- avatar({ id: t.updated_by_id, name: t.updated_by }, 'xs') %><%= t.updated_by %></span><% } else { %>—<% } %></td>
-            <td class="nowrap muted"><%= fmtDate(t.updated_at) %></td>
-            <td><%- include('priority', { priority: t.priority }) %></td>
+            <td title="<%= t.created_by || 'Deleted user' %>"><span class="person"><%- avatar({ id: t.created_by_id, name: t.created_by }, 'xs') %><%= firstName(t.created_by) || 'Deleted user' %></span></td>
+            <td title="<%= t.updated_by || '' %>"><% if (t.updated_by) { %><span class="person"><%- avatar({ id: t.updated_by_id, name: t.updated_by }, 'xs') %><%= firstName(t.updated_by) %></span><% } else { %><span class="muted">—</span><% } %></td>
+            <td class="right muted" title="<%= fmtDate(t.updated_at) %>"><%= fmtShort(t.updated_at) %></td>
             <td class="row-actions">
               <%- include('delete', {
                 action: `/tickets/${t.id}/delete`,

@@ -76,6 +76,11 @@ app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-
 // user's own format in res.locals (src/middleware/auth.js).
 Object.assign(app.locals, formattersFor());
 app.locals.dateFormats = DATE_FORMATS;
+// First name for compact lists: 'Obaid Shaukat' -> 'Obaid', 'sam.jones@x.co' -> 'Sam'.
+app.locals.firstName = (name) => {
+  const first = String(name || '').trim().replace(/@.*$/, '').split(/[\s._-]+/)[0] || '';
+  return first ? first.charAt(0).toUpperCase() + first.slice(1) : '';
+};
 // Avatars without a user list: initials only (pages get the real helper below).
 app.locals.avatar = avatarHelper([]);
 app.locals.fmtBytes = (bytes) => {
@@ -144,6 +149,8 @@ const NAV_PREFIXES = [
   ['/inventory', 'inventory'],
 ];
 app.use((req, res, next) => {
+  // Sidebar collapsed to icons (cookie set by the toggle in app.js), rendered server-side so it does not flash.
+  res.locals.navCollapsed = /(?:^|;\s*)itsupport_nav=collapsed(?:;|$)/.test(req.headers.cookie || '');
   const hit = NAV_PREFIXES.find(([prefix]) => req.path === prefix || req.path.startsWith(`${prefix}/`));
   res.locals.nav = hit ? hit[1] : req.path === '/' ? 'dashboard' : '';
   next();

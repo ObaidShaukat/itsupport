@@ -17,7 +17,7 @@
 <body>
 <%- include('icons') %>
 <% if (locals.currentUser) { %>
-<div class="shell">
+<div class="shell <%= locals.navCollapsed ? 'nav-collapsed' : '' %>" data-shell>
   <input type="checkbox" id="nav-toggle" class="nav-toggle">
   <aside class="sidebar">
     <div class="sidebar-top">
@@ -28,18 +28,20 @@
           <span class="brand-name">Cleartwo</span>
         <% } %>
         <span class="brand-sub">IT Support</span>
+        <img src="/favicon.svg" alt="Cleartwo" class="brand-mark">
       </a>
+      <button type="button" class="nav-collapse" data-nav-collapse aria-pressed="<%= locals.navCollapsed ? 'true' : 'false' %>" title="<%= locals.navCollapsed ? 'Expand menu' : 'Collapse menu' %>" aria-label="<%= locals.navCollapsed ? 'Expand menu' : 'Collapse menu' %>"><%- icon('left') %></button>
       <label for="nav-toggle" class="nav-button" aria-label="Toggle menu"><%- icon('menu') %></label>
     </div>
     <nav class="nav" aria-label="Main">
       <% for (const item of navItems) { %>
-        <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
+        <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>" title="<%= item.label %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
       <% } %>
       <div class="nav-foot">
         <a href="/profile" class="whoami <%= locals.nav === 'profile' ? 'active' : '' %>" title="My profile"><%- avatar(currentUser, 'sm') %><span><%= currentUser.name || currentUser.username %></span></a>
         <form method="post" action="/logout">
           <%- locals.csrfField %>
-          <button type="submit" class="nav-signout"><%- icon('logout') %><span>Sign out</span></button>
+          <button type="submit" class="nav-signout" title="Sign out"><%- icon('logout') %><span>Sign out</span></button>
         </form>
       </div>
     </nav>

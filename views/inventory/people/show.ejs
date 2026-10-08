@@ -150,7 +150,7 @@
   <% if (!held.access.length) { %><p class="empty">No accounts recorded.</p><% } else { %>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Account</th><th>Username / email</th><th>Status</th><th>Granted</th><th>1Password</th><th></th></tr></thead>
+        <thead><tr><th class="w-20">Account</th><th>Username / email</th><th class="w-md">Status</th><th class="w-md">Granted</th><th class="w-num">1Password</th><th class="w-xs"><span class="visually-hidden">Actions</span></th></tr></thead>
         <tbody>
           <% for (const a of held.access) { %>
             <tr>

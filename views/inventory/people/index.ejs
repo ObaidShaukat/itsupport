@@ -41,8 +41,8 @@
       <table class="table">
         <thead>
           <tr>
-            <th>Name</th><th>Company</th><th>Team</th><th>Role</th>
-            <% if (former) { %><th>Left</th><th>Offboarding</th><% } else { %><th class="num">Assets</th><th class="num">Stock</th><th class="num">Access</th><% } %>
+            <th class="w-20">Name</th><th class="w-md">Company</th><th class="w-md">Team</th><th>Role</th>
+            <% if (former) { %><th class="w-sm">Left</th><th class="w-sm">Offboarding</th><% } else { %><th class="num w-num">Assets</th><th class="num w-num">Stock</th><th class="num w-num">Access</th><% } %>
             <% for (const f of listFields) { %><th><%= f.label %></th><% } %>
           </tr>
         </thead>

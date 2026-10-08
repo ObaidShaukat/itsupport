@@ -1486,3 +1486,32 @@ if (cropDialog && typeof cropDialog.showModal === 'function') {
     }
   });
 }
+
+// ---- Compact layout helpers ----
+
+// Sidebar: collapse to icons only. The choice is kept in a cookie so the server renders
+// the page already collapsed (no flash on the next page).
+const shell = document.querySelector('[data-shell]');
+const navCollapse = document.querySelector('[data-nav-collapse]');
+if (shell && navCollapse) {
+  navCollapse.addEventListener('click', () => {
+    const collapsed = shell.classList.toggle('nav-collapsed');
+    document.cookie = `itsupport_nav=${collapsed ? 'collapsed' : 'open'}; path=/; max-age=31536000; SameSite=Lax`;
+    const label = collapsed ? 'Expand menu' : 'Collapse menu';
+    navCollapse.setAttribute('aria-pressed', String(collapsed));
+    navCollapse.title = label;
+    navCollapse.setAttribute('aria-label', label);
+  });
+}
+
+// Table cells are one line, cut with "…": show the full text as a tooltip when a cell
+// is actually cut off and has no tooltip of its own.
+document.addEventListener('mouseover', (event) => {
+  const cell = event.target.closest && event.target.closest('.table td, .table th');
+  if (!cell || cell.hasAttribute('title') || cell.dataset.tipChecked) return;
+  cell.dataset.tipChecked = '1';
+  if (cell.scrollWidth > cell.clientWidth + 1) {
+    const text = cell.textContent.replace(/\s+/g, ' ').trim();
+    if (text) cell.title = text;
+  }
+});

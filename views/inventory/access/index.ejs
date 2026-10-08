@@ -47,9 +47,9 @@
       <table class="table">
         <thead>
           <tr>
-            <th>Account</th><th>Person</th><th>Username / email</th><th>Status</th><th>Granted</th><th>1Password</th>
+            <th class="w-md">Account</th><th class="w-md">Person</th><th>Username / email</th><th class="w-sm">Status</th><th class="w-md">Granted</th><th class="w-num">1Password</th>
             <% for (const f of listFields) { %><th><%= f.label %></th><% } %>
-            <th></th>
+            <th class="w-xs"><span class="visually-hidden">Edit</span></th>
           </tr>
         </thead>
         <tbody>
@@ -80,8 +80,8 @@
     <div class="table-wrap">
       <table class="table">
         <thead>
-          <tr><th>Name</th><th>Account / app</th><th>Login</th><th>Purpose</th><th>Owner</th><th>Status</th><th>1Password</th>
-            <% for (const f of sharedListFields) { %><th><%= f.label %></th><% } %><th></th></tr>
+          <tr><th class="w-md">Name</th><th class="w-md">Account / app</th><th>Login</th><th>Purpose</th><th class="w-md">Owner</th><th class="w-sm">Status</th><th class="w-sm">1Password</th>
+            <% for (const f of sharedListFields) { %><th><%= f.label %></th><% } %><th class="w-xs"><span class="visually-hidden">Actions</span></th></tr>
         </thead>
         <tbody>
           <% for (const s of shared) { %>

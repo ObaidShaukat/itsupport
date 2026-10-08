@@ -20,7 +20,8 @@ const formatter = (key, options) => {
   return cache.get(key);
 };
 
-// { fmtDate(datetime) -> "7 Oct 2026, 15:00", fmtDay(date) -> "7 Oct 2026", fmtTime(datetime) -> "15:00" }
+// { fmtDate(datetime) -> "7 Oct 2026, 15:00", fmtDay(date) -> "7 Oct 2026", fmtTime(datetime) -> "15:00",
+//   fmtShort(datetime) -> "7 Oct, 15:00" (07/10, 15:00; the year is added when it is not this year) }
 // fmtDay takes a DATE column ("YYYY-MM-DD", shown as that calendar day) or a timestamp
 // (shown as its UK day). Empty values give ''.
 function formattersFor(format) {
@@ -28,6 +29,9 @@ function formattersFor(format) {
   const day = formatter(`${key}:day`, { ...OPTIONS[key], timeZone: 'Europe/London' });
   const calendarDay = formatter(`${key}:cal`, { ...OPTIONS[key], timeZone: 'UTC' });
   const time = formatter('time', { ...TIME, timeZone: 'Europe/London' });
+  const SHORT = { d_mon_yyyy: { day: 'numeric', month: 'short' }, dd_mm_yyyy: { day: '2-digit', month: '2-digit' } };
+  const shortDay = formatter(`${key}:short`, { ...SHORT[key], timeZone: 'Europe/London' });
+  const year = formatter('year', { year: 'numeric', timeZone: 'Europe/London' });
   const valid = (value) => {
     if (value === null || value === undefined || value === '') return null;
     const d = value instanceof Date ? value : new Date(value);
@@ -46,7 +50,13 @@ function formattersFor(format) {
     const d = valid(value);
     return d ? time.format(d) : '';
   };
-  return { fmtDate, fmtDay, fmtTime };
+  const fmtShort = (value) => {
+    const d = valid(value);
+    if (!d) return '';
+    if (year.format(d) !== year.format(new Date())) return fmtDate(d);
+    return `${shortDay.format(d)}, ${time.format(d)}`;
+  };
+  return { fmtDate, fmtDay, fmtTime, fmtShort };
 }
 
 module.exports = { DATE_FORMATS, DEFAULT_FORMAT, isDateFormat, formattersFor };

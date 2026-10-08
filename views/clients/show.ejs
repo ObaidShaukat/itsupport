@@ -161,8 +161,8 @@
     <h2>Tickets</h2>
     <a href="/tickets/new?client_id=<%= client.id %>" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
   </div>
-  <div class="card">
-    <%- include('../partials/ticket-filters', { controls: ticketControls }) %>
+  <div class="card" id="client-tickets">
+    <%- include('../partials/ticket-filters', { controls: ticketControls, search: { target: '#client-tickets', placeholder: 'Search tickets' } }) %>
     <%- include('../partials/ticket-table', { tickets, controls: ticketControls, filtered: Boolean(ticketState.status || ticketState.priority) }) %>
   </div>
 </section>

@@ -18,7 +18,9 @@ const SORTS = {
 // Default: urgent tickets first, then the most recently updated.
 const DEFAULT_ORDER = "(t.priority = 'urgent') DESC, t.updated_at DESC, t.id DESC";
 
+// Priority is a small flag at the start of each row (its header sorts by priority).
 const COLUMNS = [
+  ['priority', 'Priority'],
   ['id', '#'],
   ['title', 'Title'],
   ['client', 'Client'],
@@ -26,7 +28,6 @@ const COLUMNS = [
   ['created_by', 'Created by'],
   ['updated_by', 'Updated by'],
   ['updated', 'Last updated'],
-  ['priority', 'Priority'],
 ];
 
 function readListQuery(query) {
@@ -108,7 +109,7 @@ function listControls(base, state, counts, hash = '') {
     })),
   ];
   const priorityFilters = [
-    { label: 'Any priority', href: href({ priority: '' }), active: !state.priority, count: counts.all },
+    { label: 'Any', href: href({ priority: '' }), active: !state.priority, count: counts.all },
     ...['urgent', 'high', 'normal', 'low'].map((key) => ({
       key, label: TICKET_PRIORITIES[key], href: href({ priority: key }), active: state.priority === key, count: counts.priority[key],
     })),

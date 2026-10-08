@@ -21,7 +21,7 @@
     <h2>By category</h2>
     <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Category</th><th>Kind</th><th class="num">Assets</th><th class="num">Stock units</th></tr></thead>
+        <thead><tr><th>Category</th><th class="w-sm">Kind</th><th class="num w-num">Assets</th><th class="num w-sm">Stock units</th></tr></thead>
         <tbody>
           <% for (const c of byCategory) { %>
             <tr><td><%= c.category %></td><td class="muted small"><%= c.kind === 'stock' ? 'Stock' : 'Asset' %></td><td class="num"><%= Number(c.assets) || '' %></td><td class="num"><%= Number(c.stock) || '' %></td></tr>
@@ -46,7 +46,7 @@
   <div class="table-wrap" id="models">
     <p class="empty" data-filter-empty hidden>Nothing matches your search.</p>
     <table class="table">
-      <thead><tr><th>Category</th><th>Model</th><th class="num">Count</th><th>Status</th><th>Used by</th></tr></thead>
+      <thead><tr><th class="w-md">Category</th><th class="w-20">Model</th><th class="num w-num">Count</th><th class="w-20">Status</th><th>Used by</th></tr></thead>
       <tbody>
         <% for (const g of assetGroups) { %>
           <tr data-filter-item data-search="<%= g.category %> <%= g.model %> <%= g.people.join(' ') %>">
@@ -66,7 +66,7 @@
   <h2>Stock by model</h2>
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Category</th><th>Model</th><th class="num">Total</th><th class="num">Available</th><th>Used by</th></tr></thead>
+      <thead><tr><th class="w-md">Category</th><th class="w-20">Model</th><th class="num w-num">Total</th><th class="num w-num">Available</th><th>Used by</th></tr></thead>
       <tbody>
         <% for (const s of stock) { %>
           <tr>

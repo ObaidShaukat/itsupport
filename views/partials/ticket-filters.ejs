@@ -1,4 +1,4 @@
-<%# controls: { statusFilters, priorityFilters } from src/lib/ticket-list.js %>
+<%# controls: { statusFilters, priorityFilters } from src/lib/ticket-list.js; search: { target, placeholder } (optional) %>
 <div class="ticket-filters">
   <nav class="filters" aria-label="Filter by status">
     <% for (const f of controls.statusFilters) { %>
@@ -7,9 +7,10 @@
   </nav>
   <nav class="filters filters-priority" aria-label="Filter by priority">
     <% for (const f of controls.priorityFilters) { %>
-      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %> <%= f.key ? `filter-priority-${f.key}` : '' %>">
+      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %> <%= f.key ? `filter-priority-${f.key}` : '' %>" <%= f.key ? '' : 'title="Any priority"' %>>
         <% if (f.key) { %><span class="priority-dot priority-dot-<%= f.key %>" aria-hidden="true"></span><% } %><%= f.label %> <span class="count"><%= f.count %></span>
       </a>
     <% } %>
   </nav>
+  <% if (locals.search) { %><%- include('search', search) %><% } %>
 </div>
