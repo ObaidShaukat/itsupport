@@ -16,16 +16,33 @@
 <%- include('../_tabs', { active: tab.id }) %>
 
 <div class="grid-2 grid-wide-left">
-  <section class="card">
-    <h2>Details</h2>
-    <dl class="inv-details">
-      <% for (const f of fields.filter((x) => x.visible)) { %>
-        <%- include('../_field-value', { field: f, v: values.get(f.id), recordId: record.id }) %>
+  <section class="card" id="details">
+    <% const shown = fields.filter((x) => x.visible); const back = `/inventory/r/${record.id}#details`; %>
+    <div class="card-head">
+      <h2>Details</h2>
+      <%- include('../_add-field', { tabId: tab.id, back, types: invFieldTypes }) %>
+    </div>
+    <ul class="inv-details" data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=details">
+      <% for (const [i, f] of shown.filter((x) => x.field_type !== 'access').entries()) { const list = shown.filter((x) => x.field_type !== 'access'); %>
+        <%- include('../_field-value', { field: f, v: values.get(f.id), recordId: record.id, manage: { back, types: invFieldTypes, first: i === 0, last: i === list.length - 1 } }) %>
       <% } %>
-    </dl>
+    </ul>
+    <p class="small" data-reorder-status role="status" hidden></p>
+    <% const access = shown.filter((x) => x.field_type === 'access'); %>
+    <% if (access.length) { %>
+      <h3 class="inv-subhead">Access</h3>
+      <ul class="inv-details" data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=access">
+        <% for (const [i, f] of access.entries()) { %>
+          <%- include('../_field-value', { field: f, v: values.get(f.id), recordId: record.id, manage: { back, types: invFieldTypes, first: i === 0, last: i === access.length - 1 } }) %>
+        <% } %>
+      </ul>
+    <% } %>
+    <% const hiddenCount = fields.length - shown.length; %>
+    <% if (hiddenCount) { %><p class="muted small inv-hidden-note"><%= hiddenCount %> hidden field<%= hiddenCount === 1 ? '' : 's' %> · <a href="/inventory/t/<%= tab.id %>/columns">Columns</a></p><% } %>
   </section>
   <section class="card">
     <%- include('../../partials/history', { entries: history, open: true }) %>
   </section>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script>
 <%- include('../../partials/foot') %>

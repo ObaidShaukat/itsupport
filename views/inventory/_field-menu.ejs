@@ -1,0 +1,53 @@
+<%#
+  "⋯" menu for one field on a record page: Rename, Change type (not for access toggles),
+  Move up / down, Hide, Delete (confirmation page with a data count). field, back, types,
+  first / last (disable moves).
+%>
+<details class="edit edit-right field-menu">
+  <summary class="icon-btn field-menu-btn" title="Field options" aria-label="Options for <%= field.label %>">⋯</summary>
+  <div class="edit-panel">
+    <form method="post" action="/inventory/fields/<%= field.id %>/rename" class="form">
+      <%- csrfField %>
+      <input type="hidden" name="back" value="<%= back %>">
+      <label class="field">
+        <span>Rename</span>
+        <input type="text" name="label" value="<%= field.label %>" required maxlength="100">
+      </label>
+      <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save name</button></div>
+    </form>
+    <% if (field.field_type !== 'access') { %>
+      <form method="post" action="/inventory/fields/<%= field.id %>/type" class="form" data-field-form>
+        <%- csrfField %>
+        <input type="hidden" name="back" value="<%= back %>">
+        <label class="field">
+          <span>Change type</span>
+          <select name="field_type" data-field-type>
+            <% for (const [key, label] of Object.entries(types)) { if (key === 'access') continue; %>
+              <option value="<%= key %>" <%= key === field.field_type ? 'selected' : '' %>><%= label %></option>
+            <% } %>
+          </select>
+        </label>
+        <label class="field" data-options-field>
+          <span>Options <span class="muted">(one per line)</span></span>
+          <textarea name="options" rows="3"><%= field.options || '' %></textarea>
+        </label>
+        <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save type</button></div>
+      </form>
+    <% } %>
+    <div class="field-menu-actions">
+      <form method="post" action="/inventory/fields/<%= field.id %>/move" class="inline">
+        <%- csrfField %>
+        <input type="hidden" name="back" value="<%= back %>">
+        <button type="submit" name="dir" value="up" class="btn btn-small btn-ghost" <%= locals.first ? 'disabled' : '' %>><%- icon('up') %><span>Move up</span></button>
+        <button type="submit" name="dir" value="down" class="btn btn-small btn-ghost" <%= locals.last ? 'disabled' : '' %>><%- icon('down') %><span>Move down</span></button>
+      </form>
+      <form method="post" action="/inventory/fields/<%= field.id %>/hide" class="inline">
+        <%- csrfField %>
+        <input type="hidden" name="back" value="<%= back %>">
+        <button type="submit" class="btn btn-small btn-ghost" title="Hidden fields can be shown again from Columns"><%- icon('eye') %><span>Hide</span></button>
+      </form>
+      <a href="/inventory/fields/<%= field.id %>/delete?back=<%= encodeURIComponent(back) %>" class="btn btn-small btn-danger"><%- icon('trash') %><span>Delete</span></a>
+    </div>
+    <div class="form-actions"><button type="button" class="btn btn-small btn-ghost" data-cancel>Close</button></div>
+  </div>
+</details>

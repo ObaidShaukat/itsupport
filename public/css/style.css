@@ -1851,10 +1851,31 @@ table.grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; 
 .field-list .is-hidden-field { opacity: 0.6; }
 
 /* Record details */
-.inv-details { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-3) var(--sp-4); margin: 0; }
-.inv-detail { min-width: 0; }
-.inv-detail dt { font-size: 0.7857rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
-.inv-detail dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; min-height: 22px; }
+.inv-details { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: var(--sp-2) var(--sp-4); margin: 0; }
+.inv-detail { min-width: 0; padding: 6px 8px; margin: -6px -8px; border-radius: var(--radius-sm); transition: background 0.12s; }
+.inv-detail:hover, .inv-detail:focus-within { background: var(--surface-soft); }
+.inv-detail-label { display: flex; align-items: center; gap: 4px; min-height: 22px; font-size: 0.7857rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600; margin-bottom: 2px; }
+.inv-detail-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inv-detail-value { font-weight: 500; overflow-wrap: anywhere; min-height: 22px; }
+.inv-subhead { margin: var(--sp-4) 0 var(--sp-2); font-size: 0.8571rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--purple); }
+.inv-hidden-note { margin: var(--sp-3) 0 0; }
+/* Field tools (drag handle and the ⋯ menu) show on hover / focus; always on touch screens. */
+.inv-detail .drag-handle, .access-list .drag-handle { width: 16px; height: 18px; margin-left: -4px; cursor: grab; color: var(--muted); }
+.inv-detail .drag-handle .icon, .access-list .drag-handle .icon { width: 14px; height: 14px; }
+.field-menu-btn { width: 24px; height: 22px; font-size: 1rem; line-height: 1; letter-spacing: 0; color: var(--muted); }
+@media (hover: hover) {
+  .inv-detail .drag-handle, .inv-detail .field-menu > summary, .access-list .drag-handle, .access-list .field-menu > summary { opacity: 0; transition: opacity 0.12s; }
+  .inv-detail:hover .drag-handle, .inv-detail:hover .field-menu > summary, .inv-detail:focus-within .drag-handle, .inv-detail:focus-within .field-menu > summary,
+  .access-list li:hover .drag-handle, .access-list li:hover .field-menu > summary, .access-list li:focus-within .drag-handle, .access-list li:focus-within .field-menu > summary,
+  .field-menu[open] > summary { opacity: 1; }
+}
+.field-menu { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.field-menu .edit-panel { width: min(320px, calc(100vw - 2rem)); color: var(--text); font-size: 1rem; }
+.field-menu-actions { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.field-menu-actions .btn:disabled { opacity: 0.4; cursor: default; }
+.access-name { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.add-field > summary { white-space: nowrap; }
+.inv-details .sortable-ghost, .access-list .sortable-ghost { opacity: 0.4; }
 
 /* Employee profile */
 .emp-head { display: flex; align-items: center; gap: var(--sp-5); flex-wrap: wrap; padding: var(--sp-5); background: linear-gradient(120deg, var(--surface) 55%, var(--purple-soft)); }

@@ -56,21 +56,36 @@
 
 <div class="emp-grid">
   <section class="card" id="details">
-    <h2>Details</h2>
-    <dl class="inv-details">
-      <% for (const f of detailFields) { %><%- include('_field-value', { field: f, v: values.get(f.id), recordId: record.id }) %><% } %>
-    </dl>
+    <div class="card-head">
+      <h2>Details</h2>
+      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, back: back + '#details', types: invFieldTypes }) %><% } %>
+    </div>
+    <ul class="inv-details" <% if (!readOnly) { %>data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=details"<% } %>>
+      <% for (const [i, f] of detailFields.entries()) { %>
+        <%- include('_field-value', { field: f, v: values.get(f.id), recordId: record.id, manage: readOnly ? null : { back: back + '#details', types: invFieldTypes, first: i === 0, last: i === detailFields.length - 1 } }) %>
+      <% } %>
+    </ul>
+    <p class="small" data-reorder-status role="status" hidden></p>
+    <% const hiddenCount = fields.filter((f) => !f.visible).length; %>
+    <% if (hiddenCount) { %><p class="muted small inv-hidden-note"><%= hiddenCount %> hidden field<%= hiddenCount === 1 ? '' : 's' %> · <a href="/inventory/t/<%= tab.id %>/columns">Columns</a></p><% } %>
   </section>
 
   <section class="card" id="access">
-    <h2>Access</h2>
+    <div class="card-head">
+      <h2>Access</h2>
+      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, back: back + '#access', access: true }) %><% } %>
+    </div>
     <% if (!accessFields.length) { %>
       <p class="empty">No access columns. <a href="/inventory/t/<%= tab.id %>/columns">Add one</a> (type "Access").</p>
     <% } else { %>
-      <ul class="access-list">
-        <% for (const f of accessFields) { const on = values.get(f.id)?.value === 'granted'; %>
-          <li>
-            <span><%= f.label %></span>
+      <ul class="access-list" <% if (!readOnly) { %>data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=access"<% } %>>
+        <% for (const [i, f] of accessFields.entries()) { const on = values.get(f.id)?.value === 'granted'; %>
+          <li data-id="<%= f.id %>">
+            <span class="access-name">
+              <% if (!readOnly) { %><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span><% } %>
+              <span><%= f.label %></span>
+              <% if (!readOnly) { %><%- include('_field-menu', { field: f, back: back + '#access', types: invFieldTypes, first: i === 0, last: i === accessFields.length - 1 }) %><% } %>
+            </span>
             <% if (readOnly) { %>
               <span class="access-badge <%= on ? 'is-granted' : '' %>"><%= on ? 'Granted' : 'Not granted' %></span>
             <% } else { %>
@@ -88,6 +103,7 @@
           </li>
         <% } %>
       </ul>
+      <p class="small" data-reorder-status role="status" hidden></p>
     <% } %>
   </section>
 </div>
@@ -196,4 +212,5 @@
     <%- include('../partials/history', { entries: history, open: true, label: 'History' }) %>
   </div>
 </section>
+<% if (!readOnly) { %><script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script><% } %>
 <%- include('../partials/foot') %>

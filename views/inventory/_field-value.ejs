@@ -1,14 +1,19 @@
 <%#
-  Read-only display of one field on a record page. field, v ({ value, hasSecret } or
-  undefined), recordId.
+  One field on a record page (an <li> inside ul.inv-details). field, v ({ value, hasSecret }
+  or undefined), recordId; manage: { back, types, first, last } adds the drag handle and
+  the "⋯" menu (Rename, Change type, Move, Hide, Delete).
 %>
-<div class="inv-detail">
-  <dt><%= field.label %></dt>
-  <dd>
+<li class="inv-detail" data-id="<%= field.id %>">
+  <div class="inv-detail-label">
+    <% if (locals.manage) { %><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span><% } %>
+    <span class="inv-detail-name"><%= field.label %></span>
+    <% if (locals.manage) { %><%- include('_field-menu', { field, back: manage.back, types: manage.types, first: manage.first, last: manage.last }) %><% } %>
+  </div>
+  <div class="inv-detail-value">
     <% if (field.field_type === 'password' || field.field_type === 'pin') { %>
       <%- include('_secret', { recordId, field, hasSecret: Boolean(v && v.hasSecret) }) %>
     <% } else { %>
       <%- include('_cell', { cell: { kind: field.field_type === 'access' ? 'access' : field.field_type, value: v ? v.value : null, granted: Boolean(v && v.value === 'granted') } }) %>
     <% } %>
-  </dd>
-</div>
+  </div>
+</li>

@@ -1,0 +1,42 @@
+<%#
+  "+ Add field" / "+ Add access" button on a record page. Adds the field to the whole tab
+  (empty for everyone else; also a column in the tab's table). tabId, back, access (true
+  for an access toggle), types ({ key: label }, for fields).
+%>
+<details class="edit edit-right add-field">
+  <summary class="btn btn-small btn-ghost"><%- icon('plus') %><span><%= locals.access ? 'Add access' : 'Add field' %></span></summary>
+  <div class="edit-panel">
+    <form method="post" action="/inventory/t/<%= tabId %>/columns" class="form" data-field-form>
+      <%- csrfField %>
+      <input type="hidden" name="back" value="<%= back %>">
+      <h3 class="edit-section"><%= locals.access ? 'New access toggle' : 'New field' %></h3>
+      <label class="field">
+        <span><%= locals.access ? 'Name (e.g. CRM, Portal)' : 'Name' %></span>
+        <input type="text" name="label" required maxlength="100">
+      </label>
+      <% if (locals.access) { %>
+        <input type="hidden" name="field_type" value="access">
+        <p class="muted small">Added for everyone, as Not granted.</p>
+      <% } else { %>
+        <label class="field">
+          <span>Type</span>
+          <select name="field_type" data-field-type>
+            <% for (const [key, label] of Object.entries(types)) { if (key === 'access') continue; %>
+              <option value="<%= key %>"><%= label %></option>
+            <% } %>
+          </select>
+        </label>
+        <label class="field" data-options-field>
+          <span>Options <span class="muted">(one per line)</span></span>
+          <textarea name="options" rows="3"></textarea>
+        </label>
+        <p class="muted small">Added for everyone (empty for now) and as a column in the table.</p>
+      <% } %>
+      <input type="hidden" name="visible" value="1">
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Add</button>
+        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+      </div>
+    </form>
+  </div>
+</details>
