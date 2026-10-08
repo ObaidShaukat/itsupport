@@ -1,0 +1,80 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/workbook">Inventory workbook</a> / Import</p>
+    <h1>Match sheets and columns</h1>
+    <p class="muted"><%= stage.fileName %> · <%= stage.sheets.length %> sheet<%= stage.sheets.length === 1 ? '' : 's' %>. Each sheet was matched to a tab by name and its columns to fields by name. Change anything that is wrong, then preview.</p>
+  </div>
+</header>
+<%- include('../import/_steps', { step: 1 }) %>
+<% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+<% if (notice) { %><div class="flash flash-info" role="status"><%= notice %></div><% } %>
+
+<form method="post" action="/inventory/workbook/import/<%= token %>/map" class="form">
+  <%- csrfField %>
+  <% for (const s of sheets) { %>
+    <section class="card wb-sheet <%= s.sheet.target === 'skip' ? 'is-skipped' : '' %>">
+      <div class="card-head">
+        <h2><%- icon('file') %> <%= s.sheet.name %> <span class="muted small"><%= s.sheet.rows.length %> row<%= s.sheet.rows.length === 1 ? '' : 's' %><% if (s.sheet.examples) { %> · <%= s.sheet.examples %> example row left out<% } %></span></h2>
+        <% if (s.sheet.unknown) { %><span class="chip chip-warn">No tab with this name</span><% } %>
+      </div>
+      <div class="form-row">
+        <label class="field">
+          <span>Import into</span>
+          <select name="s<%= s.i %>_target">
+            <option value="skip" <%= s.sheet.target === 'skip' ? 'selected' : '' %>>Skip this sheet</option>
+            <% for (const t of tabs) { const v = t.kind === 'stock' ? 'stock' : `tab:${t.id}`; %>
+              <option value="<%= v %>" <%= s.sheet.target === v ? 'selected' : '' %>><%= t.name %><%= t.kind === 'employees' && s.sheet.defaultStatus === 'inactive' ? ' (new rows as ex employees)' : '' %></option>
+            <% } %>
+            <option value="newtab" <%= s.sheet.target === 'newtab' ? 'selected' : '' %>>Create a new tab</option>
+          </select>
+        </label>
+        <% if (s.sheet.target === 'newtab' || s.sheet.unknown) { %>
+          <label class="field">
+            <span>New tab name</span>
+            <input type="text" name="s<%= s.i %>_tabname" value="<%= s.sheet.newTabName %>" maxlength="60">
+          </label>
+        <% } %>
+      </div>
+      <% if (s.sheet.target !== 'skip') { %>
+        <% if (s.scope.kind === 'newtab') { %><p class="muted small">Each column becomes a field of the new tab; the first one is its name. Pick a type for each, or skip it.</p><% } %>
+        <div class="table-wrap">
+          <table class="table import-map">
+            <thead><tr><th class="w-20">Column</th><th>Example values</th><th class="w-25">Import into</th><th class="w-md">New field type</th></tr></thead>
+            <tbody>
+              <% s.columns.forEach((c, col) => { %>
+                <tr class="<%= c.mapping.target === 'skip' ? 'is-skipped' : '' %>" data-map-row>
+                  <td><strong><%= c.header %></strong></td>
+                  <td class="muted small" title="<%= c.samples.join(' · ') %>"><%= c.samples.join(' · ') || '—' %></td>
+                  <td>
+                    <select name="s<%= s.i %>_map_<%= col %>" aria-label="<%= s.sheet.name %>: import <%= c.header %> into" data-map-target>
+                      <option value="skip" <%= c.mapping.target === 'skip' ? 'selected' : '' %>>Skip this column</option>
+                      <option value="new" <%= c.mapping.target === 'new' ? 'selected' : '' %>>Create a new field "<%= c.header %>"</option>
+                      <% if (s.targets.length) { %>
+                        <optgroup label="<%= s.scope.name %>">
+                          <% for (const t of s.targets) { %><option value="<%= t.value %>" <%= c.mapping.target === t.value ? 'selected' : '' %>><%= t.label %></option><% } %>
+                        </optgroup>
+                      <% } %>
+                    </select>
+                  </td>
+                  <td>
+                    <select name="s<%= s.i %>_type_<%= col %>" aria-label="<%= s.sheet.name %>: type for a new field <%= c.header %>" data-map-type>
+                      <% const def = c.mapping.type && c.mapping.type !== 'text' ? c.mapping.type : (/pass/i.test(c.header) ? 'password' : /\bpin\b/i.test(c.header) ? 'pin' : 'text'); %>
+                      <% for (const k of s.newTypes) { %><option value="<%= k %>" <%= def === k ? 'selected' : '' %>><%= fieldTypes[k] %></option><% } %>
+                    </select>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </section>
+  <% } %>
+  <div class="card form-actions">
+    <button type="submit" class="btn btn-primary">Preview<%- icon('arrow-right') %></button>
+    <button type="submit" formaction="/inventory/workbook/import/<%= token %>/cancel" formnovalidate class="btn btn-ghost">Cancel import</button>
+    <span class="muted small">Changing where a sheet goes matches its columns again first.</span>
+  </div>
+</form>
+<%- include('../../partials/foot') %>

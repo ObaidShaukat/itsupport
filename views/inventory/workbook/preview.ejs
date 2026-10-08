@@ -1,0 +1,70 @@
+<%- include('../../partials/head') %>
+<% const labels = { create: 'Create', update: 'Update', unchanged: 'No change', skip: 'Skip' }; %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/workbook">Inventory workbook</a> / Import</p>
+    <h1>Preview</h1>
+    <p class="muted"><%= stage.fileName %>. Nothing has been changed yet. Sheets are shown in the order they will be imported. Rows with problems are skipped, not guessed.</p>
+  </div>
+</header>
+<%- include('../import/_steps', { step: 2 }) %>
+
+<div class="import-counts">
+  <div class="card import-count is-create"><strong><%= totals.create %></strong><span>to create</span></div>
+  <div class="card import-count is-update"><strong><%= totals.update %></strong><span>to update</span></div>
+  <div class="card import-count"><strong><%= totals.unchanged %></strong><span>no change</span></div>
+  <div class="card import-count is-skip"><strong><%= totals.skip %></strong><span>skipped</span></div>
+</div>
+<% if (skippedSheets.length) { %><p class="muted small">Sheets skipped: <%= skippedSheets.map((s) => s.name).join(', ') %>.</p><% } %>
+
+<% for (const [n, r] of results.entries()) { const plan = r.plan; %>
+  <details class="card wb-result" <%= n === 0 || plan.counts.skip ? 'open' : '' %>>
+    <summary class="wb-result-head">
+      <span class="wb-order"><%= n + 1 %></span>
+      <strong><%= r.sheet.name %></strong>
+      <span class="muted">→ <%= r.scope.kind === 'newtab' ? `new tab "${r.scope.name}"` : r.scope.name %></span>
+      <span class="wb-counts small">
+        <span class="import-action import-action-create"><%= plan.counts.create %> create</span>
+        <span class="import-action import-action-update"><%= plan.counts.update %> update</span>
+        <span class="import-action"><%= plan.counts.unchanged %> no change</span>
+        <span class="import-action import-action-skip"><%= plan.counts.skip %> skip</span>
+      </span>
+    </summary>
+    <% const created = [...(plan.newFields || []).map((x) => `Field: ${x}`), ...(plan.newCategories || []).map((x) => `Category: ${x}`), ...(plan.newModels || []).map((x) => `Model: ${x}`)]; %>
+    <% for (const note of plan.notes) { %><p class="flash flash-info"><%= note %></p><% } %>
+    <% if (created.length) { %><ul class="chip-list wb-created"><% for (const c of created) { %><li class="chip chip-category"><%= c %></li><% } %></ul><% } %>
+    <% const shown = [...plan.rows.filter((x) => x.action === 'skip'), ...plan.rows.filter((x) => x.action !== 'skip')].slice(0, previewRows); %>
+    <div class="table-wrap">
+      <table class="table import-preview">
+        <thead><tr><th class="w-id">Row</th><th class="w-sm">Action</th><th class="w-20">Name</th><th>Values</th><th class="w-25">Problems / notes</th></tr></thead>
+        <tbody>
+          <% for (const row of shown) { %>
+            <tr class="import-row-<%= row.action %>">
+              <td class="muted"><%= row.n %></td>
+              <td><span class="import-action import-action-<%= row.action %>"><%= labels[row.action] %></span></td>
+              <td title="<%= row.title %>"><%= row.title || '—' %></td>
+              <% const vals = row.display.map((d) => `${d.label}: ${d.text}`).join(' · '); %>
+              <td class="small" title="<%= vals %>"><%= vals %></td>
+              <% const notes = [...row.errors, ...row.warnings].join(' '); %>
+              <td class="small <%= row.errors.length ? 'import-error' : 'import-warn' %>" title="<%= notes %>"><%= notes %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <% if (shown.length < plan.rows.length) { %><p class="muted small">Showing <%= shown.length %> of <%= plan.rows.length %> rows (skipped rows first).</p><% } %>
+  </details>
+<% } %>
+
+<section class="card import-confirm">
+  <form method="post" action="/inventory/workbook/import/<%= token %>/confirm" class="form-actions" data-confirm="Import <%= totals.create %> new and <%= totals.update %> updated rows from <%= results.length %> sheet<%= results.length === 1 ? '' : 's' %>?" data-confirm-ok="Import">
+    <%- csrfField %>
+    <button type="submit" class="btn btn-primary" <%= totals.create + totals.update ? '' : 'disabled' %>><%- icon('check') %><span>Import <%= totals.create + totals.update %> row<%= totals.create + totals.update === 1 ? '' : 's' %></span></button>
+    <a href="/inventory/workbook/import/<%= token %>" class="btn">Back to matching</a>
+  </form>
+  <form method="post" action="/inventory/workbook/import/<%= token %>/cancel" class="inline">
+    <%- csrfField %>
+    <button type="submit" class="btn btn-ghost">Cancel import</button>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

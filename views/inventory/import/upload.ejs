@@ -29,7 +29,8 @@
       <% } else { %>
         <li>Records are matched by <strong><%= area.tab.name === 'Writers' ? 'Official-ID' : area.tab.name === 'Old Accounts' ? 'Gmail-ID' : 'their key column' %></strong>: existing records are updated, not duplicated.</li>
       <% } %>
-      <li>Access columns: Yes, Done, Granted, Y, 1, True mean Granted; empty, No, 0, False mean Not granted.</li>
+      <li>Access columns: Yes, Done, Granted, Y, 1, True mean Granted; No, 0, False mean Not granted.</li>
+      <li>Empty cells never change saved data (passwords and PINs included). Type <strong>CLEAR</strong> to clear a value.</li>
       <li>Passwords and PINs are encrypted on import and only ever shown masked. The uploaded file is deleted as soon as it has been read.</li>
     </ul>
     <div class="form-actions">

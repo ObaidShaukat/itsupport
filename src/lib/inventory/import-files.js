@@ -19,6 +19,10 @@ const MAX_ROWS = 5000;
 const MAX_COLUMNS = 100;
 const TTL_MS = 60 * 60 * 1000;
 const TOKEN = /^[0-9a-f-]{36}$/;
+// Templates and empty workbook sheets carry one example row marked with this text; the
+// importer leaves such rows out, so importing a template unchanged adds nothing.
+const EXAMPLE_MARK = 'EXAMPLE (delete this row)';
+const isExampleRow = (cells) => cells.some((c) => String(c).trim().toUpperCase() === EXAMPLE_MARK.toUpperCase());
 
 fs.mkdirSync(IMPORT_DIR, { recursive: true });
 
@@ -100,10 +104,55 @@ async function readSheet(file) {
   if (!all.length) return { error: 'The file has no data.' };
   const width = Math.min(MAX_COLUMNS, Math.max(...all.map((r) => r.length)));
   const headers = Array.from({ length: width }, (_, i) => all[0][i] || `Column ${i + 1}`);
-  const rows = all.slice(1).map((r) => Array.from({ length: width }, (_, i) => r[i] || ''));
-  if (!rows.length) return { error: 'The file only has a header row.' };
+  const withExamples = all.slice(1).map((r) => Array.from({ length: width }, (_, i) => r[i] || ''));
+  const rows = withExamples.filter((r) => !isExampleRow(r));
+  if (!rows.length) return { error: withExamples.length ? 'The file only has the example row.' : 'The file only has a header row.' };
   if (rows.length > MAX_ROWS) return { error: `The file has ${rows.length} rows; import at most ${MAX_ROWS} at a time.` };
-  return { headers, rows };
+  return { headers, rows, examples: withExamples.length - rows.length };
+}
+
+// Every data sheet of a workbook (Instructions / Lists and empty sheets left out):
+// { sheets: [{ name, headers, rows }] } or { error }. A .csv is one sheet named after the file.
+async function readWorkbook(file) {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  if (!['.xlsx', '.csv'].includes(ext)) return { error: 'Upload an .xlsx (or .csv) file.' };
+  if (file.size > MAX_BYTES) return { error: 'The file must be 20 MB or smaller.' };
+  const book = new ExcelJS.Workbook();
+  let sheets;
+  try {
+    if (ext === '.csv') {
+      const ws = await book.csv.readFile(file.path);
+      ws.name = path.basename(file.originalname, ext).slice(0, 31) || 'Sheet';
+      sheets = [ws];
+    } else {
+      await book.xlsx.readFile(file.path);
+      sheets = book.worksheets.filter((ws) => !['instructions', 'lists'].includes(ws.name.toLowerCase()) && ws.state === 'visible');
+    }
+  } catch (err) {
+    return { error: 'That file could not be read. Save it as .xlsx and try again.' };
+  }
+  const out = [];
+  let total = 0;
+  for (const ws of sheets) {
+    const all = [];
+    ws.eachRow({ includeEmpty: false }, (row) => {
+      const values = [];
+      for (let c = 1; c <= Math.min(row.cellCount, MAX_COLUMNS); c += 1) values.push(cellText(row.getCell(c).value).trim());
+      if (values.some(Boolean)) all.push(values);
+    });
+    if (all.length < 2) continue; // no header or no rows
+    const width = Math.min(MAX_COLUMNS, Math.max(...all.map((r) => r.length)));
+    const headers = Array.from({ length: width }, (_, i) => all[0][i] || `Column ${i + 1}`);
+    const withExamples = all.slice(1).map((r) => Array.from({ length: width }, (_, i) => r[i] || ''));
+    const rows = withExamples.filter((r) => !isExampleRow(r));
+    if (!rows.length) continue; // only the example row
+    if (rows.length > MAX_ROWS) return { error: `Sheet "${ws.name}" has ${rows.length} rows; import at most ${MAX_ROWS} per sheet.` };
+    total += rows.length;
+    out.push({ name: ws.name, headers, rows, examples: withExamples.length - rows.length });
+  }
+  if (!out.length) return { error: 'The workbook has no sheets with data.' };
+  if (total > MAX_ROWS * 4) return { error: `The workbook has ${total} rows in total; import at most ${MAX_ROWS * 4} at a time.` };
+  return { sheets: out };
 }
 
 // ---- Encrypted staging between the steps ----
@@ -154,6 +203,6 @@ function removeUpload(file) {
 }
 
 module.exports = {
-  MAX_BYTES, cellText, normHeader, parseAccess, parseDate, readSheet,
+  MAX_BYTES, EXAMPLE_MARK, cellText, normHeader, parseAccess, parseDate, readSheet, readWorkbook,
   cleanStaging, createStage, saveStage, loadStage, deleteStage, removeUpload,
 };

@@ -1,0 +1,43 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/workbook">Inventory workbook</a> / Import</p>
+    <h1>Workbook imported</h1>
+    <p class="muted"><%= stage.fileName %> was imported. The file and its staged copy have been deleted.</p>
+  </div>
+  <div class="actions"><a href="/inventory" class="btn btn-primary">Open Inventory</a></div>
+</header>
+<%- include('../import/_steps', { step: 3 }) %>
+
+<section class="card">
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Sheet</th><th class="w-20">Into</th><th class="num w-num">Created</th><th class="num w-num">Updated</th><th class="num w-num">No change</th><th class="num w-num">Skipped</th></tr></thead>
+      <tbody>
+        <% for (const r of results) { %>
+          <tr>
+            <td><strong><%= r.sheet.name %></strong></td>
+            <td><%= r.scope.kind === 'newtab' ? `${r.scope.name} (new tab)` : r.scope.name %></td>
+            <td class="num"><%= r.plan.counts.create %></td>
+            <td class="num"><%= r.plan.counts.update %></td>
+            <td class="num"><%= r.plan.counts.unchanged %></td>
+            <td class="num <%= r.plan.counts.skip ? 'import-error' : '' %>"><%= r.plan.counts.skip %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<% if (report) { %>
+  <section class="card">
+    <h2>Skipped rows</h2>
+    <p class="muted">Download the error report, fix those rows and import them again. Passwords and PINs in it are shown as (hidden).</p>
+    <textarea hidden id="wb-report"><%= report %></textarea>
+    <button type="button" class="btn" data-download-text="#wb-report" data-download-name="inventory-import-skipped.csv"><%- icon('download') %><span>Download error report</span></button>
+    <ul class="import-skips small">
+      <% for (const r of results) for (const row of r.plan.rows.filter((x) => x.action === 'skip').slice(0, 30)) { %><li><strong><%= r.sheet.name %>, row <%= row.n %></strong>: <%= row.errors.join(' ') %></li><% } %>
+    </ul>
+  </section>
+<% } %>
+<%- include('../../partials/foot') %>

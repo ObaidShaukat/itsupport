@@ -32,7 +32,7 @@ const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'not
   'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting',
   'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'manual'];
 const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed', 'sent',
-  'assigned', 'returned', 'viewed', 'copied'];
+  'assigned', 'returned', 'viewed', 'copied', 'exported'];
 
 const ACTION_LABELS = {
   created: 'Created',
@@ -50,6 +50,7 @@ const ACTION_LABELS = {
   returned: 'Returned',
   viewed: 'Revealed',
   copied: 'Copied',
+  exported: 'Exported',
 };
 
 // Today's date in the UK as YYYY-MM-DD. Report days follow UK time.

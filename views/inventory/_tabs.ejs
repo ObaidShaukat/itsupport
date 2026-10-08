@@ -6,7 +6,8 @@
   <% for (const t of (locals.invTabs || [])) { %>
     <a href="<%= t.href %>" class="<%= locals.active === t.id ? 'active' : '' %>"><%= t.name %></a>
   <% } %>
-  <a href="/inventory/settings/tabs" class="inv-tabs-settings <%= locals.active === 'settings' ? 'active' : '' %>" title="Inventory tabs settings"><%- icon('sliders') %><span>Tabs</span></a>
+  <a href="/inventory/workbook" class="inv-tabs-settings <%= locals.active === 'workbook' ? 'active' : '' %>" title="Export or import the whole inventory as one Excel workbook"><%- icon('file') %><span>Workbook</span></a>
+  <a href="/inventory/settings/tabs" class="inv-tabs-extra <%= locals.active === 'settings' ? 'active' : '' %>" title="Inventory tabs settings"><%- icon('sliders') %><span>Tabs</span></a>
 </nav>
 <% if (locals.invKey && !invKey.ok) { %>
   <div class="flash flash-info" role="status"><%- icon('lock') %> <%= invKey.message %> Add a 64-character hex ENCRYPTION_KEY to .env and restart the portal.</div>

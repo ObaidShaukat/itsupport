@@ -1956,3 +1956,18 @@ table.grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; 
 .import-confirm form { margin: 0; }
 .import-skips { margin: var(--sp-3) 0 0; padding-left: 18px; display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
 @media (max-width: 700px) { .import-counts { grid-template-columns: 1fr 1fr; } }
+
+/* ---- Inventory workbook ---- */
+.inv-tabs-extra .icon { width: 14px; height: 14px; }
+.wb-sheet.is-skipped { opacity: 0.7; }
+.wb-sheet .card-head h2 { display: inline-flex; align-items: center; gap: 6px; }
+.wb-result { padding: 0; }
+.wb-result > summary { list-style: none; cursor: pointer; }
+.wb-result > summary::-webkit-details-marker { display: none; }
+.wb-result-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); }
+.wb-result[open] .wb-result-head { border-bottom: 1px solid var(--border); }
+.wb-result > :not(summary) { margin-left: var(--sp-4); margin-right: var(--sp-4); }
+.wb-result > .table-wrap { margin-bottom: var(--sp-3); }
+.wb-order { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--purple-soft); color: var(--purple); font-weight: 700; font-size: 0.7857rem; }
+.wb-counts { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: auto; }
+.wb-created { margin-top: var(--sp-3); margin-bottom: var(--sp-3); }

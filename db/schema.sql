@@ -271,7 +271,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
                    'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
-              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied') NOT NULL,
+              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported') NOT NULL,
   subject VARCHAR(255) NULL,
   summary TEXT NOT NULL,
   changes VARCHAR(255) NULL,
@@ -615,4 +615,4 @@ ALTER TABLE activity_log
 
 ALTER TABLE activity_log
   MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
-              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied') NOT NULL;
+              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported') NOT NULL;

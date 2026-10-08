@@ -3,7 +3,7 @@
   <div>
     <p class="crumbs"><a href="<%= area.back %>"><%= area.name %></a> / Import</p>
     <h1>Map columns</h1>
-    <p class="muted"><%= stage.fileName %> · <%= stage.rows.length %> row<%= stage.rows.length === 1 ? '' : 's' %>. Columns were matched by name where possible. For the others choose a field, create a new one, or skip it.</p>
+    <p class="muted"><%= stage.fileName %> · <%= stage.rows.length %> row<%= stage.rows.length === 1 ? '' : 's' %>. Columns were matched by name where possible. For the others choose a field, create a new one, or skip it.<% if (stage.examples) { %> <%= stage.examples %> example row<%= stage.examples === 1 ? ' was' : 's were' %> left out.<% } %></p>
   </div>
 </header>
 <%- include('_steps', { step: 1 }) %>

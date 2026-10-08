@@ -6,6 +6,8 @@
 //
 // Matching: Employees by User-ID (else Email), Writers by Official-ID, Old Accounts by
 // Gmail-ID, other tabs by their name field, Stock by Serial / Asset number.
+// Empty cells NEVER change a saved value (passwords and PINs included); the text CLEAR
+// clears one. A password / PIN equal to the saved one counts as no change.
 const { londonDate } = require('../activity');
 const {
   FIELD_TYPES, CATEGORY_TYPES, STOCK_STATUSES, MASK, isSecret, listFields, readValues, saveValues,
@@ -14,6 +16,9 @@ const { recordTitle, listRecords, employeesTab, logInv } = require('./records');
 const { listCategories, listItems, getItem, itemLabel, assignItem, returnItem, returnAll } = require('./stock');
 const { getPrefix, normalizeId, lowestFree } = require('./userids');
 const { normHeader, parseAccess, parseDate } = require('./import-files');
+const { decrypt } = require('./secrets');
+
+const isClear = (text) => /^clear$/i.test(String(text || '').trim());
 
 // ---- Mapping targets ----
 
@@ -84,12 +89,15 @@ function keyFieldFor(tab, fields) {
 
 // Plan for a records tab. mapping uses 'f:<id>' (existing or already-created fields),
 // 'new' (virtual fields, preview only), 'status', 'leaving', 'skip'.
-async function planRecords(db, { tab, mapping, headers, rows }) {
+// defaultStatus: status of new employees without a Status cell ('inactive' for an
+// "Ex Employees" sheet).
+// newTab: a tab created by this import (its first new column becomes the name field).
+async function planRecords(db, { tab, mapping, headers, rows, defaultStatus = 'active', newTab = false }) {
   const realFields = await listFields(db, { tabId: tab.id });
   const specs = newFieldSpecs(mapping, headers, rows, Object.keys(FIELD_TYPES));
   const virtual = specs.map((s, i) => ({
     id: -(i + 1), label: s.label, field_type: s.type, options: s.options, optionList: s.options ? s.options.split('\n') : [],
-    visible: true, required: false, role: null, isNew: true,
+    visible: true, required: newTab && i === 0, role: newTab && i === 0 ? 'title' : null, isNew: true,
   }));
   const fields = [...realFields, ...virtual];
   const colField = mapping.map((m, col) => {
@@ -140,6 +148,19 @@ async function planRecords(db, { tab, mapping, headers, rows }) {
     return { error: `More than one record has this ${label}.` };
   };
 
+  const secretCols = colField.filter((f) => f && isSecret(f) && f.id > 0);
+  const savedSecrets = new Map();
+  if (secretCols.length) {
+    const [enc] = await db.query(`
+      SELECT v.record_id, v.field_id, v.value_enc FROM inventory_values v
+      JOIN inventory_records r ON r.id = v.record_id
+      WHERE r.tab_id = ? AND v.value_enc IS NOT NULL AND v.field_id IN (?)
+    `, [tab.id, secretCols.map((x) => x.id)]);
+    for (const e of enc) {
+      try { savedSecrets.set(`${e.record_id}:${e.field_id}`, decrypt(e.value_enc)); } catch (err) { /* treated as different */ }
+    }
+  }
+
   const reserved = new Set();
   if (isEmp && uidField) {
     for (const cells of rows) {
@@ -160,7 +181,8 @@ async function planRecords(db, { tab, mapping, headers, rows }) {
     let uid = '';
     let keyText = '';
     if (isEmp) {
-      if (uidCol >= 0 && cells[uidCol]) {
+      if (uidCol >= 0 && isClear(cells[uidCol])) row.errors.push('A User-ID cannot be cleared.');
+      else if (uidCol >= 0 && cells[uidCol]) {
         const n = normalizeId(prefix, cells[uidCol]);
         if (n.error) row.errors.push(n.error);
         else uid = n.value;
@@ -188,7 +210,26 @@ async function planRecords(db, { tab, mapping, headers, rows }) {
     const used = [];
     colField.forEach((f, col) => {
       if (!f || (uidField && f.id === uidField.id)) return;
-      const text = cells[col];
+      const text = String(cells[col] || '').trim();
+      if (!text || (isClear(text) && !record)) {
+        // Empty never changes a saved record; on a new one it is simply empty.
+        if (!record) {
+          body[`f_${f.id}`] = '';
+          used.push(f);
+        }
+        return;
+      }
+      if (isClear(text)) {
+        body[`f_${f.id}`] = '';
+        if (isSecret(f)) body[`clear_${f.id}`] = '1';
+        used.push(f);
+        row.display.push({ label: f.label, text: '(cleared)' });
+        return;
+      }
+      if (isSecret(f) && record && savedSecrets.get(`${record.id}:${f.id}`) === text) {
+        row.display.push({ label: f.label, text: `${MASK} (same)` });
+        return;
+      }
       if (f.field_type === 'access') {
         const g = parseAccess(text);
         if (g === null) row.errors.push(`${f.label}: "${text}" is not Yes / No.`);
@@ -199,7 +240,6 @@ async function planRecords(db, { tab, mapping, headers, rows }) {
         }
         return;
       }
-      if (record && !text) return; // empty cells leave saved values alone
       let value = text;
       if (f.field_type === 'date' && text) {
         value = parseDate(text);
@@ -226,17 +266,19 @@ async function planRecords(db, { tab, mapping, headers, rows }) {
     }
 
     // Employees: status, leaving date, User-ID.
-    let status = record ? record.status : 'active';
+    let status = record ? record.status : defaultStatus;
     let leaving = record ? record.leaving_date : null;
     let newUid = null;
     if (isEmp) {
-      if (statusCol >= 0 && cells[statusCol]) {
+      if (statusCol >= 0 && isClear(cells[statusCol])) row.errors.push('Status cannot be cleared (use Active or Inactive).');
+      else if (statusCol >= 0 && cells[statusCol]) {
         const s = lower(cells[statusCol]);
         if (['active', 'current'].includes(s)) status = 'active';
         else if (['inactive', 'left', 'ex', 'former', 'ex employee'].includes(s)) status = 'inactive';
         else row.errors.push(`Status "${cells[statusCol]}" is not Active or Inactive.`);
       }
-      if (leavingCol >= 0 && cells[leavingCol]) {
+      if (leavingCol >= 0 && isClear(cells[leavingCol])) leaving = null;
+      else if (leavingCol >= 0 && cells[leavingCol]) {
         const d = parseDate(cells[leavingCol]);
         if (d === null) row.errors.push(`Leaving date "${cells[leavingCol]}" is not a valid date.`);
         else leaving = d;
@@ -268,7 +310,7 @@ async function planRecords(db, { tab, mapping, headers, rows }) {
 
     if (row.errors.length) row.action = 'skip';
     else if (record) {
-      const plainChanged = [...values].some(([k, c]) => c.secret || c.clear || (before.get(k)?.value || null) !== (c.value || null));
+      const plainChanged = [...values].some(([k, c]) => c.secret || (c.clear ? Boolean(before.get(k)?.hasSecret) : (before.get(k)?.value || null) !== (c.value || null)));
       const uidChanged = newUid !== null && uidField && (record.values.get(uidField.id)?.value || '') !== newUid;
       if (!plainChanged && !uidChanged && record.status === status && (record.leaving_date || null) === (leaving || null)) row.action = 'unchanged';
     }
@@ -322,9 +364,20 @@ STATUS_BY_TEXT['in use'] = 'assigned';
 STATUS_BY_TEXT.spare = 'available';
 STATUS_BY_TEXT.broken = 'damaged';
 
-async function employeeIndex(db) {
+// extra: employees not saved yet (preview of a workbook whose Employees sheet adds them):
+// [{ title, uid, status }].
+async function employeeIndex(db, extra = []) {
   const tab = await employeesTab(db);
-  if (!tab) return { byUid: new Map(), byName: new Map(), prefix: await getPrefix(db) };
+  const addExtra = (idx) => {
+    const add = (map, k, r) => { if (!k) return; if (!map.has(k)) map.set(k, []); map.get(k).push(r); };
+    for (const e of extra) {
+      const r = { id: null, title: e.title, status: e.status, leaving_date: null, pending: true };
+      add(idx.byUid, lower(e.uid), r);
+      add(idx.byName, lower(e.title), r);
+    }
+    return idx;
+  };
+  if (!tab) return addExtra({ byUid: new Map(), byName: new Map(), prefix: await getPrefix(db) });
   const fields = await listFields(db, { tabId: tab.id });
   const uidField = fields.find((f) => f.role === 'user_id');
   const records = (await listRecords(db, tab.id)).map((r) => ({ ...r, title: recordTitle(r, fields, r.values) }));
@@ -335,17 +388,17 @@ async function employeeIndex(db) {
     add(byUid, uidField ? lower(r.values.get(uidField.id)?.value) : '', r);
     add(byName, lower(r.title), r);
   }
-  return { byUid, byName, prefix: await getPrefix(db) };
+  return addExtra({ byUid, byName, prefix: await getPrefix(db) });
 }
 
-async function planStock(db, { mapping, headers, rows }) {
+async function planStock(db, { mapping, headers, rows, extraEmployees = [] }) {
   const categories = await listCategories(db, { withFields: true });
   const catByName = new Map(categories.map((c) => [lower(c.name), c]));
   const items = await listItems(db);
   const bySerial = new Map();
   for (const it of items) if (it.serial) { const k = lower(it.serial); if (!bySerial.has(k)) bySerial.set(k, []); bySerial.get(k).push(it); }
   const knownModels = new Set(items.map((it) => `${it.category_id}|${lower(it.brand)}|${lower(it.model)}`));
-  const emp = await employeeIndex(db);
+  const emp = await employeeIndex(db, extraEmployees);
   const specs = newFieldSpecs(mapping, headers, rows, CATEGORY_TYPES);
   const colOf = (t) => mapping.findIndex((m) => m.target === t);
   const cols = Object.fromEntries(STOCK_CORE.map(([t]) => [t, colOf(t)]));
@@ -387,20 +440,24 @@ async function planStock(db, { mapping, headers, rows }) {
       else item = found[0] || null;
     } else row.warnings.push('No serial / asset number: always added as a new item.');
     row.action = item ? 'update' : 'create';
-    const brand = text('brand') || (item ? item.brand : '') || '';
-    const model = text('model') || (item ? item.model : '') || '';
-    const notesText = text('notes');
+    // Empty keeps what is saved; CLEAR empties it.
+    const keepOr = (t, current) => (isClear(text(t)) ? '' : text(t) || current || '');
+    const brand = keepOr('brand', item && item.brand);
+    const model = keepOr('model', item && item.model);
+    const notesValue = keepOr('notes', item && item.notes) || null;
     row.title = itemLabel({ category_name: cat ? cat.name : catName, brand, model, serial });
 
     // Status and who has it.
     let status = null;
-    if (text('status')) {
+    if (isClear(text('status'))) row.errors.push('Status cannot be cleared.');
+    else if (text('status')) {
       status = STATUS_BY_TEXT[lower(text('status'))] || null;
       if (!status) row.errors.push(`Status "${text('status')}" is not one of ${Object.values(STOCK_STATUSES).join(', ')}.`);
     }
     let holder = null;
     const who = text('assigned');
-    if (who) {
+    const unassign = isClear(who);
+    if (who && !unassign) {
       const n = normalizeId(emp.prefix, who);
       let list = !n.error && n.value ? emp.byUid.get(lower(n.value)) || [] : [];
       if (!list.length) list = emp.byName.get(lower(who)) || [];
@@ -408,8 +465,10 @@ async function planStock(db, { mapping, headers, rows }) {
       if (!list.length) row.errors.push(`Unknown employee "${who}" in Assigned to.`);
       else if (active.length > 1 || (!active.length && list.length > 1)) row.errors.push(`"${who}" matches more than one employee; use their User-ID.`);
       else holder = active[0] || list[0];
+      if (holder && holder.pending) row.warnings.push(`${holder.title} is added by the Employees sheet of this workbook.`);
     }
     let finalStatus = status || (item ? item.status : 'available');
+    if (unassign && finalStatus === 'assigned') finalStatus = 'available';
     if (holder && holder.status === 'active') {
       if (status && status !== 'assigned') row.warnings.push(`Status ${STOCK_STATUSES[status]} ignored: assigned to ${holder.title}.`);
       finalStatus = 'assigned';
@@ -427,6 +486,14 @@ async function planStock(db, { mapping, headers, rows }) {
     for (const x of extraCols) {
       const value = String(cells[x.col] || '').trim();
       if (!value || !cat) continue;
+      if (isClear(value)) {
+        const existingField = cat.fields.find((f) => normHeader(f.label) === x.norm);
+        if (existingField) {
+          extras.push({ norm: x.norm, label: existingField.label, value: null });
+          row.display.push({ label: existingField.label, text: '(cleared)' });
+        }
+        continue;
+      }
       let field = cat.fields.find((f) => normHeader(f.label) === x.norm);
       if (!field) {
         const template = x.spec ? { label: x.spec.label, field_type: x.spec.type, options: x.spec.options } : (cat.id ? null : typeOfNorm.get(x.norm));
@@ -466,10 +533,10 @@ async function planStock(db, { mapping, headers, rows }) {
         return f && f.id && same(item.values.get(f.id)?.value, x.value);
       });
       if (same(item.category_name, cat.name) && same(item.brand, brand) && same(item.model, model) && same(item.status, finalStatus)
-        && (!notesText || same(item.notes, notesText)) && (holder ? holder.id === item.employee_id : true) && extrasSame) row.action = 'unchanged';
+        && same(item.notes, notesValue) && (holder ? holder.id === item.employee_id : true) && extrasSame) row.action = 'unchanged';
     }
     row.apply = { itemId: item ? item.id : null, catName: cat ? cat.name : catName, brand: brand || null, model: model || null, serial: serial || null,
-      notes: notesText || (item ? item.notes : null), status: finalStatus, holder: holder ? { id: holder.id, title: holder.title, status: holder.status, leaving: holder.leaving_date } : null, extras };
+      notes: notesValue, status: finalStatus, holder: holder ? { id: holder.id, title: holder.title, status: holder.status, leaving: holder.leaving_date } : null, extras };
     return row;
   });
   return summarise(out, {
@@ -555,13 +622,14 @@ async function applyStock(conn, user, { plan, fileName }) {
 }
 
 // Creates the "new field" columns of a records import and points the mapping at them.
-async function createRecordFields(conn, user, { tab, mapping, headers, rows }) {
+async function createRecordFields(conn, user, { tab, mapping, headers, rows, newTab = false }) {
   const specs = newFieldSpecs(mapping, headers, rows, Object.keys(FIELD_TYPES));
   const out = mapping.map((m) => ({ ...m }));
   for (const s of specs) {
     const [[{ next }]] = await conn.query('SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM inventory_fields WHERE tab_id = ?', [tab.id]);
-    const [r] = await conn.query('INSERT INTO inventory_fields (tab_id, label, field_type, options, sort_order, width) VALUES (?, ?, ?, ?, ?, 160)',
-      [tab.id, s.label, s.type, s.options, next]);
+    const isTitle = newTab && s === specs[0];
+    const [r] = await conn.query('INSERT INTO inventory_fields (tab_id, label, field_type, options, role, required, sort_order, width) VALUES (?, ?, ?, ?, ?, ?, ?, 160)',
+      [tab.id, s.label, s.type, s.options, isTitle ? 'title' : null, isTitle ? 1 : 0, next]);
     out[s.col] = { target: `f:${r.insertId}` };
     await logInv(conn, user, { type: 'inv_config', action: 'created', subject: tab.name, summary: `Added the column "${s.label}" (${FIELD_TYPES[s.type]}) to ${tab.name} (import)` });
   }

@@ -72,7 +72,7 @@ async function receive(req, res, scope) {
     const targets = await planner.targetsFor(pool, scope);
     const token = files.createStage({
       userId: req.user.id, scope: scope.kind === 'stock' ? { kind: 'stock' } : { kind: 'records', tabId: scope.tabId },
-      fileName: String(file.originalname || 'import').slice(0, 120), headers: sheet.headers, rows: sheet.rows,
+      fileName: String(file.originalname || 'import').slice(0, 120), headers: sheet.headers, rows: sheet.rows, examples: sheet.examples || 0,
       mapping: planner.autoMatch(sheet.headers, targets),
     });
     return res.redirect(`/inventory/import/${token}`);

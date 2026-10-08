@@ -1811,3 +1811,12 @@ document.querySelectorAll('[data-download-text]').forEach((button) => {
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   });
 });
+
+// Workbook export: show the warning while "Include passwords and PINs" is ticked.
+document.querySelectorAll('[data-password-toggle]').forEach((box) => {
+  const warning = box.form && box.form.querySelector('[data-password-warning]');
+  if (!warning) return;
+  const sync = () => { warning.hidden = !box.checked; };
+  box.addEventListener('change', sync);
+  sync();
+});

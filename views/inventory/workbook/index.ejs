@@ -1,0 +1,49 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Inventory workbook</h1>
+    <p class="muted">One Excel file for everything: a sheet per tab (<%= tabs.filter((t) => t.kind !== 'ex_employees').map((t) => t.name).join(', ') %>) with every column, plus an Instructions sheet. Export it, edit it, import it back.</p>
+  </div>
+</header>
+<%- include('../_tabs', { active: 'workbook' }) %>
+<% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+
+<div class="grid-2">
+  <section class="card" id="export">
+    <h2><%- icon('download') %> Export workbook</h2>
+    <p class="muted">Every current field as a column, in the current order, filled with what is saved (ex employees are on the Employees sheet with Status Inactive). A tab with no data gets one example row, so a new install gets a ready-made template.</p>
+    <form method="post" action="/inventory/workbook/export" class="form">
+      <%- csrfField %>
+      <label class="checkbox-field">
+        <input type="checkbox" name="include_passwords" value="1" data-password-toggle <%= key.ok ? '' : 'disabled' %>>
+        <span>Include passwords and PINs</span>
+      </label>
+      <div class="flash flash-error small" data-password-warning hidden role="alert">
+        The file will contain every saved password and PIN in plain text. Anyone who gets the file can read them. Keep it somewhere safe, delete it when done, and never email it. This export is recorded in the activity log.
+      </div>
+      <p class="muted small">Without this, password and PIN columns are left blank. Importing the file back never erases them.</p>
+      <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('download') %><span>Export workbook</span></button></div>
+    </form>
+  </section>
+
+  <section class="card" id="import">
+    <h2><%- icon('upload') %> Import workbook</h2>
+    <p class="muted">Upload the workbook (.xlsx, up to 20 MB). Sheets are matched to tabs by name and imported in order: Employees, then Stock (so "Assigned to" can find employees from the same file), then Writers, Old Accounts and other tabs. You check the columns and a preview first; nothing changes until you confirm.</p>
+    <% if (!key.ok) { %><div class="flash flash-error" role="alert"><%= key.message %> Imports need it.</div><% } %>
+    <form method="post" action="/inventory/workbook/import" enctype="multipart/form-data" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Workbook</span>
+        <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv" required>
+      </label>
+      <ul class="import-rules small muted">
+        <li>Empty cells never change saved data (passwords and PINs included). Type <strong>CLEAR</strong> to clear a value.</li>
+        <li>Matches update, never duplicate: Employees by User-ID (or Email), Writers by Official-ID, Old Accounts by Gmail-ID, Stock by Serial / Asset number.</li>
+        <li>Sheets with other names can be skipped or turned into new tabs.</li>
+        <li>The uploaded file is deleted as soon as it has been read; passwords are encrypted on import.</li>
+      </ul>
+      <div class="form-actions"><button type="submit" class="btn btn-primary" <%= key.ok ? '' : 'disabled' %>><%- icon('upload') %><span>Upload and continue</span></button></div>
+    </form>
+  </section>
+</div>
+<%- include('../../partials/foot') %>
