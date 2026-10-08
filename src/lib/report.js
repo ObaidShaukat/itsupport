@@ -1,16 +1,15 @@
 // Daily report: built only from activity_log. A UK date (or range) is turned into a
 // UTC start/end and automatic entries are matched on created_at (when the action
 // happened). Manual "Log work" entries are matched on the date the user picked.
-// Each user gets a "<User>'s Work:" list with one bullet per entry, built from what
-// was typed (Log work text, note text), see userLines() below. Only Log work, client
-// services and General IT Support (KB) articles are reported; ticket activity
-// (comments, status, priority, reminders) stays in the activity log and ticket history.
+// Each user gets a "<User>'s Work:" list with one bullet per entry, see userLines()
+// below. Only Log work entries and General IT Support (KB) articles are reported;
+// ticket activity (comments, status, priority, reminders) and client service activity
+// (commenced, steps, notes, completed) stay in the activity log and History panels.
 const { pool } = require('../db');
 const { londonDate, londonDayStart } = require('./activity');
 
 const MAX_RANGE_DAYS = 62;
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const SNIPPET_LENGTH = 200;
 
 function isDate(value) {
   if (typeof value !== 'string' || !DATE_PATTERN.test(value)) return false;
@@ -57,12 +56,6 @@ function heading(username) {
 
 const clean = (text) => String(text || '').replace(/\s+/g, ' ').trim();
 const withoutStop = (text) => clean(text).replace(/[.;:,\s]+$/, '');
-// Entries logged before plain-text summaries had a "Comment: " style prefix.
-const withoutPrefix = (text) => clean(text).replace(/^(Comment|Note|Edited note|Done):\s*/i, '');
-const snippet = (text) => {
-  const t = withoutStop(withoutPrefix(text));
-  return t.length > SNIPPET_LENGTH ? `${t.slice(0, SNIPPET_LENGTH - 1).trimEnd()}…` : t;
-};
 // Cleans a bullet: trimmed, no semicolons, "setup"/"set-up" at the start becomes
 // "Set up", first letter capitalised, exactly one full stop at the end.
 const sentence = (text) => {
@@ -72,9 +65,6 @@ const sentence = (text) => {
   t = t.charAt(0).toUpperCase() + t.slice(1);
   return /[!?]$/.test(t) ? t : `${t}.`;
 };
-
-// "British" list: "A", "A and B", "A, B and C".
-const joinAnd = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
 
 const mentions = (text, client) => Boolean(client) && text.toLowerCase().includes(client.toLowerCase());
 
@@ -91,103 +81,45 @@ function withClient(text, client) {
   }
   return `${text} for ${client}`;
 }
-const forClient = withClient;
 
 // ---- Bullets ----
 
-// One user's day: one bullet per entry, in this order: client services, log work,
-// General IT Support (knowledge base), then always "Other IT related tasks.".
+// One user's day: one bullet per entry, in this order: log work, then General IT
+// Support (knowledge base), then always "Other IT related tasks.".
 //   Log work:         the typed text with the client put in (see withClient); no client: as typed.
-//   Note:             the typed note with the client put in, then " ({service})".
-//   Client services:  "Commenced {service} for {client}." / "Completed {steps} as part of
-//                     {service} for {client}." / "Completed {service} for {client}."
-//                     ({service} is the service's report phrase, or its name)
 //   Knowledge base:   "Documented a solution for '{title}' in the knowledge base." /
 //                     "Updated the knowledge base article '{title}'."
-// Typed text never gets a prefix of ours; withClient() only inserts the client. Exact duplicate
-// lines are removed. All ticket activity, deletes, unticked steps, reopenings, sent
-// reports and client/user/catalogue changes are left out (they are listed on /activity).
+// Typed text never gets a prefix of ours; withClient() only inserts the client. Exact
+// duplicate lines are removed. Everything else (tickets, client services, deletes, sent
+// reports, client/user/catalogue changes) is left out; it is listed on /activity.
 function userLines(rows) {
-  const section = () => ({ items: [], byKey: new Map() });
-  const sections = { services: section(), logwork: section(), kb: section() };
-
-  // Adds an item once per key; later rows for the same key update it in place.
-  const item = (sec, key, create) => {
-    if (!sec.byKey.has(key)) {
-      const created = create();
-      sec.byKey.set(key, created);
-      sec.items.push(created);
-    }
-    return sec.byKey.get(key);
-  };
-  const push = (sec, text) => sec.items.push({ text: sentence(text) });
+  const logwork = [];
+  const articles = new Map(); // article id -> { title, created }
 
   for (const row of rows) {
     if (row.action === 'deleted') continue;
-    const client = clean(row.client_name);
-    const subject = withoutStop(row.subject);
-    const servicePhrase = withoutStop(row.service_phrase) || subject;
-
-    switch (row.entity_type) {
-      case 'manual': {
-        const text = withoutStop(row.summary);
-        if (text) push(sections.logwork, forClient(text, client));
-        break;
-      }
-      case 'note': {
-        if (!client) break;
-        const text = snippet(row.summary);
-        if (text) push(sections.services, `${forClient(text, client)}${subject ? ` (${subject})` : ''}`);
-        break;
-      }
-      case 'client_service':
-        if (!client) break;
-        if (row.action === 'created') {
-          item(sections.services, `start:${row.entity_id}`, () => ({ text: sentence(`Commenced ${servicePhrase} for ${client}`) }));
-        } else if (row.action === 'closed') {
-          item(sections.services, `done:${row.entity_id}`, () => ({ text: sentence(`Completed ${servicePhrase} for ${client}`) }));
-        }
-        break;
-      case 'step': {
-        if (!client || row.action !== 'step_done') break;
-        const steps = item(sections.services, `steps:${row.entity_id}`, () => ({ client, phrase: servicePhrase, steps: [] }));
-        const step = withoutStop(withoutPrefix(row.summary));
-        if (step && !steps.steps.some((x) => x.toLowerCase() === step.toLowerCase())) steps.steps.push(step);
-        break;
-      }
-      case 'kb_article': {
-        const a = item(sections.kb, `kb:${row.entity_id}`, () => ({ kb: true, created: false }));
-        a.title = subject;
-        if (row.action === 'created') a.created = true;
-        break;
-      }
-      default:
-        // Tickets, comments, reminders, sent reports, users, ...: not on the report.
-        break;
+    if (row.entity_type === 'manual') {
+      const text = withoutStop(row.summary);
+      if (text) logwork.push(sentence(withClient(text, clean(row.client_name))));
+    } else if (row.entity_type === 'kb_article') {
+      if (!articles.has(row.entity_id)) articles.set(row.entity_id, { title: '', created: false });
+      const article = articles.get(row.entity_id);
+      article.title = withoutStop(row.subject);
+      if (row.action === 'created') article.created = true;
     }
+    // Any other entity type is not on the report.
   }
 
-  const render = (entry) => {
-    if (entry.steps) {
-      return entry.steps.length ? sentence(`Completed ${joinAnd(entry.steps)} as part of ${entry.phrase} for ${entry.client}`) : null;
-    }
-    if (entry.kb) {
-      return entry.created
-        ? sentence(`Documented a solution for '${entry.title}' in the knowledge base`)
-        : sentence(`Updated the knowledge base article '${entry.title}'`);
-    }
-    return entry.text || null;
-  };
+  const kb = [...articles.values()].map((a) => (a.created
+    ? sentence(`Documented a solution for '${a.title}' in the knowledge base`)
+    : sentence(`Updated the knowledge base article '${a.title}'`)));
 
   const seen = new Set();
   const lines = [];
-  for (const sec of [sections.services, sections.logwork, sections.kb]) {
-    for (const entry of sec.items) {
-      const line = render(entry);
-      if (line && !seen.has(line.toLowerCase())) {
-        seen.add(line.toLowerCase());
-        lines.push(line);
-      }
+  for (const line of [...logwork, ...kb]) {
+    if (line && !seen.has(line.toLowerCase())) {
+      seen.add(line.toLowerCase());
+      lines.push(line);
     }
   }
   return lines.concat('Other IT related tasks.');
@@ -202,13 +134,10 @@ async function buildReport({ from, to, userId }) {
   const [rows] = await pool.query(`
     SELECT l.user_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS username, l.client_id, COALESCE(c.name, l.client_name) AS client_name,
            l.entity_type, l.entity_id, l.action, l.subject, l.summary, l.changes,
-           s.report_phrase AS service_phrase,
            l.activity_date, l.created_at, l.id
     FROM activity_log l
     LEFT JOIN users u ON u.id = l.user_id
     LEFT JOIN clients c ON c.id = l.client_id
-    LEFT JOIN client_services cs ON cs.id = l.entity_id AND l.entity_type IN ('client_service', 'step', 'note')
-    LEFT JOIN services s ON s.id = cs.service_id
     WHERE ${range.sql} ${userId ? 'AND l.user_id = ?' : ''}
     ORDER BY l.created_at, l.id
   `, params);
