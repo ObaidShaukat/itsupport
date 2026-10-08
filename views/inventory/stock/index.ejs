@@ -6,6 +6,8 @@
   </div>
   <div class="actions">
     <% if (category) { %><a href="/inventory/stock/categories/<%= category.id %>/fields" class="btn"><%- icon('sliders') %><span>Columns</span></a><% } %>
+    <a href="/inventory/stock/template.xlsx" class="btn" title="Excel template with categories, statuses and category fields"><%- icon('download') %><span>Template</span></a>
+    <a href="/inventory/stock/import" class="btn"><%- icon('upload') %><span>Import</span></a>
     <a href="/inventory/stock/multiple<%= category ? `?category=${category.id}` : '' %>" class="btn"><%- icon('layers') %><span>Add multiple</span></a>
     <a href="/inventory/stock/new<%= category ? `?category=${category.id}` : '' %>" class="btn btn-primary"><%- icon('plus') %><span>Add item</span></a>
   </div>

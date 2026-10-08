@@ -7,6 +7,8 @@
     </p>
   </div>
   <div class="actions">
+    <a href="/inventory/t/<%= data.id %>/template.xlsx" class="btn" title="Excel template with this tab's current columns"><%- icon('download') %><span>Template</span></a>
+    <a href="/inventory/t/<%= data.id %>/import" class="btn"><%- icon('upload') %><span>Import</span></a>
     <a href="/inventory/t/<%= data.id %>/columns" class="btn"><%- icon('sliders') %><span>Columns</span></a>
     <% if (tab.kind !== 'ex_employees') { %>
       <a href="/inventory/t/<%= data.id %>/new" class="btn btn-primary"><%- icon('plus') %><span><%= tab.kind === 'employees' ? 'Add employee' : 'Add' %></span></a>

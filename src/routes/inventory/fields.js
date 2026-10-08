@@ -57,7 +57,7 @@ async function dataCounts(scope, fields) {
 async function showManager(res, scope) {
   const fields = await listFields(pool, scope.owner);
   res.render('inventory/fields/index', {
-    title: `Columns · ${scope.name}`, scope, fields, counts: await dataCounts(scope, fields),
+    title: `Columns · ${scope.name}`, area: scope, fields, counts: await dataCounts(scope, fields),
     types: Object.fromEntries(scope.types.map((t) => [t, FIELD_TYPES[t]])),
   });
 }
@@ -188,7 +188,7 @@ router.get('/fields/:id/delete', async (req, res) => {
   const field = await getField(requireId(req.params.id));
   const scope = await fieldScope(field);
   const count = (await dataCounts(scope, [field]))[field.id] || 0;
-  res.render('inventory/fields/delete', { title: `Delete · ${field.label}`, field, scope, count, back: backTo(req, scope) });
+  res.render('inventory/fields/delete', { title: `Delete · ${field.label}`, field, area: scope, count, back: backTo(req, scope) });
 });
 
 router.post('/fields/:id/delete', async (req, res) => {

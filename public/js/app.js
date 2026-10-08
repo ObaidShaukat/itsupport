@@ -1781,3 +1781,33 @@ document.querySelectorAll('[data-field-form]').forEach((form) => {
   type.addEventListener('change', sync);
   sync();
 });
+
+// ---- Inventory import ----
+
+// Map step: the "New field type" choice only applies to "Create a new field".
+document.querySelectorAll('[data-map-row]').forEach((row) => {
+  const target = row.querySelector('[data-map-target]');
+  const type = row.querySelector('[data-map-type]');
+  if (!target || !type) return;
+  const sync = () => {
+    type.disabled = target.value !== 'new';
+    row.classList.toggle('is-skipped', target.value === 'skip');
+  };
+  target.addEventListener('change', sync);
+  sync();
+});
+
+// Download a text block on the page as a file (e.g. the import error report).
+document.querySelectorAll('[data-download-text]').forEach((button) => {
+  button.addEventListener('click', () => {
+    const source = document.querySelector(button.dataset.downloadText);
+    if (!source) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([source.value], { type: 'text/csv;charset=utf-8' }));
+    a.download = button.dataset.downloadName || 'report.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+});

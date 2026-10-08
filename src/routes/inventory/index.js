@@ -69,6 +69,8 @@ router.post('/widths', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Templates and imports first: /stock/template.xlsx and /stock/import must not reach /stock/:id.
+router.use(require('./imports'));
 router.use('/stock', require('./stock'));
 router.use(require('./settings'));
 router.use(require('./fields'));

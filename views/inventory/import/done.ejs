@@ -1,0 +1,30 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="<%= area.back %>"><%= area.name %></a> / Import</p>
+    <h1>Import finished</h1>
+    <p class="muted"><%= fileName %> was imported into <%= area.name %>. The file and its staged copy have been deleted.</p>
+  </div>
+  <div class="actions"><a href="<%= area.back %>" class="btn btn-primary">Open <%= area.name %></a></div>
+</header>
+<%- include('_steps', { step: 3 }) %>
+
+<div class="import-counts">
+  <div class="card import-count is-create"><strong><%= plan.counts.create %></strong><span>created</span></div>
+  <div class="card import-count is-update"><strong><%= plan.counts.update %></strong><span>updated</span></div>
+  <div class="card import-count"><strong><%= plan.counts.unchanged %></strong><span>no change</span></div>
+  <div class="card import-count is-skip"><strong><%= plan.counts.skip %></strong><span>skipped</span></div>
+</div>
+
+<% if (report) { %>
+  <section class="card">
+    <h2>Skipped rows</h2>
+    <p class="muted">Download the error report, fix those rows and import them again. Passwords and PINs in it are shown as (hidden).</p>
+    <textarea hidden data-download-source id="import-report"><%= report %></textarea>
+    <button type="button" class="btn" data-download-text="#import-report" data-download-name="<%= reportName %>"><%- icon('download') %><span>Download error report</span></button>
+    <ul class="import-skips small">
+      <% for (const r of plan.rows.filter((x) => x.action === 'skip').slice(0, 50)) { %><li><strong>Row <%= r.n %></strong>: <%= r.errors.join(' ') %></li><% } %>
+    </ul>
+  </section>
+<% } %>
+<%- include('../../partials/foot') %>

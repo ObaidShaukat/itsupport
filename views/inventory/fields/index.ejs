@@ -1,13 +1,13 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="<%= scope.back %>"><%= scope.kind === 'tab' ? scope.name : 'Stock categories' %></a></p>
-    <h1>Columns · <%= scope.name %></h1>
-    <p class="muted"><%= scope.kind === 'tab' ? 'The fields every record in this tab has.' : `Extra fields for ${scope.name} items, shown on the item, in Stock when filtered to ${scope.name}, and in employee profiles.` %> Drag to reorder (also possible by dragging the column headers in the table).</p>
+    <p class="crumbs"><a href="<%= area.back %>"><%= area.kind === 'tab' ? area.name : 'Stock categories' %></a></p>
+    <h1>Columns · <%= area.name %></h1>
+    <p class="muted"><%= area.kind === 'tab' ? 'The fields every record in this tab has.' : `Extra fields for ${area.name} items, shown on the item, in Stock when filtered to ${area.name}, and in employee profiles.` %> Drag to reorder (also possible by dragging the column headers in the table).</p>
   </div>
-  <div class="actions"><a href="<%= scope.back %>" class="btn"><%- icon('left') %><span>Back</span></a></div>
+  <div class="actions"><a href="<%= area.back %>" class="btn"><%- icon('left') %><span>Back</span></a></div>
 </header>
-<% if (scope.kind === 'tab') { %><%- include('../_tabs', { active: scope.id }) %><% } %>
+<% if (area.kind === 'tab') { %><%- include('../_tabs', { active: area.id }) %><% } %>
 
 <div class="grid-2 grid-wide-left">
   <section class="card">
@@ -15,7 +15,7 @@
     <% if (!fields.length) { %>
       <p class="empty">No columns yet. Add one.</p>
     <% } else { %>
-      <ul class="rows field-list" data-sortable-list data-order-url="<%= scope.kind === 'tab' ? `/inventory/t/${scope.id}/columns/order` : `/inventory/stock/categories/${scope.id}/fields/order` %>">
+      <ul class="rows field-list" data-sortable-list data-order-url="<%= area.kind === 'tab' ? `/inventory/t/${area.id}/columns/order` : `/inventory/stock/categories/${area.id}/fields/order` %>">
         <% for (const f of fields) { %>
           <li class="row <%= f.visible ? '' : 'is-hidden-field' %>" data-id="<%= f.id %>">
             <span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span>
@@ -51,7 +51,7 @@
 
   <section class="card">
     <h2>Add a column</h2>
-    <form method="post" action="<%= scope.url %>" class="form" data-field-form>
+    <form method="post" action="<%= area.url %>" class="form" data-field-form>
       <%- csrfField %>
       <%- include('_form-fields', { f: null, types }) %>
       <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add column</span></button></div>

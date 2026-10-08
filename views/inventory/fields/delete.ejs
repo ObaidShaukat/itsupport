@@ -2,12 +2,12 @@
 <header class="page-head">
   <div>
     <p class="crumbs"><a href="<%= back %>">Back</a></p>
-    <h1>Delete "<%= field.label %>" from <%= scope.name %>?</h1>
+    <h1>Delete "<%= field.label %>" from <%= area.name %>?</h1>
   </div>
 </header>
 <section class="card card-narrow">
   <% if (count) { %>
-    <div class="flash flash-error" role="alert"><strong><%= count %> <%= count === 1 ? (scope.isEmployees ? 'employee has' : 'record has') : (scope.isEmployees ? 'employees have' : 'records have') %> data in it.</strong> That data is deleted too and cannot be brought back.</div>
+    <div class="flash flash-error" role="alert"><strong><%= count %> <%= count === 1 ? (area.isEmployees ? 'employee has' : 'record has') : (area.isEmployees ? 'employees have' : 'records have') %> data in it.</strong> That data is deleted too and cannot be brought back.</div>
   <% } else { %>
     <p>Nobody has data in it yet.</p>
   <% } %>

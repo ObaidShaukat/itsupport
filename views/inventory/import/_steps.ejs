@@ -1,0 +1,6 @@
+<%# Import progress. step: 0 upload, 1 map, 2 preview, 3 done. %>
+<ol class="import-steps" aria-label="Import steps">
+  <% ['Upload', 'Map columns', 'Preview', 'Done'].forEach((label, i) => { %>
+    <li class="<%= i === step ? 'is-current' : i < step ? 'is-done' : '' %>" <%= i === step ? 'aria-current=step' : '' %>><span><%= i + 1 %></span><%= label %></li>
+  <% }) %>
+</ol>

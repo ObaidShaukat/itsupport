@@ -1,0 +1,41 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="<%= area.back %>"><%= area.name %></a></p>
+    <h1>Import into <%= area.name %></h1>
+    <p class="muted">Upload an .xlsx or .csv file (up to 20 MB). Next you match its columns to fields, check a preview, then confirm. Nothing changes until you confirm.</p>
+  </div>
+  <div class="actions"><a href="<%= templateUrl %>" class="btn"><%- icon('download') %><span>Download template</span></a></div>
+</header>
+<%- include('../_tabs', { active: area.kind === 'stock' ? ((invTabs.find((t) => t.kind === 'stock') || {}).id) : area.tabId }) %>
+<%- include('_steps', { step: 0 }) %>
+
+<section class="card card-narrow">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <% if (!key.ok) { %><div class="flash flash-error" role="alert"><%= key.message %> Imports need it.</div><% } %>
+  <form method="post" action="<%= action %>" enctype="multipart/form-data" class="form">
+    <%- csrfField %>
+    <label class="field">
+      <span>File</span>
+      <input type="file" name="file" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" required>
+    </label>
+    <ul class="import-rules small muted">
+      <% if (area.kind === 'stock') { %>
+        <li>Items are matched by <strong>Serial / Asset number</strong>: existing items are updated, not duplicated.</li>
+        <li>New categories, brands and models are created automatically. "Assigned to" takes a User-ID or a full name.</li>
+      <% } else if (area.tab.kind === 'employees') { %>
+        <li>Employees are matched by <strong>User-ID</strong> (or Email when there is no User-ID): existing employees are updated, not duplicated.</li>
+        <li>New employees without a User-ID get the lowest free number. A Status column (Active / Inactive) and Leaving date import ex employees too.</li>
+      <% } else { %>
+        <li>Records are matched by <strong><%= area.tab.name === 'Writers' ? 'Official-ID' : area.tab.name === 'Old Accounts' ? 'Gmail-ID' : 'their key column' %></strong>: existing records are updated, not duplicated.</li>
+      <% } %>
+      <li>Access columns: Yes, Done, Granted, Y, 1, True mean Granted; empty, No, 0, False mean Not granted.</li>
+      <li>Passwords and PINs are encrypted on import and only ever shown masked. The uploaded file is deleted as soon as it has been read.</li>
+    </ul>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" <%= key.ok ? '' : 'disabled' %>><%- icon('upload') %><span>Upload and continue</span></button>
+      <a href="<%= area.back %>" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

@@ -1,0 +1,66 @@
+<%- include('../../partials/head') %>
+<% const labels = { create: 'Create', update: 'Update', unchanged: 'No change', skip: 'Skip' }; %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="<%= area.back %>"><%= area.name %></a> / Import</p>
+    <h1>Preview</h1>
+    <p class="muted"><%= stage.fileName %>. Nothing has been changed yet. Rows with problems are skipped, not guessed.</p>
+  </div>
+</header>
+<%- include('_steps', { step: 2 }) %>
+
+<div class="import-counts">
+  <div class="card import-count is-create"><strong><%= plan.counts.create %></strong><span>to create</span></div>
+  <div class="card import-count is-update"><strong><%= plan.counts.update %></strong><span>to update</span></div>
+  <div class="card import-count"><strong><%= plan.counts.unchanged %></strong><span>no change</span></div>
+  <div class="card import-count is-skip"><strong><%= plan.counts.skip %></strong><span>skipped</span></div>
+</div>
+
+<% const created = [...(plan.newFields || []).map((x) => `Field: ${x}`), ...(plan.newCategories || []).map((x) => `Category: ${x}`), ...(plan.newModels || []).map((x) => `Model: ${x}`)]; %>
+<% if (plan.notes.length || created.length) { %>
+  <section class="card">
+    <% for (const n of plan.notes) { %><p class="flash flash-info"><%= n %></p><% } %>
+    <% if (created.length) { %>
+      <h2>Created automatically</h2>
+      <ul class="chip-list"><% for (const c of created) { %><li class="chip chip-category"><%= c %></li><% } %></ul>
+    <% } %>
+  </section>
+<% } %>
+
+<section class="card">
+  <div class="card-head">
+    <h2>Rows</h2>
+    <% if (shown.length < plan.rows.length) { %><span class="muted small">Showing <%= shown.length %> of <%= plan.rows.length %> (skipped rows first)</span><% } %>
+  </div>
+  <div class="table-wrap">
+    <table class="table import-preview">
+      <thead><tr><th class="w-id">Row</th><th class="w-sm">Action</th><th class="w-20">Name</th><th>Values</th><th class="w-25">Problems / notes</th></tr></thead>
+      <tbody>
+        <% for (const r of shown) { %>
+          <tr class="import-row-<%= r.action %>">
+            <td class="muted"><%= r.n %></td>
+            <td><span class="import-action import-action-<%= r.action %>"><%= labels[r.action] %></span></td>
+            <td title="<%= r.title %>"><%= r.title || '—' %></td>
+            <% const vals = r.display.map((d) => `${d.label}: ${d.text}`).join(' · '); %>
+            <td class="small" title="<%= vals %>"><%= vals %></td>
+            <% const notes = [...r.errors, ...r.warnings].join(' '); %>
+            <td class="small <%= r.errors.length ? 'import-error' : 'import-warn' %>" title="<%= notes %>"><%= notes || '' %></td>
+          </tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card import-confirm">
+  <form method="post" action="/inventory/import/<%= token %>/confirm" class="form-actions" data-confirm="Import <%= plan.counts.create %> new and <%= plan.counts.update %> updated rows into <%= area.name %>?" data-confirm-ok="Import">
+    <%- csrfField %>
+    <button type="submit" class="btn btn-primary" <%= plan.counts.create + plan.counts.update ? '' : 'disabled' %>><%- icon('check') %><span>Import <%= plan.counts.create + plan.counts.update %> row<%= plan.counts.create + plan.counts.update === 1 ? '' : 's' %></span></button>
+    <a href="/inventory/import/<%= token %>" class="btn">Back to mapping</a>
+  </form>
+  <form method="post" action="/inventory/import/<%= token %>/cancel" class="inline">
+    <%- csrfField %>
+    <button type="submit" class="btn btn-ghost">Cancel import</button>
+  </form>
+</section>
+<%- include('../../partials/foot') %>

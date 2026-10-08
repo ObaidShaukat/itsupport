@@ -1,0 +1,48 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="<%= area.back %>"><%= area.name %></a> / Import</p>
+    <h1>Map columns</h1>
+    <p class="muted"><%= stage.fileName %> · <%= stage.rows.length %> row<%= stage.rows.length === 1 ? '' : 's' %>. Columns were matched by name where possible. For the others choose a field, create a new one, or skip it.</p>
+  </div>
+</header>
+<%- include('_steps', { step: 1 }) %>
+
+<section class="card">
+  <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+  <form method="post" action="/inventory/import/<%= token %>/map" class="form">
+    <%- csrfField %>
+    <div class="table-wrap">
+      <table class="table import-map">
+        <thead><tr><th class="w-20">Column in the file</th><th>Example values</th><th class="w-25">Import into</th><th class="w-md">New field type</th></tr></thead>
+        <tbody>
+          <% columns.forEach((c, col) => { %>
+            <tr class="<%= c.mapping.target === 'skip' ? 'is-skipped' : '' %>" data-map-row>
+              <td><strong><%= c.header %></strong></td>
+              <td class="muted small" title="<%= c.samples.join(' · ') %>"><%= c.samples.join(' · ') || '—' %></td>
+              <td>
+                <select name="map_<%= col %>" aria-label="Import <%= c.header %> into" data-map-target>
+                  <option value="skip" <%= c.mapping.target === 'skip' ? 'selected' : '' %>>Skip this column</option>
+                  <option value="new" <%= c.mapping.target === 'new' ? 'selected' : '' %>>Create a new field "<%= c.header %>"</option>
+                  <optgroup label="<%= area.kind === 'stock' ? 'Stock' : 'Fields' %>">
+                    <% for (const t of targets) { %><option value="<%= t.value %>" <%= c.mapping.target === t.value ? 'selected' : '' %>><%= t.label %></option><% } %>
+                  </optgroup>
+                </select>
+              </td>
+              <td>
+                <select name="type_<%= col %>" aria-label="Type for a new field <%= c.header %>" data-map-type>
+                  <% for (const [k, label] of Object.entries(newTypes)) { %><option value="<%= k %>" <%= (c.mapping.type || (/pass/i.test(c.header) ? 'password' : /\bpin\b/i.test(c.header) ? 'pin' : 'text')) === k ? 'selected' : '' %>><%= label %></option><% } %>
+                </select>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Preview<%- icon('arrow-right') %></button>
+      <button type="submit" formaction="/inventory/import/<%= token %>/cancel" formnovalidate class="btn btn-ghost">Cancel import</button>
+    </div>
+  </form>
+</section>
+<%- include('../../partials/foot') %>
