@@ -15,7 +15,7 @@
     <div class="inv-form-grid">
       <% for (const f of plain) { %>
         <div class="<%= f.field_type === 'longtext' ? 'span-2' : '' %>">
-          <%- include('../_field-input', { field: f, value: input[f.id], secretSet: record && record.secretsSet && record.secretsSet[f.id] }) %>
+          <%- include('../_field-input', { field: f, value: input[f.id], secretSet: record && record.secretsSet && record.secretsSet[f.id], hint: hints[f.id] }) %>
         </div>
       <% } %>
     </div>

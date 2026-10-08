@@ -35,5 +35,6 @@
         <%= field.field_type === 'link' ? 'placeholder=https://' : '' %>
         <%= field.required ? 'required' : '' %>>
     <% } %>
+    <% if (locals.hint) { %><small class="muted"><%= hint %></small><% } %>
   </div>
 <% } %>

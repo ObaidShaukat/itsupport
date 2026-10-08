@@ -5,6 +5,7 @@ const express = require('express');
 const { pool, transaction } = require('../../db');
 const { requireId, str, flash, notFound } = require('../../lib/http');
 const { listTabs, getTab, logInv } = require('../../lib/inventory/records');
+const { getPrefix, formatId, PREFIX_PATTERN } = require('../../lib/inventory/userids');
 
 const router = express.Router();
 
@@ -16,7 +17,9 @@ async function recordCounts() {
 }
 
 router.get('/settings/tabs', async (req, res) => {
-  res.render('inventory/settings/tabs', { title: 'Inventory tabs', tabs: await listTabs(), counts: await recordCounts(), deletable });
+  res.render('inventory/settings/tabs', {
+    title: 'Inventory settings', tabs: await listTabs(), counts: await recordCounts(), deletable, prefix: await getPrefix(pool),
+  });
 });
 
 router.post('/settings/tabs', async (req, res) => {
@@ -37,6 +40,25 @@ router.post('/settings/tabs', async (req, res) => {
   });
   flash(req, 'success', `Tab "${name}" added. Add its columns here.`);
   res.redirect(`/inventory/t/${id}/columns`);
+});
+
+// Employee User-ID prefix (MDP in MDP-001). Existing IDs keep the prefix they were given.
+router.post('/settings/user-id-prefix', async (req, res) => {
+  const prefix = str(req.body.prefix, 10).toUpperCase();
+  if (!PREFIX_PATTERN.test(prefix)) {
+    flash(req, 'error', 'The prefix can only use letters and numbers (up to 10).');
+    return res.redirect('/inventory/settings/tabs#user-id');
+  }
+  const before = await getPrefix(pool);
+  if (prefix !== before) {
+    await pool.query("INSERT INTO inventory_settings (name, value) VALUES ('user_id_prefix', ?) ON DUPLICATE KEY UPDATE value = VALUES(value)", [prefix]);
+    await logInv(null, req.user, {
+      type: 'inv_config', action: 'updated', subject: 'Employee User-IDs',
+      summary: `Changed the employee User-ID prefix from ${before} to ${prefix} (new IDs look like ${formatId(prefix, 1)})`,
+    });
+  }
+  flash(req, 'success', prefix === before ? 'No changes.' : `New User-IDs now look like ${formatId(prefix, 1)}.`);
+  res.redirect('/inventory/settings/tabs#user-id');
 });
 
 router.post('/settings/tabs/order', async (req, res) => {

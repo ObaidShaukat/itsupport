@@ -10,6 +10,9 @@ const {
   getTab, dataTab, listRecords, getRecord, recordTitle, fieldByRole, logInv,
 } = require('../../lib/inventory/records');
 const { listFields, readValues, saveValues } = require('../../lib/inventory/fields');
+const {
+  getPrefix, suggestId, checkId, resolveId, lockEmployees, activeIds, isTaken, lowestFree,
+} = require('../../lib/inventory/userids');
 const { fieldColumns, fixedColumn, fieldCells } = require('../../lib/inventory/grid');
 const {
   listCategories, listItems, getItem, assignItem, returnAll, assignmentsFor,
@@ -18,6 +21,36 @@ const {
 const router = express.Router();
 
 const isEmployees = (tab) => tab.kind === 'employees';
+
+// The Employees User-ID field (role 'user_id'), when it is on the form.
+const userIdField = (tab, fields) => (isEmployees(tab) ? fields.find((f) => f.role === 'user_id' && f.visible) || null : null);
+// "Aisha Khan (MDP-013)" for log lines, so people sharing a reused User-ID stay distinct.
+const withUserId = (title, uid) => (uid ? `${title} (${uid})` : title);
+
+// Normalises and checks the typed User-ID before validation. Returns an error or null;
+// on success the form value is replaced by the normalised one ('' = assign automatically).
+async function prepareUserId(req, tab, fields, recordId = 0) {
+  const field = userIdField(tab, fields);
+  if (!field) return null;
+  const result = await checkId(pool, tab.id, field.id, req.body[`f_${field.id}`], recordId);
+  if (result.error) return result.error;
+  req.body[`f_${field.id}`] = result.value;
+  return null;
+}
+
+// Inside the save transaction: lock, then take the typed User-ID (if still free) or the
+// lowest free one, and put it into the values being saved. Returns the User-ID.
+async function settleUserId(conn, tab, fields, values, recordId = 0) {
+  // A hidden User-ID column still gets a number on create; on edit it is left alone.
+  const field = isEmployees(tab) ? fields.find((f) => f.role === 'user_id') : null;
+  if (!field || (!field.visible && recordId)) return null;
+  await lockEmployees(conn, tab.id);
+  const typed = values.get(field.id)?.value || '';
+  const result = await resolveId(conn, tab.id, field.id, typed, recordId);
+  if (result.error) throw Object.assign(new Error(result.error), { status: 409 });
+  values.set(field.id, { value: result.value });
+  return result.value;
+}
 
 // The tab in the URL (not Stock) and the tab whose fields / records it shows.
 async function tabContext(req) {
@@ -66,10 +99,10 @@ router.get('/t/:id', async (req, res) => {
 
 // ---- Add / edit ----
 
-function renderForm(res, { tab, fields, record = null, title = '', input = {}, error = null }) {
+function renderForm(res, { tab, fields, record = null, title = '', input = {}, error = null, hints = {} }) {
   res.render('inventory/records/form', {
     title: record ? `Edit ${title}` : `Add to ${tab.name}`,
-    tab, fields: fields.filter((f) => f.visible), record, recordTitle: title, input, error,
+    tab, fields: fields.filter((f) => f.visible), record, recordTitle: title, input, error, hints,
     action: record ? `/inventory/r/${record.id}` : `/inventory/t/${tab.id}`,
     back: record ? `/inventory/r/${record.id}` : `/inventory/t/${tab.id}`,
   });
@@ -83,25 +116,35 @@ const typedValues = (body, fields) => Object.fromEntries(fields
 router.get('/t/:id/new', async (req, res) => {
   const { tab, data, fields } = await tabContext(req);
   if (tab.kind === 'ex_employees') return res.redirect(`/inventory/t/${data.id}/new`);
-  renderForm(res, { tab: data, fields });
+  const uid = userIdField(data, fields);
+  const input = {};
+  const hints = {};
+  if (uid) {
+    input[uid.id] = await suggestId(pool, data.id, uid.id);
+    hints[uid.id] = `Suggested: the lowest number not used by an active employee. You can change it to any free ${await getPrefix(pool)} number.`;
+  }
+  renderForm(res, { tab: data, fields, input, hints });
 });
 
 router.post('/t/:id', async (req, res) => {
   const { tab, data, fields } = await tabContext(req);
   if (tab.kind === 'ex_employees') throw notFound();
   const visible = fields.filter((f) => f.visible);
+  const uidError = await prepareUserId(req, data, fields);
   const { values, errors } = readValues(req.body, visible);
+  if (uidError) errors.unshift(uidError);
   if (errors.length) {
     res.status(400);
     return renderForm(res, { tab: data, fields, input: typedValues(req.body, visible), error: errors.join(' ') });
   }
   const id = await transaction(async (conn) => {
+    const uid = await settleUserId(conn, data, fields, values);
     const [r] = await conn.query('INSERT INTO inventory_records (tab_id, created_by, updated_by) VALUES (?, ?, ?)', [data.id, req.user.id, req.user.id]);
     await saveValues(conn, r.insertId, fields, values);
     const plain = new Map([...values].filter(([, c]) => 'value' in c).map(([k, c]) => [k, { value: c.value }]));
     const title = recordTitle({ id: r.insertId }, fields, plain);
     await logInv(conn, req.user, {
-      type: 'inv_record', id: r.insertId, action: 'created', subject: title, summary: `Added ${title} to ${data.name}`,
+      type: 'inv_record', id: r.insertId, action: 'created', subject: title, summary: `Added ${withUserId(title, uid)} to ${data.name}`,
     });
     return r.insertId;
   });
@@ -124,7 +167,9 @@ router.post('/r/:id', async (req, res) => {
   const ctx = await getRecord(pool, requireId(req.params.id));
   if (isEmployees(ctx.tab) && ctx.record.status === 'inactive') throw notFound();
   const visible = ctx.fields.filter((f) => f.visible);
+  const uidError = await prepareUserId(req, ctx.tab, ctx.fields, ctx.record.id);
   const { values, errors } = readValues(req.body, visible, ctx.values);
+  if (uidError) errors.unshift(uidError);
   if (errors.length) {
     res.status(400);
     const secretsSet = Object.fromEntries(ctx.fields.map((f) => [f.id, Boolean(ctx.values.get(f.id)?.hasSecret)]));
@@ -134,6 +179,7 @@ router.post('/r/:id', async (req, res) => {
     });
   }
   const changed = await transaction(async (conn) => {
+    await settleUserId(conn, ctx.tab, ctx.fields, values, ctx.record.id);
     const labels = await saveValues(conn, ctx.record.id, ctx.fields, values, ctx.values);
     if (!labels.length) return labels;
     await conn.query('UPDATE inventory_records SET updated_by = ? WHERE id = ?', [req.user.id, ctx.record.id]);
@@ -166,6 +212,12 @@ router.post('/r/:id/delete', async (req, res) => {
 });
 
 // ---- Record page / employee profile ----
+
+// The record's saved User-ID (employees), or ''.
+const uidOf = (ctx) => {
+  const f = ctx.fields.find((x) => x.role === 'user_id');
+  return f ? ctx.values.get(f.id)?.value || '' : '';
+};
 
 router.get('/r/:id', async (req, res) => {
   const ctx = await getRecord(pool, requireId(req.params.id));
@@ -227,7 +279,7 @@ router.post('/r/:id/deactivate', async (req, res) => {
     await conn.query("UPDATE inventory_records SET status = 'inactive', leaving_date = ?, updated_by = ? WHERE id = ?", [leaving, req.user.id, ctx.record.id]);
     await logInv(conn, req.user, {
       type: 'inv_record', id: ctx.record.id, action: 'status_changed', subject: ctx.title,
-      summary: `Marked ${ctx.title} as inactive (left ${leaving})${count ? `; ${count} item${count === 1 ? '' : 's'} returned to stock` : ''}`,
+      summary: `Marked ${withUserId(ctx.title, uidOf(ctx))} as inactive (left ${leaving})${count ? `; ${count} item${count === 1 ? '' : 's'} returned to stock` : ''}`,
     });
     return count;
   });
@@ -238,13 +290,32 @@ router.post('/r/:id/deactivate', async (req, res) => {
 router.post('/r/:id/reactivate', async (req, res) => {
   const ctx = await getRecord(pool, requireId(req.params.id));
   if (!isEmployees(ctx.tab) || ctx.record.status !== 'inactive') throw notFound();
-  await transaction(async (conn) => {
+  // They get their old User-ID back if no active employee has it, else the lowest free one.
+  const field = ctx.fields.find((f) => f.role === 'user_id');
+  const note = await transaction(async (conn) => {
+    let change = '';
+    let uid = field ? ctx.values.get(field.id)?.value || '' : '';
+    if (field) {
+      await lockEmployees(conn, ctx.tab.id);
+      const ids = await activeIds(conn, ctx.tab.id, field.id, ctx.record.id);
+      if (!uid || isTaken(ids, uid)) {
+        const next = lowestFree(await getPrefix(conn), ids);
+        change = uid ? `User-ID changed from ${uid} to ${next} on reactivation` : `User-ID ${next} given on reactivation`;
+        await conn.query(
+          'INSERT INTO inventory_values (record_id, field_id, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+          [ctx.record.id, field.id, next]
+        );
+        uid = next;
+      }
+    }
     await conn.query("UPDATE inventory_records SET status = 'active', leaving_date = NULL, updated_by = ? WHERE id = ?", [req.user.id, ctx.record.id]);
     await logInv(conn, req.user, {
-      type: 'inv_record', id: ctx.record.id, action: 'status_changed', subject: ctx.title, summary: `Reactivated ${ctx.title}`,
+      type: 'inv_record', id: ctx.record.id, action: 'status_changed', subject: ctx.title, changes: change ? [field.label] : undefined,
+      summary: `Reactivated ${withUserId(ctx.title, uid)}${change ? `; ${change}` : ''}`,
     });
+    return change;
   });
-  flash(req, 'success', `${ctx.title} is active again.`);
+  flash(req, 'success', `${ctx.title} is active again.${note ? ` ${note}.` : ''}`);
   res.redirect(`/inventory/r/${ctx.record.id}`);
 });
 

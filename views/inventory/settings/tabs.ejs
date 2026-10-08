@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <h1>Inventory tabs</h1>
+    <h1>Inventory settings</h1>
     <p class="muted">Drag to change the order (for everyone). Employees, Ex Employees and Stock can be renamed and moved but not deleted.</p>
   </div>
 </header>
@@ -46,6 +46,7 @@
     <p class="small" data-reorder-status role="status" hidden></p>
   </section>
 
+  <div>
   <section class="card">
     <h2>Add tab</h2>
     <form method="post" action="/inventory/settings/tabs" class="form">
@@ -58,6 +59,19 @@
       <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add tab</span></button></div>
     </form>
   </section>
+  <section class="card" id="user-id">
+    <h2>Employee User-IDs</h2>
+    <p class="muted small">New employees get the lowest free number among active employees, e.g. <strong><%= prefix %>-001</strong>. Ex employees keep theirs. Changing the prefix does not rename existing IDs.</p>
+    <form method="post" action="/inventory/settings/user-id-prefix" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Prefix</span>
+        <input type="text" name="prefix" value="<%= prefix %>" required maxlength="10" pattern="[A-Za-z0-9]{1,10}" autocomplete="off">
+      </label>
+      <div class="form-actions"><button type="submit" class="btn btn-primary">Save</button></div>
+    </form>
+  </section>
+  </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script>
 <%- include('../../partials/foot') %>

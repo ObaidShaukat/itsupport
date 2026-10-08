@@ -444,6 +444,13 @@ CREATE TABLE IF NOT EXISTS stock_assignments (
   CONSTRAINT fk_stock_assignments_returner FOREIGN KEY (returned_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Inventory settings, e.g. user_id_prefix (employee User-IDs PREFIX-001; default MDP).
+CREATE TABLE IF NOT EXISTS inventory_settings (
+  name VARCHAR(50) NOT NULL,
+  value VARCHAR(255) NULL,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Column widths each user dragged in inventory tables (col_key e.g. "f12", "stock:brand").
 CREATE TABLE IF NOT EXISTS inventory_widths (
   user_id INT UNSIGNED NOT NULL,

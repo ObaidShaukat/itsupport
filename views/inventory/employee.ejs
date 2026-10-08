@@ -13,7 +13,8 @@
   <div class="emp-id">
     <h1><%= title %></h1>
     <p class="emp-sub">
-      <% if (userId) { %><span><%- icon('tag') %> <%= userId %></span><% } %>
+      <% if (userId) { %><span title="User-ID (reused after people leave)"><%- icon('tag') %> <%= userId %></span><% } %>
+      <span class="muted small" title="Internal record number: never reused">Record #<%= record.id %></span>
       <% if (email) { %><a href="mailto:<%= email %>"><%- icon('mail') %> <%= email %></a><% } %>
     </p>
     <p class="emp-status">
