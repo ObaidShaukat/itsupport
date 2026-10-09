@@ -499,10 +499,12 @@ CREATE TABLE IF NOT EXISTS reminders (
   ticket_id INT UNSIGNED NOT NULL,
   note VARCHAR(500) NULL,
   remind_at DATETIME NOT NULL,
-  for_user_id INT UNSIGNED NOT NULL,
+  -- First recipient (kept for older code paths; recipients are in reminder_recipients).
+  for_user_id INT UNSIGNED NULL,
+  -- 'done' once every recipient has marked it done (or the creator did it for everyone).
   status ENUM('pending', 'done') NOT NULL DEFAULT 'pending',
+  -- No longer used: snoozes and email state are per recipient (reminder_recipients).
   snoozed_until DATETIME NULL,
-  -- When the reminder email went out for the current due time; cleared by snooze / edit.
   email_sent_at DATETIME NULL,
   created_by INT UNSIGNED NULL,
   updated_by INT UNSIGNED NULL,
@@ -513,9 +515,33 @@ CREATE TABLE IF NOT EXISTS reminders (
   KEY idx_reminders_ticket (ticket_id, status),
   KEY idx_reminders_user (for_user_id, status, remind_at),
   CONSTRAINT fk_reminders_ticket FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE,
-  CONSTRAINT fk_reminders_user FOREIGN KEY (for_user_id) REFERENCES users (id) ON DELETE CASCADE,
+  CONSTRAINT fk_reminders_user FOREIGN KEY (for_user_id) REFERENCES users (id) ON DELETE SET NULL,
   CONSTRAINT fk_reminders_creator FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
   CONSTRAINT fk_reminders_editor FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Who a reminder is for, and each person's own state: snoozed_until (their snooze),
+-- sent_at (email sent for the current due time) and done_at (they marked it done).
+CREATE TABLE IF NOT EXISTS reminder_recipients (
+  reminder_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  snoozed_until DATETIME NULL,
+  sent_at DATETIME NULL,
+  done_at DATETIME NULL,
+  PRIMARY KEY (reminder_id, user_id),
+  KEY idx_reminder_recipients_user (user_id, done_at),
+  CONSTRAINT fk_reminder_recipients_reminder FOREIGN KEY (reminder_id) REFERENCES reminders (id) ON DELETE CASCADE,
+  CONSTRAINT fk_reminder_recipients_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- @mentions in ticket comments (each mentioned user is emailed and notified once).
+CREATE TABLE IF NOT EXISTS comment_mentions (
+  comment_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  PRIMARY KEY (comment_id, user_id),
+  KEY idx_comment_mentions_user (user_id),
+  CONSTRAINT fk_comment_mentions_comment FOREIGN KEY (comment_id) REFERENCES ticket_comments (id) ON DELETE CASCADE,
+  CONSTRAINT fk_comment_mentions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Notifications. Only the 'portal' channel (bell + toast) is delivered today;

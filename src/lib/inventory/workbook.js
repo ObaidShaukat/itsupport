@@ -27,17 +27,28 @@ async function tabSecrets(db, tabId) {
   return out;
 }
 
+// One .xlsx with a sheet per tab in tab order (Employees = active staff, Stock, Writers,
+// Ex Employees = inactive staff with the Employees columns, Old Accounts, custom tabs)
+// plus Instructions and Lists.
 // Returns { book, sheets: [{ name, rows }], secrets } (secrets = values written decrypted).
 async function exportWorkbook(db, { includeSecrets = false } = {}) {
   const tabs = await listTabs(db);
   const sheets = [];
   let secrets = 0;
-  const ordered = [
-    ...tabs.filter((t) => t.kind === 'employees'),
-    ...tabs.filter((t) => t.kind === 'stock'),
-    ...tabs.filter((t) => t.kind === 'records'),
-  ];
-  for (const tab of ordered) {
+  const employees = tabs.find((t) => t.kind === 'employees');
+  const exTab = tabs.find((t) => t.kind === 'ex_employees');
+  const ordered = [];
+  for (const t of tabs) {
+    if (t.kind === 'employees') {
+      ordered.push({ tab: t, name: t.name, status: 'active' });
+      if (!exTab) ordered.push({ tab: t, name: 'Ex Employees', status: 'inactive' });
+    } else if (t.kind === 'ex_employees') {
+      if (employees) ordered.push({ tab: employees, name: t.name, status: 'inactive' });
+    } else {
+      ordered.push({ tab: t, name: t.name });
+    }
+  }
+  for (const { tab, name, status } of ordered) {
     if (tab.kind === 'stock') {
       const columns = await stockColumns(db, { all: true });
       const items = await listItems(db);
@@ -60,11 +71,11 @@ async function exportWorkbook(db, { includeSecrets = false } = {}) {
         const v = f ? it.values.get(f.id)?.value : '';
         return f && f.field_type === 'date' ? dateCell(v) : f && f.field_type === 'number' && v ? Number(v) : v || '';
       }));
-      sheets.push({ name: tab.name, title: 'Stock', columns, rows });
+      sheets.push({ name, title: 'Stock', columns, rows });
       continue;
     }
     const columns = await recordsColumns(db, tab, { all: true });
-    const records = await listRecords(db, tab.id);
+    const records = (await listRecords(db, tab.id)).filter((r) => !status || r.status === status);
     const plain = includeSecrets ? await tabSecrets(db, tab.id) : new Map();
     const rows = records.map((r) => columns.map((c) => {
       if (c.role === 'status') return r.status === 'active' ? 'Active' : 'Inactive';
@@ -82,7 +93,8 @@ async function exportWorkbook(db, { includeSecrets = false } = {}) {
       if (f.field_type === 'number') return Number(v.value);
       return v.value;
     }));
-    sheets.push({ name: tab.name, title: tab.kind === 'employees' ? 'Employees (active and ex employees)' : tab.name, columns, rows });
+    const title = status === 'inactive' ? `${name} (inactive, imported back into ${tab.name} as inactive)` : status ? `${name} (active)` : name;
+    sheets.push({ name, title, columns, rows });
   }
   return { book: buildBook(sheets), sheets: sheets.map((s) => ({ name: s.name, rows: s.rows.length })), secrets };
 }

@@ -58,6 +58,24 @@ const ONE_TIME_STEPS = [
       await conn.query('SET FOREIGN_KEY_CHECKS = 1');
     }
   }],
+  // Reminders get several recipients: copy each reminder's one recipient (with its snooze,
+  // email and done state) into reminder_recipients, and stop deleting a whole reminder
+  // when its first recipient's user is deleted.
+  ['reminder_recipients_v1', async (conn) => {
+    const [[fk]] = await conn.query(`
+      SELECT COUNT(*) AS n FROM information_schema.TABLE_CONSTRAINTS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reminders' AND CONSTRAINT_NAME = 'fk_reminders_user'
+    `);
+    if (Number(fk.n)) await conn.query('ALTER TABLE reminders DROP FOREIGN KEY fk_reminders_user');
+    await conn.query('ALTER TABLE reminders MODIFY for_user_id INT UNSIGNED NULL');
+    await conn.query('ALTER TABLE reminders ADD CONSTRAINT fk_reminders_user FOREIGN KEY (for_user_id) REFERENCES users (id) ON DELETE SET NULL');
+    await conn.query(`
+      INSERT IGNORE INTO reminder_recipients (reminder_id, user_id, snoozed_until, sent_at, done_at)
+      SELECT id, for_user_id, snoozed_until, email_sent_at, CASE WHEN status = 'done' THEN COALESCE(done_at, updated_at) END
+      FROM reminders WHERE for_user_id IS NOT NULL
+    `);
+    await conn.query('UPDATE reminders SET snoozed_until = NULL, email_sent_at = NULL');
+  }],
   ['inventory_v2_defaults', async (conn) => {
     await conn.beginTransaction();
     try {

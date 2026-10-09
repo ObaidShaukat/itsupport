@@ -514,8 +514,29 @@ if (bell) {
     bellCount.textContent = count > 99 ? '99+' : String(count);
     bellCount.hidden = count === 0;
     bell.classList.toggle('has-unread', count > 0);
-    bellToggle.setAttribute('aria-label', count ? `Reminders (${count} due)` : 'Reminders');
+    bellToggle.setAttribute('aria-label', count ? `Notifications (${count})` : 'Notifications');
     bellList.replaceChildren();
+    // Unread @mentions first; opening one marks it read.
+    const mentions = data.mentions || [];
+    if (mentions.length) {
+      const group = el('section', 'bell-group bell-group-mentions');
+      group.appendChild(el('h3', '', `Mentions (${mentions.length})`));
+      const ul = el('ul');
+      for (const m of mentions) {
+        const li = el('li');
+        const link = el('a', 'notice');
+        link.href = m.link;
+        const body = el('div', 'notice-body');
+        body.appendChild(el('span', 'notice-title', m.title));
+        if (m.body) body.appendChild(el('div', 'small notice-note', m.body));
+        body.appendChild(el('div', 'muted small', m.time));
+        link.appendChild(body);
+        li.appendChild(link);
+        ul.appendChild(li);
+      }
+      group.appendChild(ul);
+      bellList.appendChild(group);
+    }
     const groups = [
       ['due', 'Due now', data.due],
       ['missed', 'Missed', data.missed],
@@ -537,7 +558,7 @@ if (bell) {
       group.appendChild(ul);
       bellList.appendChild(group);
     }
-    if (!bellList.children.length) bellList.appendChild(el('p', 'empty small', 'No reminders due in the next 7 days.'));
+    if (!bellList.children.length) bellList.appendChild(el('p', 'empty small', 'No mentions or reminders due in the next 7 days.'));
   }
 
   async function poll() {
@@ -1819,4 +1840,135 @@ document.querySelectorAll('[data-password-toggle]').forEach((box) => {
   const sync = () => { warning.hidden = !box.checked; };
   box.addEventListener('change', sync);
   sync();
+});
+
+// ---- @mentions in ticket comments ----
+// Typing "@" in the comment box opens a list of portal users (from the page's
+// <template data-mention-users>), filtered as you type; arrows + Enter (or Tab) pick,
+// Esc closes. The picked name is inserted as "@Name " and highlighted by a backdrop
+// layer behind the textarea. The server finds the mentions again when the comment is saved.
+document.querySelectorAll('[data-mention-box]').forEach((box) => {
+  const area = box.querySelector('textarea');
+  const backdrop = box.querySelector('.mention-backdrop');
+  const source = box.closest('form')?.querySelector('template[data-mention-users]');
+  if (!area || !backdrop || !source) return;
+  const people = [...source.content.querySelectorAll('li')].map((li) => ({ name: li.dataset.name, node: li }));
+  const names = people.map((p) => p.name).sort((a, b) => b.length - a.length);
+  const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = names.length ? new RegExp(`@(?:${names.map(escapeRe).join('|')})(?![\\p{L}\\p{N}_])`, 'giu') : null;
+
+  const list = document.createElement('ul');
+  list.className = 'mention-list';
+  list.setAttribute('role', 'listbox');
+  list.id = `mention-list-${Math.random().toString(36).slice(2, 8)}`;
+  list.hidden = true;
+  box.appendChild(list);
+  area.setAttribute('aria-autocomplete', 'list');
+  area.setAttribute('aria-controls', list.id);
+
+  let start = -1; // index of the "@" being completed
+  let active = 0;
+  let shown = [];
+
+  // Backdrop: the same text with known mentions wrapped in <mark>.
+  function paint() {
+    backdrop.replaceChildren();
+    const text = area.value;
+    let last = 0;
+    if (pattern) {
+      pattern.lastIndex = 0;
+      let m;
+      while ((m = pattern.exec(text))) {
+        const before = text[m.index - 1];
+        if (m.index > 0 && before && !/\s|[(\[{"']/.test(before)) continue;
+        backdrop.appendChild(document.createTextNode(text.slice(last, m.index)));
+        const mark = document.createElement('mark');
+        mark.textContent = m[0];
+        backdrop.appendChild(mark);
+        last = m.index + m[0].length;
+      }
+    }
+    backdrop.appendChild(document.createTextNode(`${text.slice(last)}\n`));
+    backdrop.scrollTop = area.scrollTop;
+  }
+
+  function close() {
+    list.hidden = true;
+    start = -1;
+    area.removeAttribute('aria-activedescendant');
+    area.setAttribute('aria-expanded', 'false');
+  }
+
+  function highlight(i) {
+    active = i;
+    [...list.children].forEach((li, n) => {
+      li.classList.toggle('is-active', n === i);
+      li.setAttribute('aria-selected', String(n === i));
+      if (n === i) {
+        area.setAttribute('aria-activedescendant', li.id);
+        li.scrollIntoView({ block: 'nearest' });
+      }
+    });
+  }
+
+  function pick(person) {
+    const caret = area.selectionStart;
+    const insert = `@${person.name} `;
+    area.value = area.value.slice(0, start) + insert + area.value.slice(caret);
+    const pos = start + insert.length;
+    area.setSelectionRange(pos, pos);
+    close();
+    paint();
+    area.focus();
+  }
+
+  // The "@word" being typed before the caret, or null.
+  function query() {
+    const caret = area.selectionStart;
+    if (caret !== area.selectionEnd) return null;
+    const before = area.value.slice(0, caret);
+    const at = before.lastIndexOf('@');
+    if (at < 0 || (at > 0 && !/\s|[(\[{"']/.test(before[at - 1]))) return null;
+    const typed = before.slice(at + 1);
+    if (typed.length > 40 || /[\n@]/.test(typed) || /\s\s/.test(typed)) return null;
+    return { at, typed };
+  }
+
+  function update() {
+    const q = query();
+    if (!q) return close();
+    const term = q.typed.toLowerCase();
+    shown = people.filter((p) => {
+      const n = p.name.toLowerCase();
+      return !term || n.startsWith(term) || n.split(/\s+/).some((w) => w.startsWith(term));
+    }).slice(0, 8);
+    if (!shown.length) return close();
+    start = q.at;
+    list.replaceChildren(...shown.map((p, i) => {
+      const li = p.node.cloneNode(true);
+      li.id = `${list.id}-${i}`;
+      li.addEventListener('mousedown', (e) => { e.preventDefault(); pick(p); });
+      li.addEventListener('mousemove', () => { if (active !== i) highlight(i); });
+      return li;
+    }));
+    list.hidden = false;
+    area.setAttribute('aria-expanded', 'true');
+    highlight(0);
+    return undefined;
+  }
+
+  area.addEventListener('input', () => { paint(); update(); });
+  area.addEventListener('click', update);
+  area.addEventListener('scroll', () => { backdrop.scrollTop = area.scrollTop; });
+  area.addEventListener('blur', () => setTimeout(close, 100));
+  area.addEventListener('keydown', (e) => {
+    if (list.hidden) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); highlight((active + 1) % shown.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); highlight((active - 1 + shown.length) % shown.length); }
+    else if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(shown[active]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+  });
+  if (window.ResizeObserver) new ResizeObserver(() => { backdrop.style.height = `${area.offsetHeight}px`; }).observe(area);
+  box.classList.add('is-ready');
+  paint();
 });

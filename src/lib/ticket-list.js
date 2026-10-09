@@ -60,7 +60,7 @@ async function listTickets({ clientId = null, status, priority, sort, dir }) {
     SELECT t.id, t.title, t.status, t.priority, t.created_at, t.updated_at, t.created_by AS created_by_id, t.updated_by AS updated_by_id,
            c.id AS client_id, c.name AS client_name,
            COALESCE(NULLIF(cu.display_name, ''), cu.username) AS created_by, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by,
-           (SELECT MIN(COALESCE(r.snoozed_until, r.remind_at)) FROM reminders r
+           (SELECT MIN(r.remind_at) FROM reminders r
             WHERE r.ticket_id = t.id AND r.status = 'pending') AS next_reminder_at
     FROM tickets t
     JOIN clients c ON c.id = t.client_id

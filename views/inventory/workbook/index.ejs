@@ -2,7 +2,7 @@
 <header class="page-head">
   <div>
     <h1>Inventory workbook</h1>
-    <p class="muted">One Excel file for everything: a sheet per tab (<%= tabs.filter((t) => t.kind !== 'ex_employees').map((t) => t.name).join(', ') %>) with every column, plus an Instructions sheet. Export it, edit it, import it back.</p>
+    <p class="muted">One Excel file (.xlsx) for everything: a sheet per tab (<%= tabs.map((t) => t.name).join(', ') %>) with every column, plus an Instructions sheet. Export it, edit it, import it back.</p>
   </div>
 </header>
 <%- include('../_tabs', { active: 'workbook' }) %>
@@ -11,7 +11,7 @@
 <div class="grid-2">
   <section class="card" id="export">
     <h2><%- icon('download') %> Export workbook</h2>
-    <p class="muted">Every current field as a column, in the current order, filled with what is saved (ex employees are on the Employees sheet with Status Inactive). A tab with no data gets one example row, so a new install gets a ready-made template.</p>
+    <p class="muted">Every current field as a column, in the current order, filled with what is saved: active staff on the Employees sheet, leavers on the Ex Employees sheet. A tab with no data gets one example row, so a new install gets a ready-made template.</p>
     <form method="post" action="/inventory/workbook/export" class="form">
       <%- csrfField %>
       <label class="checkbox-field">
@@ -28,13 +28,13 @@
 
   <section class="card" id="import">
     <h2><%- icon('upload') %> Import workbook</h2>
-    <p class="muted">Upload the workbook (.xlsx, up to 20 MB). Sheets are matched to tabs by name and imported in order: Employees, then Stock (so "Assigned to" can find employees from the same file), then Writers, Old Accounts and other tabs. You check the columns and a preview first; nothing changes until you confirm.</p>
+    <p class="muted">Upload the workbook (.xlsx, up to 20 MB). Every sheet is matched to a tab by name and imported in order: Employees and Ex Employees, then Stock (so "Assigned to" can find employees from the same file), then Writers, Old Accounts and other tabs. You check the columns and a preview first; nothing changes until you confirm.</p>
     <% if (!key.ok) { %><div class="flash flash-error" role="alert"><%= key.message %> Imports need it.</div><% } %>
     <form method="post" action="/inventory/workbook/import" enctype="multipart/form-data" class="form">
       <%- csrfField %>
       <label class="field">
         <span>Workbook</span>
-        <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.csv" required>
+        <input type="file" name="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
       </label>
       <ul class="import-rules small muted">
         <li>Empty cells never change saved data (passwords and PINs included). Type <strong>CLEAR</strong> to clear a value.</li>

@@ -115,19 +115,13 @@ async function readSheet(file) {
 // { sheets: [{ name, headers, rows }] } or { error }. A .csv is one sheet named after the file.
 async function readWorkbook(file) {
   const ext = path.extname(file.originalname || '').toLowerCase();
-  if (!['.xlsx', '.csv'].includes(ext)) return { error: 'Upload an .xlsx (or .csv) file.' };
+  if (ext !== '.xlsx') return { error: 'Upload the inventory workbook as one .xlsx file (Export workbook makes one).' };
   if (file.size > MAX_BYTES) return { error: 'The file must be 20 MB or smaller.' };
   const book = new ExcelJS.Workbook();
   let sheets;
   try {
-    if (ext === '.csv') {
-      const ws = await book.csv.readFile(file.path);
-      ws.name = path.basename(file.originalname, ext).slice(0, 31) || 'Sheet';
-      sheets = [ws];
-    } else {
-      await book.xlsx.readFile(file.path);
-      sheets = book.worksheets.filter((ws) => !['instructions', 'lists'].includes(ws.name.toLowerCase()) && ws.state === 'visible');
-    }
+    await book.xlsx.readFile(file.path);
+    sheets = book.worksheets.filter((ws) => !['instructions', 'lists'].includes(ws.name.toLowerCase()) && ws.state === 'visible');
   } catch (err) {
     return { error: 'That file could not be read. Save it as .xlsx and try again.' };
   }

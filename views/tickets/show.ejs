@@ -58,9 +58,9 @@
       <% } else { %>
         <ul class="comments">
           <% for (const c of comments) { %>
-            <li class="comment">
+            <li class="comment" id="comment-<%= c.id %>">
               <div class="comment-meta"><%- avatar({ id: c.user_id, name: c.username }, 'sm') %><strong><%= c.username || 'Deleted user' %></strong> <span class="muted small"><%= fmtDate(c.created_at) %></span></div>
-              <p class="pre-line"><%= c.body %></p>
+              <p class="pre-line"><%- c.html %></p>
             </li>
           <% } %>
         </ul>
@@ -68,9 +68,17 @@
       <form method="post" action="/tickets/<%= ticket.id %>/comments" class="form">
         <%- csrfField %>
         <label class="field">
-          <span>Add a comment</span>
-          <textarea name="body" rows="4" required maxlength="10000"></textarea>
+          <span>Add a comment <span class="muted">(type @ to mention someone)</span></span>
+          <div class="mention-box" data-mention-box>
+            <div class="mention-backdrop" aria-hidden="true"></div>
+            <textarea name="body" rows="4" required maxlength="10000" autocomplete="off"></textarea>
+          </div>
         </label>
+        <template data-mention-users>
+          <% for (const u of mentionable) { %>
+            <li role="option" data-name="<%= u.name %>"><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %></span></li>
+          <% } %>
+        </template>
         <button type="submit" class="btn btn-primary">Post comment</button>
       </form>
     </section>

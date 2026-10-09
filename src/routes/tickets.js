@@ -5,6 +5,7 @@ const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } =
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
 const { ticketReminders, reminderUsers, clearReminderNotifications } = require('../lib/reminders');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
+const { mentionUsers, mentionNames, mentionHtml, recordMentions, emailMentions } = require('../lib/mentions');
 
 const ticketEntry = (ticket, type, action, summary) => ({
   type, id: ticket.id, action, summary, clientId: ticket.client_id, clientName: ticket.client_name, subject: ticket.title,
@@ -101,6 +102,8 @@ router.get('/:id', async (req, res) => {
     WHERE tc.ticket_id = ?
     ORDER BY tc.created_at, tc.id
   `, [id]);
+  const mentions = await mentionNames(pool, comments.map((c) => c.id));
+  for (const c of comments) c.html = mentionHtml(c.body, mentions.get(c.id));
   const [history] = await pool.query(`
     SELECT th.old_status, th.new_status, th.old_priority, th.new_priority, th.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
     FROM ticket_history th
@@ -112,7 +115,13 @@ router.get('/:id', async (req, res) => {
   const meta = recordMeta(activity, 'ticket', { createdBy: ticket.created_by_name, createdAt: ticket.created_at });
   const reminders = await ticketReminders(id);
   const users = await reminderUsers();
-  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta, reminders, users });
+  const mentionable = await mentionUsers();
+  // Seeing the ticket reads the user's @mention notifications for it.
+  await pool.query(
+    "UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND type = 'mention' AND read_at IS NULL AND link LIKE ?",
+    [req.user.id, `/tickets/${id}#%`]
+  );
+  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta, reminders, users, mentionable });
 });
 
 router.post('/:id/status', async (req, res) => {
@@ -203,13 +212,29 @@ router.post('/:id/comments', async (req, res) => {
     flash(req, 'error', 'Comment cannot be empty.');
     return res.redirect(`/tickets/${id}#comments`);
   }
-  await transaction(async (conn) => {
+  const author = { id: req.user.id, name: req.user.name };
+  const saved = await transaction(async (conn) => {
     const ticket = await ticketContext(conn, id, true);
-    await conn.query('INSERT INTO ticket_comments (ticket_id, user_id, body) VALUES (?, ?, ?)', [id, req.user.id, body]);
+    const [r] = await conn.query('INSERT INTO ticket_comments (ticket_id, user_id, body) VALUES (?, ?, ?)', [id, req.user.id, body]);
     await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', body));
+    // @mentions: stored, a bell notification and (after commit) an email for each person
+    // mentioned except the author. Logged on the ticket History, never on the Daily Report.
+    const { mentioned, notify } = await recordMentions(conn, { commentId: r.insertId, ticket, author, body });
+    if (mentioned.length) {
+      await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'sent',
+        `Mentioned ${mentioned.map((u) => u.name).join(', ')} in a comment${notify.length ? ' (notified by bell and email)' : ''}`));
+    }
     await conn.query('UPDATE tickets SET updated_by = ?, updated_at = NOW() WHERE id = ?', [req.user.id, id]);
+    return { ticket, commentId: r.insertId, notify };
   });
-  res.redirect(`/tickets/${id}#comments`);
+  if (saved.notify.length) {
+    try {
+      await emailMentions({ users: saved.notify, author, ticket: saved.ticket, body, commentId: saved.commentId });
+    } catch (err) {
+      console.error('Mention emails failed:', err.message);
+    }
+  }
+  res.redirect(`/tickets/${id}#comment-${saved.commentId}`);
 });
 
 // Deletes the ticket with its comments and status history (ON DELETE CASCADE).

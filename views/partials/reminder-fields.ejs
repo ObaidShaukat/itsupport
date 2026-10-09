@@ -1,20 +1,25 @@
 <%#
-  Reminder form fields (add and edit). reminder: { note, for_user_id, input } or null;
-  users: [{ id, name }]. Quick picks fill the UK date/time field (public/js/app.js).
+  Reminder form fields (add and edit). reminder: { note, recipientIds, input } or null;
+  users: [{ id, name }]. "For" is one or more people (default: me). Quick picks fill the
+  UK date/time field (public/js/app.js).
 %>
-<% const r = locals.reminder || {}; const forId = r.for_user_id || currentUser.id; %>
+<% const r = locals.reminder || {}; const chosen = r.recipientIds && r.recipientIds.length ? r.recipientIds : [currentUser.id]; %>
 <label class="field">
   <span>Note</span>
   <textarea name="note" rows="2" maxlength="500" placeholder="e.g. Chase the supplier for the replacement part"><%= r.note || '' %></textarea>
 </label>
-<label class="field">
-  <span>For</span>
-  <select name="for_user_id" data-combobox>
+<fieldset class="field reminder-for">
+  <legend>For</legend>
+  <input type="hidden" name="for_present" value="1">
+  <div class="user-checks" role="group">
     <% for (const u of users) { %>
-      <option value="<%= u.id %>" <%= u.id === forId ? 'selected' : '' %>><%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %></option>
+      <label class="user-check">
+        <input type="checkbox" name="for_user_ids" value="<%= u.id %>" <%= chosen.includes(u.id) ? 'checked' : '' %>>
+        <%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %></span>
+      </label>
     <% } %>
-  </select>
-</label>
+  </div>
+</fieldset>
 <div class="field" data-reminder-when>
   <span>When <span class="muted">(UK time)</span></span>
   <div class="reminder-picks" role="group" aria-label="Quick picks">

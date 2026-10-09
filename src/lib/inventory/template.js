@@ -124,7 +124,7 @@ async function recordsColumns(db, tab, { all = false } = {}) {
   });
   if (columns.length && !fields.some((f) => f.role === 'title')) columns[0].example = EXAMPLE_MARK;
   if (tab.kind === 'employees') {
-    columns.push({ role: 'status', header: 'Status', type: 'dropdown', typeLabel: 'Status', example: 'Active', list: ['Active', 'Inactive'], allowed: 'Active or Inactive (Inactive = ex employee). Empty = Active for new employees, no change for existing ones.' });
+    columns.push({ role: 'status', header: 'Status', type: 'dropdown', typeLabel: 'Status', example: 'Active', list: ['Active', 'Inactive'], allowed: 'Active or Inactive (Inactive = ex employee). Empty = Active for new employees (Inactive on the Ex Employees sheet), no change for existing ones.' });
     columns.push({ role: 'leaving', header: 'Leaving date', type: 'date', typeLabel: 'Date', example: '', allowed: 'For Inactive employees: the date they left.' });
   }
   return columns;
