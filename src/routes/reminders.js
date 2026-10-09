@@ -9,7 +9,7 @@ const { requireId, toId, flash, notFound, safePath } = require('../lib/http');
 const { logActivity } = require('../lib/activity');
 const {
   SNOOZES, reminderContext, readReminderForm, snoozeUntil, clearReminderNotifications, setRecipients, markDone,
-  snoozeFor, namesOf,
+  snoozeFor, namesOf, readRecipients, claimAddedEmails, emailAddedRecipients,
 } = require('../lib/reminders');
 
 const router = express.Router();
@@ -28,6 +28,26 @@ async function lockedReminder(conn, req) {
   const reminder = await reminderContext(conn, requireId(req.params.id), true);
   if (!reminder) throw notFound();
   return reminder;
+}
+
+// After recipients changed (inside the transaction): a complete reminder with new people
+// is pending again, and new people on a reminder that is already due (or was done) are
+// claimed for an email now. Returns the emails to send after commit.
+async function afterRecipientsChange(conn, r, added) {
+  if (!added.length) return [];
+  const wasDone = r.status === 'done';
+  if (wasDone) await conn.query("UPDATE reminders SET status = 'pending', done_at = NULL WHERE id = ?", [r.id]);
+  return claimAddedEmails(conn, r.id, added, { wasDone });
+}
+
+// Emails never break the save; problems are in email_log.
+async function sendAddedEmails(rows, adderName) {
+  if (!rows || !rows.length) return;
+  try {
+    await emailAddedRecipients(rows, adderName);
+  } catch (err) {
+    console.error('Reminder "added you" emails failed:', err.message);
+  }
 }
 
 function done(req, res, ticketId, message, type = 'success') {
@@ -82,20 +102,45 @@ router.post('/:id', async (req, res) => {
     const newTime = new Date(r.remind_at).getTime() !== form.remindAt.getTime();
     if (newTime) changes.push('time');
     if (!changes.length) return { r };
+    // Only what changed is written; the time stays as it was unless it was edited.
     await conn.query('UPDATE reminders SET note = ?, remind_at = ?, updated_by = ? WHERE id = ?', [form.note, form.remindAt, req.user.id, r.id]);
     // A new time starts over for everyone (no snoozes, email again, new popup).
-    await setRecipients(conn, r.id, form.userIds, { resetTimes: newTime });
-    // Someone added to a reminder that was complete makes it pending again.
-    if (r.status === 'done') {
-      const [[{ open }]] = await conn.query('SELECT COUNT(*) AS open FROM reminder_recipients WHERE reminder_id = ? AND done_at IS NULL', [r.id]);
-      if (Number(open)) await conn.query("UPDATE reminders SET status = 'pending', done_at = NULL WHERE id = ?", [r.id]);
-    }
+    const { added } = await setRecipients(conn, r.id, form.userIds, { resetTimes: newTime });
+    const emails = await afterRecipientsChange(conn, r, added);
     await logActivity(conn, req.user, reminderEntry(r, 'updated',
       withNote(`Edited a reminder for ${form.names} on ${fmt(form.remindAt)}`, form.note), changes));
-    return { r, changed: true };
+    return { r, changed: true, emails };
   });
   if (result.error) return failed(req, res, result.r.ticket_id, result.error);
+  await sendAddedEmails(result.emails, req.user.name);
   return done(req, res, result.r.ticket_id, result.changed ? 'Saved. Reminder updated.' : 'Saved. Nothing changed.', 'saved');
+});
+
+// "Add people" on a reminder row: changes only who it is for. New people on a reminder
+// that is still to come get it at the due time like everyone else; on one whose time
+// has passed (or that was done) they are emailed straight away. Nobody already on the
+// reminder is emailed again.
+router.post('/:id/recipients', async (req, res) => {
+  const result = await transaction(async (conn) => {
+    const r = await lockedReminder(conn, req);
+    const people = await readRecipients(conn, req.body, req.user.id);
+    if (people.error) return { r, error: people.error };
+    const { added, removed } = await setRecipients(conn, r.id, people.userIds);
+    if (!added.length && !removed.length) return { r };
+    const emails = await afterRecipientsChange(conn, r, added);
+    const nameOf = new Map([...people.users, ...r.recipients.map((x) => ({ id: x.user_id, name: x.name }))].map((u) => [u.id, u.name]));
+    const list = (ids) => ids.map((id) => nameOf.get(id)).join(', ');
+    const parts = [];
+    if (added.length) parts.push(`added ${list(added)}`);
+    if (removed.length) parts.push(`removed ${list(removed)}`);
+    await conn.query('UPDATE reminders SET updated_by = ? WHERE id = ?', [req.user.id, r.id]);
+    await logActivity(conn, req.user, reminderEntry(r, 'updated',
+      withNote(`Changed who a reminder is for (${parts.join('; ')}); now for ${people.names}`, r.note), ['for']));
+    return { r, changed: true, emails };
+  });
+  if (result.error) return failed(req, res, result.r.ticket_id, result.error);
+  await sendAddedEmails(result.emails, req.user.name);
+  return done(req, res, result.r.ticket_id, result.changed ? 'Saved. People updated.' : 'Saved. Nothing changed.', 'saved');
 });
 
 // Done for me (a recipient), or for everyone (?everyone=1, the creator). Someone who is

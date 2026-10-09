@@ -15,7 +15,7 @@
     <%- csrfField %>
     <input type="hidden" name="ticket_id" value="<%= ticket.id %>">
     <input type="hidden" name="back" value="<%= back %>">
-    <%- include('reminder-fields', { reminder: null, users }) %>
+    <%- include('reminder-fields', { reminder: null, users, defaultInput: reminders.defaultInput }) %>
     <div class="form-actions">
       <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
       <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -67,12 +67,27 @@
             </form>
           <% } %>
           <details class="edit edit-right">
+            <summary class="btn btn-small btn-ghost"><%- icon('user-plus') %><span>Add people</span></summary>
+            <div class="edit-panel">
+              <form method="post" action="/reminders/<%= r.id %>/recipients" class="form" data-reminder-form>
+                <%- csrfField %>
+                <input type="hidden" name="back" value="<%= back %>">
+                <%- include('reminder-people', { chosen: r.recipientIds, users }) %>
+                <p class="muted small">New people get it at the due time; if that has passed<%= r.status === 'done' ? ' (or it is done)' : '' %>, they are emailed now.</p>
+                <div class="form-actions">
+                  <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+                  <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                </div>
+              </form>
+            </div>
+          </details>
+          <details class="edit edit-right">
             <summary class="btn btn-small btn-ghost"><%- icon('edit') %><span>Edit</span></summary>
             <div class="edit-panel">
               <form method="post" action="/reminders/<%= r.id %>" class="form" data-reminder-form>
                 <%- csrfField %>
                 <input type="hidden" name="back" value="<%= back %>">
-                <%- include('reminder-fields', { reminder: r, users }) %>
+                <%- include('reminder-fields', { reminder: r, users, defaultInput: null }) %>
                 <div class="form-actions">
                   <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
                   <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -101,6 +116,21 @@
             </div>
           </div>
           <div class="reminder-actions">
+            <details class="edit edit-right">
+              <summary class="btn btn-small btn-ghost"><%- icon('user-plus') %><span>Add people</span></summary>
+              <div class="edit-panel">
+                <form method="post" action="/reminders/<%= r.id %>/recipients" class="form" data-reminder-form>
+                  <%- csrfField %>
+                  <input type="hidden" name="back" value="<%= back %>">
+                  <%- include('reminder-people', { chosen: r.recipientIds, users }) %>
+                  <p class="muted small">New people get it at the due time; if that has passed<%= r.status === 'done' ? ' (or it is done)' : '' %>, they are emailed now.</p>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+                    <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </details>
             <%- include('delete', { action: `/reminders/${r.id}/delete`, confirm: 'Delete this reminder? This cannot be undone.', back, label: 'Delete reminder' }) %>
           </div>
         </li>

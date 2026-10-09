@@ -63,6 +63,8 @@ async function ticketReminders(ticketId) {
     r.recipientIds = r.recipients.map((x) => x.user_id);
   }
   return {
+    // New reminders start at tomorrow 09:00 (UK), so the time is never empty.
+    defaultInput: `${addDays(londonDate(), 1)}T09:00`,
     pending: rows.filter((r) => r.status === 'pending'),
     done: rows.filter((r) => r.status === 'done').sort((a, b) => new Date(b.done_at) - new Date(a.done_at)),
   };
@@ -83,24 +85,93 @@ async function reminderContext(db, id, lock = false) {
   return reminder;
 }
 
-// Add / edit form: note, for (one or more user ids, default the signed-in user),
-// remind_at (UK time). Returns { form } or { error }.
-async function readReminderForm(db, body, userId) {
+// The UK wall-clock "YYYY-MM-DDTHH:MM" from the form's date (dd/mm/yyyy, or yyyy-mm-dd)
+// and time (HH:MM, 24-hour) fields, or the older single remind_at field; null if invalid.
+function readWhen(body) {
+  if (body.remind_date === undefined && body.remind_time === undefined) {
+    const at = String(body.remind_at || '').trim();
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(at) ? at : null;
+  }
+  const dateText = String(body.remind_date || '').trim();
+  const timeText = String(body.remind_time || '').trim();
+  let y; let m; let d;
+  let match = /^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})$/.exec(dateText);
+  if (match) [, d, m, y] = match.map(Number);
+  else if ((match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateText))) [, y, m, d] = match.map(Number);
+  else return null;
+  const check = new Date(Date.UTC(y, m - 1, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) return null;
+  const t = /^(\d{1,2})[:.](\d{2})$/.exec(timeText);
+  if (!t || Number(t[1]) > 23 || Number(t[2]) > 59) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${y}-${pad(m)}-${pad(d)}T${pad(Number(t[1]))}:${t[2]}`;
+}
+
+// The "For" people of a form: { userIds, users, names } or { error }. The form sends
+// for_present=1, so ticking nobody is an error, not "me".
+async function readRecipients(db, body, userId) {
   const raw = [].concat(body.for_user_ids || body.for_user_id || []);
   const ids = [...new Set(raw.map(toId).filter(Boolean))];
-  const form = {
-    note: str(body.note, 500) || null,
-    // The form sends for_present=1, so ticking nobody is an error, not "me".
-    userIds: ids.length ? ids : (body.for_present ? [] : [userId]),
-    remindAt: londonLocalToUtc(body.remind_at),
-  };
-  if (!form.remindAt) return { error: 'Choose a date and time for the reminder.' };
-  if (!form.userIds.length) return { error: 'Choose who the reminder is for.' };
-  const [users] = await db.query(`SELECT id, ${USER_NAME('u')} AS name FROM users u WHERE id IN (?) ORDER BY name`, [form.userIds]);
-  if (users.length !== form.userIds.length) return { error: 'Choose who the reminder is for.' };
-  form.users = users;
-  form.names = users.map((u) => u.name).join(', ');
-  return { form };
+  const userIds = ids.length ? ids : (body.for_present ? [] : [userId]);
+  if (!userIds.length) return { error: 'Choose who the reminder is for.' };
+  const [users] = await db.query(`SELECT id, ${USER_NAME('u')} AS name FROM users u WHERE id IN (?) ORDER BY name`, [userIds]);
+  if (users.length !== userIds.length) return { error: 'Choose who the reminder is for.' };
+  return { userIds, users, names: users.map((u) => u.name).join(', ') };
+}
+
+const WHEN_ERROR = 'Enter the date as dd/mm/yyyy and the time as HH:MM (24-hour), or pick a quick option.';
+
+// Add / edit form: note, for (one or more user ids, default the signed-in user), date and
+// time (UK). Returns { form } or { error }.
+async function readReminderForm(db, body, userId) {
+  const when = readWhen(body);
+  const remindAt = when && londonLocalToUtc(when);
+  if (!remindAt) return { error: WHEN_ERROR };
+  const people = await readRecipients(db, body, userId);
+  if (people.error) return { error: people.error };
+  return { form: { note: str(body.note, 500) || null, remindAt, ...people } };
+}
+
+// People just added to a reminder whose time has passed (or that was done when they were
+// added) are emailed straight away instead of at the due time, if their preference
+// includes email. Their sent_at is claimed inside the transaction so the due-time email
+// job does not send it again. Only the given (new) people are ever included.
+async function claimAddedEmails(conn, reminderId, addedIds, { wasDone = false } = {}) {
+  if (!addedIds.length) return [];
+  const [rows] = await conn.query(`
+    SELECT r.id, r.note, r.ticket_id, r.remind_at AS due_at, r.remind_at <= NOW() AS is_past, rr.user_id,
+           t.title, c.name AS client_name, u.username, u.date_format
+    FROM reminder_recipients rr
+    JOIN reminders r ON r.id = rr.reminder_id
+    JOIN tickets t ON t.id = r.ticket_id
+    JOIN clients c ON c.id = t.client_id
+    JOIN users u ON u.id = rr.user_id
+    WHERE rr.reminder_id = ? AND rr.user_id IN (?) AND rr.sent_at IS NULL AND rr.done_at IS NULL
+      AND u.reminder_channel IN ('email', 'both')
+  `, [reminderId, addedIds]);
+  const now = rows.filter((r) => wasDone || Number(r.is_past));
+  for (const r of now) await conn.query('UPDATE reminder_recipients SET sent_at = NOW() WHERE reminder_id = ? AND user_id = ?', [r.id, r.user_id]);
+  return now;
+}
+
+// After commit: "{User} added you to a reminder: {note}" to each claimed person.
+async function emailAddedRecipients(rows, adderName) {
+  if (!rows.length) return;
+  const { mailStatus, sendMail, logSkipped, userEmail } = mailer();
+  if (!mailStatus().enabled) return;
+  for (const r of rows) {
+    const what = r.note || `#${r.ticket_id} ${r.title}`;
+    const message = {
+      to: userEmail(r),
+      ...reminderEmail(r, { subject: `${adderName} added you to a reminder: ${what}`, label: `${adderName} added you to a reminder` }),
+    };
+    const meta = { kind: 'reminder', userId: r.user_id, reminderId: r.id };
+    if (!message.to) {
+      await logSkipped({ ...message, to: r.username }, meta, 'This user has no email address (their username is not an email address).');
+      continue;
+    }
+    await sendMail(message, meta);
+  }
 }
 
 // UTC time for a snooze choice, or null for an unknown choice.
@@ -259,12 +330,12 @@ async function bellFor(user, fmtDate) {
 // the portal. The due time is shown in the recipient's own date format (24h UK time).
 const londonTime = (date, format) => formattersFor(format).fmtDate(date);
 
-function reminderEmail(r) {
+function reminderEmail(r, { subject: subjectText, label = 'Reminder' } = {}) {
   const { escapeHtml: e, appUrl } = mailer();
   const base = appUrl();
   const link = base ? `${base}/tickets/${r.ticket_id}#reminders` : '';
   const ticket = `#${r.ticket_id} ${r.title}`;
-  const subject = `Reminder: ${r.note || ticket}`.replace(/\s+/g, ' ').slice(0, 200);
+  const subject = (subjectText || `Reminder: ${r.note || ticket}`).replace(/\s+/g, ' ').slice(0, 200);
   const font = 'font-family: Arial, Helvetica, sans-serif;';
   const row = (label, value) => `<tr><td style="${font} padding: 6px 12px 6px 0; color: #6E6E73; font-size: 13px; vertical-align: top; white-space: nowrap;">${label}</td>`
     + `<td style="${font} padding: 6px 0; color: #000000; font-size: 14px;">${value}</td></tr>`;
@@ -273,7 +344,7 @@ function reminderEmail(r) {
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background: #FFFFFF; border: 1px solid #E5E5EA; border-radius: 12px; overflow: hidden;">
 <tr><td style="${font} background: #200D6C; color: #FFFFFF; padding: 18px 24px; font-size: 16px; font-weight: bold;">Cleartwo <span style="color: #B9A6F0; font-weight: normal;">IT Support</span></td></tr>
 <tr><td style="padding: 24px;">
-<p style="${font} margin: 0 0 6px; color: #6741C3; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Reminder</p>
+<p style="${font} margin: 0 0 6px; color: #6741C3; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">${e(label)}</p>
 <p style="${font} margin: 0 0 18px; color: #200D6C; font-size: 20px; font-weight: bold; line-height: 1.35; white-space: pre-line;">${e(r.note || ticket)}</p>
 <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 22px;">
 ${row('Due', `${e(londonTime(r.due_at, r.date_format))} (UK time)`)}
@@ -288,7 +359,7 @@ ${link
 <p style="${font} color: #6E6E73; font-size: 12px; margin: 14px 0 0;">You are getting this because a reminder on this ticket was set for you.</p>
 </td></tr></table></body></html>`;
   const text = [
-    'Reminder', '', r.note || ticket, '',
+    label, '', r.note || ticket, '',
     `Due: ${londonTime(r.due_at, r.date_format)} (UK time)`, `Ticket: ${ticket}`, `Client: ${r.client_name}`,
     link ? `\nOpen the ticket: ${link}` : '',
   ].join('\n');
@@ -332,6 +403,7 @@ async function sendDueReminderEmails() {
 
 module.exports = {
   sendDueReminderEmails, reminderEmail,
-  SNOOZES, reminderUsers, ticketReminders, reminderContext, readReminderForm, snoozeUntil,
+  SNOOZES, reminderUsers, ticketReminders, reminderContext, readReminderForm, readRecipients, readWhen, snoozeUntil,
+  claimAddedEmails, emailAddedRecipients,
   clearReminderNotifications, setRecipients, markDone, snoozeFor, namesOf, bellFor,
 };

@@ -1,46 +1,49 @@
 <%#
-  Reminder form fields (add and edit). reminder: { note, recipientIds, input } or null;
-  users: [{ id, name }]. "For" is one or more people (default: me): chosen people show as
-  chips with x; "Add people" opens a searchable list that stays open while picking and
-  closes with Done, Esc or a click outside (keeping the choice). Without JS the plain
-  checkbox list shows. Quick picks fill the UK date/time field (public/js/app.js).
+  Reminder form fields (add and edit). reminder: { note, recipientIds, input } or null
+  (new); defaultInput: "YYYY-MM-DDTHH:MM" for a new reminder (tomorrow 09:00 UK, with the
+  "Tomorrow morning" pick shown as chosen); users: [{ id, name }]. Editing is pre-filled
+  with the saved note, date, time and people. The date (dd/mm/yyyy) and time (HH:MM,
+  24-hour) are plain text fields that work without JS; app.js adds the calendar, the
+  time list, the quick picks and inline validation ([data-reminder-when]).
 %>
-<% const r = locals.reminder || {}; const chosen = r.recipientIds && r.recipientIds.length ? r.recipientIds : [currentUser.id]; %>
+<%
+  const r = locals.reminder || {};
+  const isNew = !locals.reminder;
+  const chosen = r.recipientIds && r.recipientIds.length ? r.recipientIds : [currentUser.id];
+  const input = r.input || (isNew ? locals.defaultInput : '') || '';
+  const [ymd = '', hm = ''] = input.split('T');
+  const [yy, mm, dd] = ymd.split('-');
+  const dateValue = ymd ? `${dd}/${mm}/${yy}` : '';
+  const uid = `rw-${r.id || 'new'}`;
+%>
 <label class="field">
   <span>Note</span>
   <textarea name="note" rows="2" maxlength="500" placeholder="e.g. Chase the supplier for the replacement part"><%= r.note || '' %></textarea>
 </label>
-<fieldset class="field reminder-for" data-user-multi>
-  <legend>For</legend>
-  <input type="hidden" name="for_present" value="1">
-  <div class="multi-chips" data-multi-chips aria-live="polite"></div>
-  <button type="button" class="btn btn-small btn-ghost multi-toggle" data-multi-toggle aria-expanded="false" hidden><%- icon('plus') %><span>Add people</span></button>
-  <div class="multi-panel" data-multi-panel role="group" aria-label="Who the reminder is for">
-    <input type="search" class="multi-search" placeholder="Search people" aria-label="Search people" data-multi-search hidden>
-    <div class="user-checks">
-      <% for (const u of users) { %>
-        <label class="user-check" data-search="<%= u.name %>">
-          <input type="checkbox" name="for_user_ids" value="<%= u.id %>" data-name="<%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %>" <%= chosen.includes(u.id) ? 'checked' : '' %>>
-          <%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %></span>
-        </label>
-      <% } %>
-    </div>
-    <p class="muted small multi-empty" data-multi-empty hidden>Nobody matches.</p>
-    <div class="multi-panel-foot" hidden data-multi-foot>
-      <span class="muted small" data-multi-count></span>
-      <button type="button" class="btn btn-small btn-primary" data-multi-done>Done</button>
-    </div>
-  </div>
-  <p class="field-error small" data-multi-error hidden>Choose at least one person.</p>
-</fieldset>
+<%- include('reminder-people', { chosen, users }) %>
 <div class="field" data-reminder-when>
-  <span>When <span class="muted">(UK time)</span></span>
+  <span id="<%= uid %>-label">When <span class="muted">(UK time)</span></span>
   <div class="reminder-picks" role="group" aria-label="Quick picks">
     <button type="button" class="chip" data-pick="1h">In 1 hour</button>
     <button type="button" class="chip" data-pick="afternoon">This afternoon (15:00)</button>
-    <button type="button" class="chip" data-pick="tomorrow">Tomorrow morning (09:00)</button>
+    <button type="button" class="chip" data-pick="tomorrow" <%= isNew ? 'data-default-pick' : '' %>>Tomorrow morning (09:00)</button>
     <button type="button" class="chip" data-pick="monday">Next Monday (09:00)</button>
     <button type="button" class="chip" data-pick="custom">Custom</button>
   </div>
-  <input type="datetime-local" name="remind_at" value="<%= r.input || '' %>" required aria-label="Reminder date and time">
+  <div class="when-inputs">
+    <div class="when-date" data-date-field>
+      <span class="when-icon"><%- icon('calendar') %></span>
+      <input type="text" name="remind_date" value="<%= dateValue %>" placeholder="dd/mm/yyyy" inputmode="numeric" maxlength="10" autocomplete="off"
+             aria-label="Date (dd/mm/yyyy)" aria-describedby="<%= uid %>-error" pattern="\d{1,2}/\d{1,2}/\d{4}" required>
+      <button type="button" class="when-open" data-date-open aria-label="Open calendar" aria-expanded="false" hidden><%- icon('calendar') %></button>
+      <div class="date-pop" data-date-pop role="dialog" aria-label="Choose a date" hidden></div>
+    </div>
+    <div class="when-time" data-time-field>
+      <span class="when-icon"><%- icon('clock') %></span>
+      <input type="text" name="remind_time" value="<%= hm %>" placeholder="HH:MM" inputmode="numeric" maxlength="5" autocomplete="off"
+             aria-label="Time (24-hour, HH:MM)" aria-describedby="<%= uid %>-error" pattern="\d{1,2}:\d{2}" required>
+      <ul class="time-list" data-time-list role="listbox" aria-label="Times" hidden></ul>
+    </div>
+  </div>
+  <p class="field-error small" id="<%= uid %>-error" data-when-error role="alert" hidden></p>
 </div>

@@ -635,27 +635,270 @@ function reminderPick(kind) {
   }
   return null;
 }
+// Date (dd/mm/yyyy) and time (HH:MM, 24-hour) fields with a calendar, a time list, quick
+// picks and inline validation (the browser's own popups are turned off for these forms).
+const pad2 = (n) => String(n).padStart(2, '0');
+const toDmy = (ymd) => { const [y, m, d] = ymd.split('-'); return `${d}/${m}/${y}`; };
+// "9/10/26", "09.10.2026", "2026-10-09" -> "09/10/2026"; null if not a real date.
+function cleanDate(text) {
+  const t = String(text || '').trim();
+  let d; let m; let y;
+  let match = /^(\d{1,2})[/.\-\s](\d{1,2})[/.\-\s](\d{2}|\d{4})$/.exec(t);
+  if (match) [, d, m, y] = match.map(Number);
+  else if ((match = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t))) [, y, m, d] = match.map(Number);
+  else if ((match = /^(\d{2})(\d{2})(\d{4})$/.exec(t))) [, d, m, y] = match.map(Number);
+  else return null;
+  if (y < 100) y += 2000;
+  const check = new Date(Date.UTC(y, m - 1, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m - 1 || check.getUTCDate() !== d) return null;
+  return `${pad2(d)}/${pad2(m)}/${y}`;
+}
+// "9" -> "09:00", "930" / "9.30" / "9:30" -> "09:30"; null if not a time.
+function cleanTime(text) {
+  const t = String(text || '').trim().replace(/\s/g, '');
+  let match = /^(\d{1,2})(?:[:.h]?(\d{2}))?$/.exec(t);
+  if (!match && /^\d{3}$/.test(t)) match = [t, t[0], t.slice(1)];
+  if (!match) return null;
+  const h = Number(match[1]);
+  const mi = Number(match[2] || 0);
+  if (h > 23 || mi > 59) return null;
+  return `${pad2(h)}:${pad2(mi)}`;
+}
+
 document.querySelectorAll('[data-reminder-when]').forEach((box) => {
-  const input = box.querySelector('input[name="remind_at"]');
-  const buttons = box.querySelectorAll('[data-pick]');
+  const form = box.closest('form');
+  const dateInput = box.querySelector('input[name="remind_date"]');
+  const timeInput = box.querySelector('input[name="remind_time"]');
+  const pop = box.querySelector('[data-date-pop]');
+  const openButton = box.querySelector('[data-date-open]');
+  const timeList = box.querySelector('[data-time-list]');
+  const error = box.querySelector('[data-when-error]');
+  const buttons = [...box.querySelectorAll('[data-pick]')];
+  if (!dateInput || !timeInput) return;
+  if (form) form.noValidate = true; // our inline messages instead of the browser popup
+  box.classList.add('is-enhanced');
+  openButton.hidden = false;
+
   const press = (active) => buttons.forEach((b) => b.setAttribute('aria-pressed', String(b === active)));
+  const initial = buttons.find((b) => b.hasAttribute('data-default-pick'));
+  press(initial || null);
+  const custom = box.querySelector('[data-pick="custom"]');
+
+  const showError = (message) => {
+    error.textContent = message || '';
+    error.hidden = !message;
+    dateInput.toggleAttribute('aria-invalid', Boolean(message) && !cleanDate(dateInput.value));
+    timeInput.toggleAttribute('aria-invalid', Boolean(message) && !cleanTime(timeInput.value));
+  };
+  // Returns true when both fields are valid (and tidies them).
+  function validate() {
+    const d = cleanDate(dateInput.value);
+    const t = cleanTime(timeInput.value);
+    if (d) dateInput.value = d;
+    if (t) timeInput.value = t;
+    if (!dateInput.value.trim() && !timeInput.value.trim()) showError('Choose when: pick a quick option or enter a date and time.');
+    else if (!d) showError('Enter the date as dd/mm/yyyy, e.g. 07/10/2026.');
+    else if (!t) showError('Enter the time as HH:MM in 24-hour format, e.g. 09:00 or 15:30.');
+    else showError('');
+    return Boolean(d && t);
+  }
+
   buttons.forEach((button) => {
-    button.setAttribute('aria-pressed', 'false');
     button.addEventListener('click', () => {
       press(button);
       const value = reminderPick(button.dataset.pick);
       if (value) {
-        input.value = value;
+        const [ymd, hm] = value.split('T');
+        dateInput.value = toDmy(ymd);
+        timeInput.value = hm;
+        showError('');
         return;
       }
-      input.focus();
-      try { input.showPicker?.(); } catch (err) { /* not allowed here: the focused field is enough */ }
+      dateInput.focus();
+      openCalendar();
     });
   });
-  input.addEventListener('input', () => {
-    const custom = box.querySelector('[data-pick="custom"]');
-    press(custom);
+  [dateInput, timeInput].forEach((input) => {
+    input.addEventListener('input', () => { press(custom); if (!error.hidden) showError(''); });
+    input.addEventListener('blur', () => {
+      const clean = input === dateInput ? cleanDate(input.value) : cleanTime(input.value);
+      if (clean) input.value = clean;
+    });
   });
+
+  // ---- Calendar ----
+  let view = null; // { y, m } shown month
+  const todayYmd = () => londonParts(new Date()).date;
+  function selectedYmd() {
+    const d = cleanDate(dateInput.value);
+    if (!d) return null;
+    const [dd, mm, yy] = d.split('/');
+    return `${yy}-${mm}-${dd}`;
+  }
+  function drawCalendar(focusYmd) {
+    const { y, m } = view;
+    const first = new Date(Date.UTC(y, m - 1, 1));
+    const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    const lead = (first.getUTCDay() + 6) % 7; // Monday first
+    const chosen = selectedYmd();
+    const today = todayYmd();
+    pop.replaceChildren();
+    const head = document.createElement('div');
+    head.className = 'date-pop-head';
+    const nav = (label, delta, text) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'date-nav';
+      b.setAttribute('aria-label', label);
+      b.textContent = text;
+      b.addEventListener('click', () => {
+        const next = new Date(Date.UTC(view.y, view.m - 1 + delta, 1));
+        view = { y: next.getUTCFullYear(), m: next.getUTCMonth() + 1 };
+        drawCalendar();
+      });
+      return b;
+    };
+    const title = document.createElement('strong');
+    title.textContent = first.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    head.append(nav('Previous month', -1, '‹'), title, nav('Next month', 1, '›'));
+    pop.appendChild(head);
+    const grid = document.createElement('div');
+    grid.className = 'date-grid';
+    grid.setAttribute('role', 'grid');
+    ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].forEach((w) => {
+      const c = document.createElement('span');
+      c.className = 'date-dow';
+      c.textContent = w;
+      grid.appendChild(c);
+    });
+    for (let i = 0; i < lead; i += 1) grid.appendChild(document.createElement('span'));
+    let focusButton = null;
+    for (let d = 1; d <= days; d += 1) {
+      const ymd = `${y}-${pad2(m)}-${pad2(d)}`;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'date-day';
+      b.textContent = String(d);
+      b.dataset.ymd = ymd;
+      b.setAttribute('aria-label', new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }));
+      if (ymd === today) b.classList.add('is-today');
+      if (ymd === chosen) { b.classList.add('is-selected'); b.setAttribute('aria-pressed', 'true'); }
+      if (ymd < today) b.classList.add('is-past');
+      b.tabIndex = -1;
+      b.addEventListener('click', () => {
+        dateInput.value = toDmy(ymd);
+        press(custom);
+        showError('');
+        closeCalendar();
+        timeInput.focus();
+      });
+      if (ymd === (focusYmd || chosen) || (!focusButton && d === 1)) focusButton = b;
+      grid.appendChild(b);
+    }
+    pop.appendChild(grid);
+    const foot = document.createElement('div');
+    foot.className = 'date-pop-foot';
+    const todayButton = document.createElement('button');
+    todayButton.type = 'button';
+    todayButton.className = 'btn btn-small btn-ghost';
+    todayButton.textContent = 'Today';
+    todayButton.addEventListener('click', () => {
+      dateInput.value = toDmy(today);
+      press(custom);
+      showError('');
+      closeCalendar();
+      timeInput.focus();
+    });
+    foot.appendChild(todayButton);
+    pop.appendChild(foot);
+    grid.querySelectorAll('.date-day').forEach((b) => { b.tabIndex = b === focusButton ? 0 : -1; });
+    return focusButton;
+  }
+  function openCalendar() {
+    const start = selectedYmd() || todayYmd();
+    view = { y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) };
+    pop.hidden = false;
+    openButton.setAttribute('aria-expanded', 'true');
+    drawCalendar();
+  }
+  function closeCalendar(focusInput) {
+    if (pop.hidden) return;
+    pop.hidden = true;
+    openButton.setAttribute('aria-expanded', 'false');
+    if (focusInput) dateInput.focus();
+  }
+  openButton.addEventListener('click', () => {
+    if (pop.hidden) {
+      openCalendar();
+      pop.querySelector('.date-day[tabindex="0"]')?.focus();
+    } else closeCalendar(true);
+  });
+  // Arrow keys move between days (across months), Enter picks.
+  pop.addEventListener('keydown', (e) => {
+    const current = e.target.closest('.date-day');
+    if (!current) return;
+    const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const [y, m, d] = current.dataset.ymd.split('-').map(Number);
+    const next = new Date(Date.UTC(y, m - 1, d + step)).toISOString().slice(0, 10);
+    if (Number(next.slice(5, 7)) !== view.m) view = { y: Number(next.slice(0, 4)), m: Number(next.slice(5, 7)) };
+    drawCalendar(next);
+    pop.querySelector(`[data-ymd="${next}"]`)?.focus();
+  });
+
+  // ---- Time list (every 30 minutes) ----
+  const times = [];
+  for (let h = 0; h < 24; h += 1) for (const mi of ['00', '30']) times.push(`${pad2(h)}:${mi}`);
+  function openTimes() {
+    const current = cleanTime(timeInput.value) || '09:00';
+    timeList.replaceChildren(...times.map((t) => {
+      const li = document.createElement('li');
+      li.setAttribute('role', 'option');
+      li.textContent = t;
+      if (t === current) { li.classList.add('is-selected'); li.setAttribute('aria-selected', 'true'); }
+      li.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        timeInput.value = t;
+        press(custom);
+        showError('');
+        timeList.hidden = true;
+      });
+      return li;
+    }));
+    timeList.hidden = false;
+    const near = times.find((t) => t >= current) || times[times.length - 1];
+    const target = [...timeList.children].find((li) => li.textContent === near);
+    if (target) timeList.scrollTop = target.offsetTop - 60;
+  }
+  timeInput.addEventListener('focus', openTimes);
+  timeInput.addEventListener('click', () => { if (timeList.hidden) openTimes(); });
+  timeInput.addEventListener('blur', () => setTimeout(() => { timeList.hidden = true; }, 120));
+
+  // Esc / click outside close the calendar or time list only (not the edit popover).
+  box.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!pop.hidden) { e.preventDefault(); e.stopPropagation(); closeCalendar(true); }
+    else if (!timeList.hidden) { e.preventDefault(); e.stopPropagation(); timeList.hidden = true; }
+  });
+  document.addEventListener('click', (e) => {
+    if (!pop.hidden && e.target.isConnected && !box.querySelector('[data-date-field]').contains(e.target) && !e.target.closest('[data-pick="custom"]')) closeCalendar();
+  });
+
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      if (validate()) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      (cleanDate(dateInput.value) ? timeInput : dateInput).focus();
+    });
+    form.addEventListener('reset', () => setTimeout(() => {
+      showError('');
+      closeCalendar();
+      timeList.hidden = true;
+      press(initial || null);
+    }));
+  }
 });
 
 // ---- Drag-and-drop lists ----

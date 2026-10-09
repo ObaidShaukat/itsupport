@@ -1,0 +1,30 @@
+<%#
+  The reminder "For" picker (add / edit form and the "Add people" popover on each row).
+  chosen: user ids ticked; users: [{ id, name }]. Chosen people show as chips with x;
+  "Add people" opens a searchable list that stays open while picking and closes with
+  Done, Esc or a click outside (keeping the choice). Without JS the plain checkbox list
+  shows; the checkboxes are what is submitted (public/js/app.js, [data-user-multi]).
+%>
+<fieldset class="field reminder-for" data-user-multi>
+  <legend>For</legend>
+  <input type="hidden" name="for_present" value="1">
+  <div class="multi-chips" data-multi-chips aria-live="polite"></div>
+  <button type="button" class="btn btn-small btn-ghost multi-toggle" data-multi-toggle aria-expanded="false" hidden><%- icon('plus') %><span>Add people</span></button>
+  <div class="multi-panel" data-multi-panel role="group" aria-label="Who the reminder is for">
+    <input type="search" class="multi-search" placeholder="Search people" aria-label="Search people" data-multi-search hidden>
+    <div class="user-checks">
+      <% for (const u of users) { %>
+        <label class="user-check" data-search="<%= u.name %>">
+          <input type="checkbox" name="for_user_ids" value="<%= u.id %>" data-name="<%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %>" <%= chosen.includes(u.id) ? 'checked' : '' %>>
+          <%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %></span>
+        </label>
+      <% } %>
+    </div>
+    <p class="muted small multi-empty" data-multi-empty hidden>Nobody matches.</p>
+    <div class="multi-panel-foot" hidden data-multi-foot>
+      <span class="muted small" data-multi-count></span>
+      <button type="button" class="btn btn-small btn-primary" data-multi-done>Done</button>
+    </div>
+  </div>
+  <p class="field-error small" data-multi-error role="alert" hidden>Choose at least one person.</p>
+</fieldset>
