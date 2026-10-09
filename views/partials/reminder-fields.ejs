@@ -1,24 +1,37 @@
 <%#
   Reminder form fields (add and edit). reminder: { note, recipientIds, input } or null;
-  users: [{ id, name }]. "For" is one or more people (default: me). Quick picks fill the
-  UK date/time field (public/js/app.js).
+  users: [{ id, name }]. "For" is one or more people (default: me): chosen people show as
+  chips with x; "Add people" opens a searchable list that stays open while picking and
+  closes with Done, Esc or a click outside (keeping the choice). Without JS the plain
+  checkbox list shows. Quick picks fill the UK date/time field (public/js/app.js).
 %>
 <% const r = locals.reminder || {}; const chosen = r.recipientIds && r.recipientIds.length ? r.recipientIds : [currentUser.id]; %>
 <label class="field">
   <span>Note</span>
   <textarea name="note" rows="2" maxlength="500" placeholder="e.g. Chase the supplier for the replacement part"><%= r.note || '' %></textarea>
 </label>
-<fieldset class="field reminder-for">
+<fieldset class="field reminder-for" data-user-multi>
   <legend>For</legend>
   <input type="hidden" name="for_present" value="1">
-  <div class="user-checks" role="group">
-    <% for (const u of users) { %>
-      <label class="user-check">
-        <input type="checkbox" name="for_user_ids" value="<%= u.id %>" <%= chosen.includes(u.id) ? 'checked' : '' %>>
-        <%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %></span>
-      </label>
-    <% } %>
+  <div class="multi-chips" data-multi-chips aria-live="polite"></div>
+  <button type="button" class="btn btn-small btn-ghost multi-toggle" data-multi-toggle aria-expanded="false" hidden><%- icon('plus') %><span>Add people</span></button>
+  <div class="multi-panel" data-multi-panel role="group" aria-label="Who the reminder is for">
+    <input type="search" class="multi-search" placeholder="Search people" aria-label="Search people" data-multi-search hidden>
+    <div class="user-checks">
+      <% for (const u of users) { %>
+        <label class="user-check" data-search="<%= u.name %>">
+          <input type="checkbox" name="for_user_ids" value="<%= u.id %>" data-name="<%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %>" <%= chosen.includes(u.id) ? 'checked' : '' %>>
+          <%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %><%= u.id === currentUser.id ? ' (me)' : '' %></span>
+        </label>
+      <% } %>
+    </div>
+    <p class="muted small multi-empty" data-multi-empty hidden>Nobody matches.</p>
+    <div class="multi-panel-foot" hidden data-multi-foot>
+      <span class="muted small" data-multi-count></span>
+      <button type="button" class="btn btn-small btn-primary" data-multi-done>Done</button>
+    </div>
   </div>
+  <p class="field-error small" data-multi-error hidden>Choose at least one person.</p>
 </fieldset>
 <div class="field" data-reminder-when>
   <span>When <span class="muted">(UK time)</span></span>

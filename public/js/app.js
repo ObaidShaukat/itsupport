@@ -65,7 +65,14 @@ document.addEventListener('click', (event) => {
   const cancel = event.target.closest('[data-cancel]');
   if (cancel) {
     const details = cancel.closest('details.edit');
-    if (details) closePopover(details, { focusSummary: true });
+    if (details) {
+      closePopover(details, { focusSummary: true });
+    } else if (cancel.form) {
+      // A form in a plain <details> (e.g. Add reminder): discard and fold it away.
+      cancel.form.reset();
+      const fold = cancel.closest('details');
+      if (fold) { fold.open = false; fold.querySelector('summary')?.focus(); }
+    }
     return;
   }
   // Clicks inside a popup opened from a popover (e.g. Crop picture) leave it open.
@@ -1971,4 +1978,139 @@ document.querySelectorAll('[data-mention-box]').forEach((box) => {
   if (window.ResizeObserver) new ResizeObserver(() => { backdrop.style.height = `${area.offsetHeight}px`; }).observe(area);
   box.classList.add('is-ready');
   paint();
+});
+
+// ---- Reminder "For": chips + people dropdown ----
+// [data-user-multi] wraps the plain checkbox list (what is submitted). With JS the
+// chosen people show as chips with x, and "Add people" opens the list as a dropdown that
+// stays open while picking (search, tick several) and closes with Done, Esc or a click
+// outside, keeping the choice. Saving needs at least one person.
+document.querySelectorAll('[data-user-multi]').forEach((box) => {
+  const chips = box.querySelector('[data-multi-chips]');
+  const toggle = box.querySelector('[data-multi-toggle]');
+  const panel = box.querySelector('[data-multi-panel]');
+  const search = box.querySelector('[data-multi-search]');
+  const foot = box.querySelector('[data-multi-foot]');
+  const count = box.querySelector('[data-multi-count]');
+  const empty = box.querySelector('[data-multi-empty]');
+  const error = box.querySelector('[data-multi-error]');
+  const doneButton = box.querySelector('[data-multi-done]');
+  const checks = [...box.querySelectorAll('input[type="checkbox"]')];
+  if (!chips || !toggle || !panel || !checks.length) return;
+
+  box.classList.add('is-enhanced');
+  toggle.hidden = false;
+  search.hidden = false;
+  foot.hidden = false;
+  panel.hidden = true;
+  const isOpen = () => !panel.hidden;
+
+  function render() {
+    const chosen = checks.filter((c) => c.checked);
+    chips.replaceChildren(...chosen.map((c) => {
+      const chip = document.createElement('span');
+      chip.className = 'multi-chip';
+      const pic = c.parentElement.querySelector('.avatar, [class*="avatar"]');
+      if (pic) chip.appendChild(pic.cloneNode(true));
+      const name = document.createElement('span');
+      name.textContent = c.dataset.name;
+      chip.appendChild(name);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'multi-chip-remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remove ${c.dataset.name}`);
+      remove.addEventListener('click', (event) => {
+        // The chip is about to be redrawn: keep this click from counting as "outside".
+        event.stopPropagation();
+        c.checked = false;
+        render();
+        toggle.focus();
+      });
+      chip.appendChild(remove);
+      return chip;
+    }));
+    if (!chosen.length) {
+      const none = document.createElement('span');
+      none.className = 'muted small';
+      none.textContent = 'Nobody chosen yet.';
+      chips.appendChild(none);
+    }
+    count.textContent = `${chosen.length} chosen`;
+    toggle.querySelector('span').textContent = chosen.length ? 'Add or remove people' : 'Add people';
+    if (chosen.length) error.hidden = true;
+  }
+
+  function filter() {
+    const term = search.value.trim().toLowerCase();
+    let shown = 0;
+    checks.forEach((c) => {
+      const label = c.closest('label');
+      const match = !term || label.dataset.search.toLowerCase().includes(term);
+      label.hidden = !match;
+      if (match) shown += 1;
+    });
+    empty.hidden = shown > 0;
+  }
+
+  function open() {
+    panel.hidden = false;
+    toggle.setAttribute('aria-expanded', 'true');
+    search.value = '';
+    filter();
+    search.focus();
+  }
+
+  function close({ focus = false } = {}) {
+    if (!isOpen()) return;
+    panel.hidden = true;
+    toggle.setAttribute('aria-expanded', 'false');
+    render();
+    if (focus) toggle.focus();
+  }
+
+  toggle.addEventListener('click', () => (isOpen() ? close() : open()));
+  doneButton.addEventListener('click', () => close({ focus: true }));
+  checks.forEach((c) => c.addEventListener('change', render));
+  search.addEventListener('input', filter);
+  search.addEventListener('keydown', (event) => {
+    // Enter ticks the only match instead of submitting the form.
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    const visible = checks.filter((c) => !c.closest('label').hidden);
+    if (visible.length === 1) {
+      visible[0].checked = !visible[0].checked;
+      render();
+    }
+  });
+  box.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !isOpen()) return;
+    // Esc closes only the dropdown (keeping the choice), not the edit popover around it.
+    event.preventDefault();
+    event.stopPropagation();
+    close({ focus: true });
+  });
+  document.addEventListener('click', (event) => {
+    if (isOpen() && event.target.isConnected && !box.contains(event.target)) close();
+  });
+
+  const form = box.closest('form');
+  if (form) {
+    form.addEventListener('reset', () => setTimeout(() => { close(); render(); error.hidden = true; }));
+    form.addEventListener('submit', (event) => {
+      if (checks.some((c) => c.checked)) return;
+      event.preventDefault();
+      error.hidden = false;
+      open();
+    });
+  }
+  render();
+});
+
+// A "Saved" toast after a save (flash type 'saved'), gone after a few seconds.
+document.querySelectorAll('[data-autohide]').forEach((toastEl) => {
+  setTimeout(() => {
+    toastEl.classList.add('is-leaving');
+    setTimeout(() => toastEl.remove(), 300);
+  }, 3500);
 });

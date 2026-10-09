@@ -2035,3 +2035,37 @@ table.grid { border-collapse: separate; border-spacing: 0; table-layout: fixed; 
 .mention-list li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mention-list li.is-active { background: var(--blue-soft); color: var(--indigo); }
 .bell-group-mentions h3 { color: var(--purple); }
+
+/* ---- Reminder "For": chips + people dropdown (data-user-multi) ---- */
+.reminder-for.is-enhanced { position: relative; }
+.multi-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 28px; }
+.multi-chip { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px 2px 3px; border: 1px solid var(--blue); background: var(--blue-soft); color: var(--indigo); border-radius: 999px; font-size: var(--fs-table); font-weight: 600; }
+.multi-chip-remove { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--indigo); font-size: 15px; line-height: 1; cursor: pointer; }
+.multi-chip-remove:hover { background: var(--purple-soft); color: var(--purple); }
+.multi-chip-remove:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.multi-toggle { justify-self: start; margin-top: 6px; }
+.reminder-for.is-enhanced .multi-panel {
+  position: absolute;
+  left: 0;
+  top: 100%;
+  z-index: 75;
+  width: min(340px, 100%);
+  margin-top: 4px;
+  padding: var(--sp-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  animation: pop-in 0.14s ease-out both;
+}
+.reminder-for.is-enhanced .multi-panel[hidden] { display: none; }
+.multi-search { margin-bottom: var(--sp-2); }
+.reminder-for.is-enhanced .user-checks { display: grid; gap: 2px; max-height: 220px; }
+.reminder-for.is-enhanced .user-check { border: 0; border-radius: 6px; padding: 5px 8px 5px 6px; }
+.reminder-for.is-enhanced .user-check[hidden] { display: none; }
+.reminder-for.is-enhanced .user-check:hover { background: var(--surface-soft); }
+.reminder-for.is-enhanced .user-check input { position: static; opacity: 1; width: 15px; height: 15px; margin: 0; accent-color: var(--blue); }
+.multi-empty { margin: 4px 0; }
+.multi-panel-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); margin-top: var(--sp-2); padding-top: var(--sp-2); border-top: 1px solid var(--border); }
+.toast-saved { grid-template-columns: auto 1fr; align-items: center; border-left-color: var(--green); font-weight: 600; }
+.toast-saved .toast-icon { color: var(--green); }

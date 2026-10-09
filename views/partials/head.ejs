@@ -70,6 +70,6 @@
 <div class="shell shell-bare">
   <main class="main">
 <% } %>
-    <% if (locals.flash) { %>
+    <% if (locals.flash && flash.type !== 'saved') { %>
       <div class="flash flash-<%= flash.type %>" role="status"><%= flash.message %></div>
     <% } %>

@@ -30,9 +30,9 @@ async function lockedReminder(conn, req) {
   return reminder;
 }
 
-function done(req, res, ticketId, message) {
+function done(req, res, ticketId, message, type = 'success') {
   if (wantsJson(req)) return res.json({ ok: true });
-  if (message) flash(req, 'success', message);
+  if (message) flash(req, type, message);
   return res.redirect(ticketBack(req, ticketId));
 }
 
@@ -66,7 +66,7 @@ router.post('/', async (req, res) => {
     return {};
   });
   if (result.error) return failed(req, res, ticketId, result.error);
-  return done(req, res, ticketId, 'Reminder added.');
+  return done(req, res, ticketId, 'Saved. Reminder added.', 'saved');
 });
 
 router.post('/:id', async (req, res) => {
@@ -95,7 +95,7 @@ router.post('/:id', async (req, res) => {
     return { r, changed: true };
   });
   if (result.error) return failed(req, res, result.r.ticket_id, result.error);
-  return done(req, res, result.r.ticket_id, result.changed ? 'Reminder updated.' : null);
+  return done(req, res, result.r.ticket_id, result.changed ? 'Saved. Reminder updated.' : 'Saved. Nothing changed.', 'saved');
 });
 
 // Done for me (a recipient), or for everyone (?everyone=1, the creator). Someone who is
