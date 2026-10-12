@@ -1,0 +1,7 @@
+<%# GDAP role chips. roles: [{ name, global, known }] (Global Administrator first); max: chips shown before "+N" (optional). %>
+<% const shown = locals.max ? roles.slice(0, max) : roles; const more = roles.length - shown.length; %>
+<span class="gdap-roles">
+  <% for (const role of shown) { %><span class="gdap-role <%= role.global ? 'is-global' : '' %> <%= role.known ? '' : 'is-unknown' %>"><%= role.name %></span><% } %>
+  <% if (more > 0) { %><span class="gdap-role gdap-role-more">+<%= more %></span><% } %>
+  <% if (!roles.length) { %><span class="muted small">No roles</span><% } %>
+</span>

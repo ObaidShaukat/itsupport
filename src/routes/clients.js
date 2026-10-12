@@ -1,5 +1,6 @@
 const express = require('express');
 const { attachmentNames, removeTicketFiles } = require('../lib/ticket-files');
+const { listRelationships: gdapRelationships } = require('../lib/gdap/data');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
@@ -142,8 +143,11 @@ router.get('/clients/:id', async (req, res) => {
     group.services.push(s);
   }
 
+  // GDAP relationships linked to this client (not removed ones).
+  const { rows: gdap } = await gdapRelationships(pool, { clientId: id });
+
   res.render('clients/show', {
-    title: client.name, client, clientMeta, activity, clientServices, tickets, ticketState, ticketControls, serviceGroups,
+    title: client.name, client, clientMeta, activity, clientServices, tickets, ticketState, ticketControls, serviceGroups, gdap,
   });
 });
 

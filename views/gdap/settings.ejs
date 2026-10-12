@@ -1,0 +1,56 @@
+<%- include('../partials/head') %>
+<% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users).split(',').map(Number); %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/gdap">GDAP</a></p>
+    <h1>GDAP settings</h1>
+    <p class="muted">Who is alerted about expiring relationships, the Partner Center link and the client secret reminder.</p>
+  </div>
+</header>
+<% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+<% if (!config.configured) { %><div class="flash flash-info" role="status"><%= config.message %></div><% } %>
+
+<form method="post" action="/gdap/settings" class="grid-2">
+  <%- csrfField %>
+  <section class="card">
+    <h2>Alerts</h2>
+    <div class="form">
+      <fieldset class="field choice-group" data-alert-users>
+        <legend>Who gets GDAP alerts</legend>
+        <label class="choice"><input type="checkbox" name="alert_all" value="1" <%= everyone ? 'checked' : '' %> data-alert-all><span><strong>Everyone</strong> (all portal users, including people added later)</span></label>
+        <div class="gdap-user-list" data-alert-list>
+          <% for (const u of users) { %>
+            <label class="choice"><input type="checkbox" name="alert_user_ids" value="<%= u.id %>" <%= everyone || chosen.includes(u.id) ? 'checked' : '' %>><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %> <span class="muted small">(<%= String(u.notify_channels || '').split(',').filter(Boolean).join(', ') || 'no channels' %>)</span></span></label>
+          <% } %>
+        </div>
+        <small class="muted">Alerts go out 30, 14, 7 and 1 days before a relationship ends and when it has expired, once each. Each person gets them the way they chose under My profile → Notifications (popup, email, desktop).</small>
+      </fieldset>
+      <label class="choice">
+        <input type="checkbox" name="digest" value="1" <%= settings.digest === '1' ? 'checked' : '' %>>
+        <span><strong>Daily digest email</strong>: one email each morning (after the 07:00 sync) listing everything ending in the next 30 days, to the people above who get email.</span>
+      </label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Microsoft</h2>
+    <div class="form">
+      <label class="field">
+        <span>Client secret expires on</span>
+        <input type="date" name="secret_expires_on" value="<%= settings.secret_expires_on || '' %>">
+        <small class="muted">The expiry of MS_CLIENT_SECRET (Entra ID → App registrations → Certificates &amp; secrets). Admins are reminded 30 and 7 days before, so syncing does not stop without warning.</small>
+      </label>
+      <label class="field">
+        <span>Partner Center customer link</span>
+        <input type="text" name="partner_center_url" value="<%= settings.partner_center_url %>" maxlength="500" required>
+        <small class="muted">Used by "Open" on the GDAP page. <code>{tenantId}</code> is replaced by the customer's tenant id. Default: <code><%= defaultUrl %></code></small>
+      </label>
+    </div>
+  </section>
+
+  <div class="form-actions grid-span">
+    <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+    <a href="/gdap" class="btn btn-ghost">Cancel</a>
+  </div>
+</form>
+<%- include('../partials/foot') %>

@@ -19,6 +19,10 @@ const { mailStatus } = require('./src/lib/mailer');
 const { sendDueReminderEmails, sendDueReminderPushes } = require('./src/lib/reminders');
 const { pushStatus } = require('./src/lib/push');
 const { channelsOf } = require('./src/lib/notify');
+const cron = require('node-cron');
+const { syncGdap } = require('./src/lib/gdap/sync');
+const { runDailyChecks } = require('./src/lib/gdap/alerts');
+const { gdapConfig } = require('./src/lib/gdap/graph');
 const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
 const { avatarHelper } = require('./src/lib/avatars');
 const { setStore } = require('./src/lib/sessions');
@@ -71,6 +75,7 @@ app.locals.navItems = [
   { key: 'kb', href: '/kb', label: 'General IT Support', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
   { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard' },
+  { key: 'gdap', href: '/gdap', label: 'GDAP', icon: 'shield' },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -199,6 +204,7 @@ app.use('/activity', require('./src/routes/activity-log'));
 app.use('/reminders', require('./src/routes/reminders'));
 app.use('/notifications', require('./src/routes/notifications'));
 app.use('/push', require('./src/routes/push'));
+app.use('/gdap', require('./src/routes/gdap'));
 app.use('/inventory', require('./src/routes/inventory'));
 
 // ---- Errors ----
@@ -253,3 +259,34 @@ async function emailDueReminders() {
 }
 setTimeout(emailDueReminders, 15 * 1000).unref();
 setInterval(emailDueReminders, 60 * 1000).unref();
+
+// GDAP: sync with Microsoft every day at 07:00 UK, then the expiry alerts, the daily
+// digest and the client secret reminder (src/lib/gdap). Without MS_* settings only the
+// secret reminder runs. After a restart, a sync that is more than a day old is caught up.
+let gdapBusy = false;
+async function gdapDaily() {
+  if (gdapBusy) return;
+  gdapBusy = true;
+  try {
+    if (gdapConfig().configured) {
+      const result = await syncGdap(null, { trigger: 'schedule' });
+      if (!result.ok) console.error('GDAP sync failed:', result.error);
+    }
+    await runDailyChecks();
+  } catch (err) {
+    console.error('GDAP daily run failed:', err.message);
+  } finally {
+    gdapBusy = false;
+  }
+}
+cron.schedule('0 7 * * *', gdapDaily, { timezone: 'Europe/London' });
+if (!gdapConfig().configured) console.warn(gdapConfig().message);
+setTimeout(async () => {
+  if (!gdapConfig().configured) return;
+  try {
+    const [[row]] = await pool.query("SELECT MAX(started_at) AS last FROM gdap_sync_log WHERE status = 'ok'");
+    if (!row.last || Date.now() - new Date(row.last).getTime() > 24 * 60 * 60 * 1000) await gdapDaily();
+  } catch (err) {
+    console.error('GDAP catch-up failed:', err.message);
+  }
+}, 90 * 1000).unref();

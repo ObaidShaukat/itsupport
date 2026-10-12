@@ -1,0 +1,23 @@
+<%# Client page: the client's GDAP relationships (gdap: shaped rows from listRelationships). Same colours as the GDAP page. %>
+<section class="card gdap-client-card" id="gdap">
+  <div class="card-head">
+    <h2><%- icon('shield') %> GDAP</h2>
+    <a href="/gdap" class="link-more small">All GDAP</a>
+  </div>
+  <ul class="gdap-client-list">
+    <% for (const r of gdap) { %>
+      <li class="gdap-client-item gdap-row-<%= r.band %>">
+        <div class="gdap-client-top">
+          <strong title="<%= r.display_name || '' %>"><%= r.display_name || r.customer_name || 'Relationship' %></strong>
+          <span class="gdap-days gdap-days-<%= r.band %>"><%= r.daysLabel %></span>
+        </div>
+        <div class="muted small">
+          <span class="gdap-status gdap-status-<%= r.statusKey %>"><%= r.statusLabel %></span>
+          · Ends <%= r.end_at ? fmtDay(r.end_at) : '–' %> · Auto-extend <%= r.autoExtendText %>
+          <% if (r.partnerUrl) { %> · <a href="<%= r.partnerUrl %>" target="_blank" rel="noopener noreferrer">Partner Center</a><% } %>
+        </div>
+        <%- include('gdap-roles', { roles: r.roleList }) %>
+      </li>
+    <% } %>
+  </ul>
+</section>

@@ -274,10 +274,10 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                    'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'manual') NOT NULL,
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
-              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported') NOT NULL,
+              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced') NOT NULL,
   subject VARCHAR(255) NULL,
   summary TEXT NOT NULL,
   changes VARCHAR(255) NULL,
@@ -588,6 +588,67 @@ CREATE TABLE IF NOT EXISTS comment_mentions (
   CONSTRAINT fk_comment_mentions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- GDAP (Microsoft partner granular delegated admin) relationships, read only from
+-- Microsoft Graph (src/lib/gdap/*). relationship_id is Microsoft's id; removed_at is set
+-- when a sync no longer returns it (kept, shown as Removed). roles is a JSON array of
+-- role definition ids. client_id links it to a portal client (auto-matched or set by
+-- hand; link_manual = 1 keeps a hand-set link from being re-matched).
+CREATE TABLE IF NOT EXISTS gdap_relationships (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  relationship_id VARCHAR(100) NOT NULL,
+  display_name VARCHAR(255) NULL,
+  customer_tenant_id VARCHAR(64) NULL,
+  customer_name VARCHAR(255) NULL,
+  status VARCHAR(40) NULL,
+  created_at_ms DATETIME NULL,
+  activated_at DATETIME NULL,
+  end_at DATETIME NULL,
+  duration VARCHAR(40) NULL,
+  auto_extend_duration VARCHAR(40) NULL,
+  roles JSON NULL,
+  client_id INT UNSIGNED NULL,
+  link_manual TINYINT(1) NOT NULL DEFAULT 0,
+  removed_at DATETIME NULL,
+  last_synced_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_gdap_relationship (relationship_id),
+  KEY idx_gdap_end (end_at),
+  KEY idx_gdap_client (client_id),
+  CONSTRAINT fk_gdap_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One row per GDAP sync (automatic at 07:00 UK, or Sync now).
+CREATE TABLE IF NOT EXISTS gdap_sync_log (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finished_at DATETIME NULL,
+  status ENUM('running', 'ok', 'failed') NOT NULL DEFAULT 'running',
+  relationship_count INT UNSIGNED NULL,
+  error TEXT NULL,
+  triggered_by INT UNSIGNED NULL,
+  PRIMARY KEY (id),
+  KEY idx_gdap_sync_started (started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Alerts already sent, so each goes once: per relationship (or '__secret__' for the client
+-- secret), threshold (30 / 14 / 7 / 1 days, 0 = expired) and end date (a new end date
+-- after an extension starts the alerts again).
+CREATE TABLE IF NOT EXISTS gdap_alerts (
+  relationship_id VARCHAR(100) NOT NULL,
+  threshold SMALLINT NOT NULL,
+  end_date DATE NOT NULL,
+  sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (relationship_id, threshold, end_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- GDAP settings: partner_center_url (with {tenantId}), alert_users ("all" or user ids),
+-- digest (1 = daily digest email), secret_expires_on (YYYY-MM-DD).
+CREATE TABLE IF NOT EXISTS gdap_settings (
+  name VARCHAR(50) NOT NULL,
+  value TEXT NULL,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Notifications. Only the 'portal' channel (bell + toast) is delivered today;
 -- 'email' and 'teams' are reserved for later. delivered_at is when the toast was first
 -- shown (the sound plays then). A due reminder gets one unread 'ticket_reminder' row;
@@ -681,8 +742,8 @@ ALTER TABLE ticket_history
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                           'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'manual') NOT NULL;
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'manual') NOT NULL;
 
 ALTER TABLE activity_log
   MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
-              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported') NOT NULL;
+              'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced') NOT NULL;

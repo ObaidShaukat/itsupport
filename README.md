@@ -53,6 +53,7 @@ Fill in:
 | `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` | Address and name emails are sent from (e.g. `it@cleartwo.co.uk`, `Cleartwo IT Support`) |
 | `APP_URL` | Address of the portal, e.g. `https://support.cleartwo.co.uk`, used for the "Open ticket" button in reminder emails |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Desktop notifications (Web Push). Generate the keys once with `npx web-push generate-vapid-keys` (in the app folder) and keep them; `VAPID_SUBJECT` is `mailto:` plus a contact address, e.g. `mailto:it@cleartwo.co.uk`. Browsers only allow desktop notifications when the portal is on https. Left empty, desktop notifications are off and the rest works as before |
+| `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` | GDAP monitoring (read only): the partner tenant id and an Entra ID app registration with the application permission `DelegatedAdminRelationship.Read.All` and a client secret (see GDAP below). Left empty, the GDAP page says "GDAP not configured" |
 | `ENCRYPTION_KEY` | 64 hex characters used to encrypt inventory passwords and PINs. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and keep a safe copy: if it is lost or changed, saved passwords cannot be read |
 
 If any of the SMTP or `MAIL_FROM_EMAIL` settings is missing, email is turned off: the portal keeps working, reminders still pop up, and Send report explains what to add. Restart the portal after changing `.env`.
@@ -141,6 +142,26 @@ Type `@` in a ticket's comment box to pick a portal user (avatar and name; type 
 
 - When the comment is posted, each person mentioned (except the author) gets a bell notification and an email from `MAIL_FROM_NAME <MAIL_FROM_EMAIL>`, subject "{Author} mentioned you on #{ticket} {title}", with the client, ticket title, the comment and an Open ticket button (needs `APP_URL`). The email goes to their username when it is an email address; every attempt is in `email_log`.
 - Mentions are stored in `comment_mentions` (created by `npm run migrate`) and logged in the ticket's History, never on the Daily Report.
+
+## GDAP (expiry monitoring)
+
+The **GDAP** page lists Cleartwo's granular delegated admin (GDAP) relationships with customers, read from Microsoft Graph. It is **read only**: the portal only ever reads `tenantRelationships/delegatedAdminRelationships` and never changes anything at Microsoft.
+
+**Setting it up (once):**
+
+1. In the Entra admin centre of the partner (Cleartwo) tenant: App registrations → New registration (single tenant), e.g. "IT Support portal – GDAP read".
+2. API permissions → Add → Microsoft Graph → **Application permissions** → `DelegatedAdminRelationship.Read.All` → **Grant admin consent**.
+3. Certificates & secrets → New client secret. Copy the secret **value** and note its expiry date.
+4. In `.env` set `MS_TENANT_ID` (the partner tenant id), `MS_CLIENT_ID` (Application (client) id) and `MS_CLIENT_SECRET`, then run `npm install`, `npm run migrate` and `pm2 restart itsupport`.
+5. On GDAP → Settings, enter **Client secret expires on** (admins are reminded 30 and 7 days before) and choose who gets alerts.
+
+**What it does:**
+
+- **Sync:** automatically every day at 07:00 UK time, and with **Sync now**. The last sync time and result show at the top; a failed sync (for example an expired secret or a missing permission) shows a red banner with the reason and alerts admins (once a day). Relationships Microsoft no longer returns are kept and marked **Removed**.
+- **Table:** customer, linked client, relationship name, roles (Global Administrator in red), status, end date, days left, auto-extend and **Open** (the customer in Partner Center; the link is set in Settings in case Microsoft changes it). Rows are coloured by days left: green over 30, amber 8-30, red 7 or less, dark red when expired. Summary cards (Active, Expiring ≤ 30 days, Expiring ≤ 7 days, Expired), filters (expiring in 30 days, expired, active, has Global Admin, auto-extend off, removed) and a search box. Soonest end date first.
+- **Clients:** customers are matched to portal clients by name (ignoring case, punctuation, "Ltd" and "Limited"). Use the link icon on a row to choose another client, no client, or automatic matching again. The client page shows a GDAP card with roles, end date and days left.
+- **Alerts:** 30, 14, 7 and 1 days before a relationship ends and when it has expired, once each per relationship (a new end date after renewal starts them again). They go to the people chosen in Settings (everyone by default), each by their own choice of popup, email and desktop notification. The email subject is "GDAP expiring in {n} days: {customer}". Settings also has a **daily digest** email listing everything ending in the next 30 days.
+- Syncs, alerts, links and settings changes are in `/activity`, never on the Daily Report.
 
 ## Desktop notifications
 

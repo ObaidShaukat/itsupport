@@ -523,11 +523,12 @@ if (bell) {
     bell.classList.toggle('has-unread', count > 0);
     bellToggle.setAttribute('aria-label', count ? `Notifications (${count})` : 'Notifications');
     bellList.replaceChildren();
-    // Unread @mentions first; opening one marks it read.
-    const mentions = data.mentions || [];
-    if (mentions.length) {
-      const group = el('section', 'bell-group bell-group-mentions');
-      group.appendChild(el('h3', '', `Mentions (${mentions.length})`));
+    // Unread GDAP alerts and @mentions first; opening one marks it read.
+    for (const [key, label, list] of [['alerts', 'GDAP alerts', data.alerts || []], ['mentions', 'Mentions', data.mentions || []]]) {
+      if (!list.length) continue;
+      const mentions = list;
+      const group = el('section', `bell-group bell-group-${key}`);
+      group.appendChild(el('h3', '', `${label} (${mentions.length})`));
       const ul = el('ul');
       for (const m of mentions) {
         const li = el('li');
@@ -565,7 +566,7 @@ if (bell) {
       group.appendChild(ul);
       bellList.appendChild(group);
     }
-    if (!bellList.children.length) bellList.appendChild(el('p', 'empty small', 'No mentions or reminders due in the next 7 days.'));
+    if (!bellList.children.length) bellList.appendChild(el('p', 'empty small', 'No alerts, mentions or reminders due in the next 7 days.'));
   }
 
   async function poll() {
@@ -2712,3 +2713,33 @@ document.querySelectorAll('form[data-composer]').forEach((form) => {
     render();
   }
 })();
+
+// ---- GDAP ----
+// GDAP settings: "Everyone" ticks (and locks) every person; untick it to choose people.
+document.querySelectorAll('[data-alert-users]').forEach((box) => {
+  const all = box.querySelector('[data-alert-all]');
+  const people = [...box.querySelectorAll('[data-alert-list] input[type="checkbox"]')];
+  const sync = () => {
+    people.forEach((p) => {
+      if (all.checked) p.checked = true;
+      p.disabled = all.checked;
+    });
+    box.querySelector('[data-alert-list]').classList.toggle('is-locked', all.checked);
+  };
+  all.addEventListener('change', sync);
+  sync();
+});
+
+// <form data-busy-label="Syncing…">: the button shows it and is disabled while the
+// request runs (e.g. Sync now, which can take a few seconds).
+document.querySelectorAll('form[data-busy-label]').forEach((form) => {
+  form.addEventListener('submit', () => {
+    const button = form.querySelector('button[type="submit"]');
+    if (!button) return;
+    setTimeout(() => {
+      button.disabled = true;
+      const label = button.querySelector('span') || button;
+      label.textContent = form.dataset.busyLabel;
+    });
+  });
+});

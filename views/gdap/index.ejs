@@ -1,0 +1,125 @@
+<%- include('../partials/head') %>
+<%
+  const last = sync.last;
+  const failed = last && last.status === 'failed';
+  const back = `/gdap${filter !== 'all' ? `?f=${filter}` : ''}`;
+%>
+<header class="page-head">
+  <div>
+    <h1>GDAP</h1>
+    <p class="muted">Granular delegated admin relationships with customers, read from Microsoft (read only). End dates, roles and alerts.</p>
+  </div>
+  <div class="actions">
+    <a href="/gdap/settings" class="btn btn-small btn-ghost"><%- icon('sliders') %><span>Settings</span></a>
+    <form method="post" action="/gdap/sync" class="inline" data-busy-label="Syncing…">
+      <%- csrfField %>
+      <button type="submit" class="btn btn-small btn-primary" <%= config.configured ? '' : 'disabled' %>><%- icon('down') %><span>Sync now</span></button>
+    </form>
+  </div>
+</header>
+
+<% if (!config.configured) { %>
+  <div class="flash flash-error gdap-banner" role="alert">
+    <strong>GDAP not configured.</strong> <%= config.message %>
+    See the README (GDAP) for the app registration and its read-only permission.
+  </div>
+<% } else if (failed) { %>
+  <div class="flash flash-error gdap-banner" role="alert">
+    <strong>The last GDAP sync failed</strong> (<%= fmtDate(last.started_at) %>): <%= last.error %>
+    <% if (sync.lastOk) { %><br><span class="small">Showing data from the last good sync, <%= fmtDate(sync.lastOk.finished_at) %>.</span><% } %>
+  </div>
+<% } %>
+
+<div class="gdap-sync muted small">
+  <% if (sync.lastOk) { %>
+    <%- icon('check-circle') %> Last synced <strong title="<%= fmtDate(sync.lastOk.finished_at) %>"><%= fmtDate(sync.lastOk.finished_at) %></strong> (<%= fmtAgo(sync.lastOk.finished_at) %>) · <%= sync.lastOk.relationship_count %> relationship<%= sync.lastOk.relationship_count === 1 ? '' : 's' %> · syncs daily at 07:00
+  <% } else if (last && last.status === 'running') { %>
+    A sync is running (started <%= fmtAgo(last.started_at) %>).
+  <% } else { %>
+    Not synced yet<%= config.configured ? ': click Sync now.' : '.' %>
+  <% } %>
+</div>
+
+<div class="gdap-cards">
+  <a href="/gdap?f=active" class="gdap-card gdap-card-ok <%= filter === 'active' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.active %></span><span class="gdap-card-label">Active</span></a>
+  <a href="/gdap?f=expiring30" class="gdap-card gdap-card-warn <%= filter === 'expiring30' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.soon30 %></span><span class="gdap-card-label">Expiring ≤ 30 days</span></a>
+  <a href="/gdap?f=expiring30" class="gdap-card gdap-card-bad"><span class="gdap-card-value"><%= summary.soon7 %></span><span class="gdap-card-label">Expiring ≤ 7 days</span></a>
+  <a href="/gdap?f=expired" class="gdap-card gdap-card-expired <%= filter === 'expired' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.expired %></span><span class="gdap-card-label">Expired</span></a>
+</div>
+
+<section class="card">
+  <div class="ticket-filters">
+    <nav class="filters" aria-label="Filter GDAP relationships">
+      <% for (const [key, f] of Object.entries(filters)) { %>
+        <a href="/gdap<%= key === 'all' ? '' : `?f=${key}` %>" class="<%= filter === key ? 'active' : '' %>"><%= f.label %> <span class="count"><%= counts[key] %></span></a>
+      <% } %>
+    </nav>
+    <%- include('../partials/search', { target: '#gdap-rows', placeholder: 'Search customer, client, relationship or role' }) %>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table gdap-table">
+      <thead>
+        <tr>
+          <th class="gd-customer">Customer</th>
+          <th class="gd-client">Linked client</th>
+          <th>Relationship name</th>
+          <th class="gd-roles">Roles</th>
+          <th class="gd-status">Status</th>
+          <th class="gd-end">End date</th>
+          <th class="gd-days">Days left</th>
+          <th class="gd-extend">Auto-extend</th>
+          <th class="gd-open"><span class="visually-hidden">Open in Partner Center</span></th>
+        </tr>
+      </thead>
+      <tbody id="gdap-rows">
+        <% for (const r of rows) { %>
+          <tr id="gdap-<%= r.id %>" class="gdap-row gdap-row-<%= r.band %>" data-filter-item data-search="<%= [r.customer_name, r.client_name, r.display_name, r.customer_tenant_id, ...r.roleList.map((x) => x.name)].filter(Boolean).join(' ') %>">
+            <td title="<%= r.customer_name || '' %><%= r.customer_tenant_id ? ` (${r.customer_tenant_id})` : '' %>"><strong><%= r.customer_name || 'Unknown customer' %></strong></td>
+            <td class="gdap-link-cell">
+              <% if (r.client_id) { %><a href="/clients/<%= r.client_id %>" title="<%= r.client_name %>"><%= r.client_name %></a><% } else { %><span class="muted">Not linked</span><% } %>
+              <details class="edit">
+                <summary class="icon-btn gdap-link-edit" title="Link to client" aria-label="Link <%= r.customer_name || 'customer' %> to a client"><%- icon('link') %></summary>
+                <div class="edit-panel">
+                  <form method="post" action="/gdap/<%= r.id %>/link" class="form">
+                    <%- csrfField %>
+                    <input type="hidden" name="back" value="<%= back %>#gdap-<%= r.id %>">
+                    <label class="field">
+                      <span>Link <%= r.customer_name || 'customer' %> to client</span>
+                      <select name="client_id" data-combobox>
+                        <option value="auto">Match automatically by name</option>
+                        <option value="" <%= !r.client_id && r.link_manual ? 'selected' : '' %>>Not linked</option>
+                        <% for (const c of clients) { %>
+                          <option value="<%= c.id %>" <%= r.client_id === c.id ? 'selected' : '' %>><%= c.name %></option>
+                        <% } %>
+                      </select>
+                    </label>
+                    <p class="muted small"><%= r.link_manual ? 'Linked by hand.' : 'Matched automatically by name (Ltd / Limited and punctuation ignored).' %></p>
+                    <div class="form-actions">
+                      <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+                      <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              </details>
+            </td>
+            <td title="<%= r.display_name || '' %><%= r.durationText ? ` · ${r.durationText}` : '' %>"><%= r.display_name || '–' %></td>
+            <td class="gdap-roles-cell" title="<%= r.roleList.map((x) => x.name).join(', ') || 'No roles' %>"><%- include('../partials/gdap-roles', { roles: r.roleList, max: 3 }) %></td>
+            <td><span class="gdap-status gdap-status-<%= r.statusKey %>"><%= r.statusLabel %></span></td>
+            <td title="<%= r.end_at ? fmtDate(r.end_at) : '' %>"><%= r.end_at ? fmtDay(r.end_at) : '–' %></td>
+            <td><span class="gdap-days gdap-days-<%= r.band %>"><%= r.removed ? '–' : r.daysLabel %></span></td>
+            <td><%= r.autoExtendText %></td>
+            <td>
+              <% if (r.partnerUrl) { %><a href="<%= r.partnerUrl %>" target="_blank" rel="noopener noreferrer" class="icon-btn" title="Open <%= r.customer_name || 'customer' %> in Partner Center" aria-label="Open in Partner Center"><%- icon('external') %></a><% } %>
+            </td>
+          </tr>
+        <% } %>
+        <tr data-filter-empty hidden><td colspan="9" class="empty">No relationships match your search.</td></tr>
+        <% if (!rows.length) { %>
+          <tr><td colspan="9" class="empty"><%= sync.lastOk ? 'No relationships in this view.' : 'No GDAP relationships yet. They appear after the first sync.' %></td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</section>
+<%- include('../partials/foot') %>
