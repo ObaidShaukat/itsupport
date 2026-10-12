@@ -6,7 +6,7 @@
 // posting a "back" address so the user returns to the page they were on.
 const express = require('express');
 const { pool, transaction } = require('../../db');
-const { requireId, flash, notFound, safePath } = require('../../lib/http');
+const { requireId, flash, notFound, backPath } = require('../../lib/http');
 const { getTab, dataTab, logInv } = require('../../lib/inventory/records');
 const { getCategory } = require('../../lib/inventory/stock');
 const {
@@ -36,9 +36,10 @@ async function fieldScope(field) {
   return field.tab_id ? tabScope(field.tab_id) : categoryScope(field.category_id);
 }
 
-// Express 5 leaves req.body undefined on GET requests (e.g. the delete confirmation page),
-// so read it defensively.
-const backTo = (req, scope) => safePath((req.body && req.body.back) || req.query.back, scope.url);
+// Where to return: back field, ?back=, same-site Referer, else the tab's (or category's)
+// Columns page. Safe on GET, where Express 5 leaves req.body undefined (the delete
+// confirmation page is opened with a plain link).
+const backTo = (req, scope) => backPath(req, scope.url);
 
 async function getField(id) {
   const [[field]] = await pool.query('SELECT * FROM inventory_fields WHERE id = ?', [id]);
@@ -243,7 +244,7 @@ router.get('/fields/:id/delete', async (req, res) => {
 router.post('/fields/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   const [[field]] = await pool.query('SELECT * FROM inventory_fields WHERE id = ?', [id]);
-  const fallback = safePath((req.body && req.body.back) || req.query.back, '/inventory');
+  const fallback = backPath(req, '/inventory');
   if (!field) {
     flash(req, 'error', 'That field was already deleted.');
     return res.redirect(fallback);

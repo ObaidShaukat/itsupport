@@ -3,7 +3,7 @@
 // an employee inactive (leaving date, all kit back to stock) and reactivating them.
 const express = require('express');
 const { pool, transaction } = require('../../db');
-const { requireId, toId, flash, notFound, safePath } = require('../../lib/http');
+const { requireId, toId, flash, notFound, backPath } = require('../../lib/http');
 const { londonDate } = require('../../lib/activity');
 const { isDate } = require('../../lib/report');
 const {
@@ -252,7 +252,7 @@ router.get('/r/:id', async (req, res) => {
 router.post('/r/:id/value', async (req, res) => {
   const ctx = await getRecord(pool, requireId(req.params.id));
   const json = (req.get('Accept') || '').includes('application/json');
-  const back = safePath(req.body.back, `/inventory/r/${ctx.record.id}`);
+  const back = backPath(req, `/inventory/r/${ctx.record.id}`);
   const fail = (status, error) => {
     if (json) return res.status(status).json({ ok: false, error });
     flash(req, 'error', error);
@@ -316,7 +316,7 @@ router.post('/r/:id/access', async (req, res) => {
       });
     });
   }
-  res.redirect(`${safePath(req.body.back, `/inventory/r/${ctx.record.id}`)}`);
+  res.redirect(backPath(req, `/inventory/r/${ctx.record.id}`));
 });
 
 // Inactive: needs a leaving date; every assigned item goes back to stock (the profile

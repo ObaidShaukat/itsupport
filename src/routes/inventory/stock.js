@@ -4,7 +4,7 @@
 const express = require('express');
 const ExcelJS = require('exceljs');
 const { pool, transaction } = require('../../db');
-const { requireId, toId, str, flash, notFound, safePath } = require('../../lib/http');
+const { requireId, toId, str, flash, notFound, backPath } = require('../../lib/http');
 const { employeesTab, listRecords, recordTitle, logInv } = require('../../lib/inventory/records');
 const { listFields, readValues, saveValues, STOCK_STATUSES } = require('../../lib/inventory/fields');
 const { fieldColumns, fixedColumn, fieldCells } = require('../../lib/inventory/grid');
@@ -380,14 +380,14 @@ router.post('/:id/assign', async (req, res) => {
     if (err.status !== 400) throw err;
     flash(req, 'error', err.message);
   }
-  res.redirect(safePath(req.body.back, `/inventory/stock/${item.id}`));
+  res.redirect(backPath(req, `/inventory/stock/${item.id}`));
 });
 
 router.post('/:id/unassign', async (req, res) => {
   const item = await getItem(pool, requireId(req.params.id));
   await transaction(async (conn) => returnItem(conn, req.user, await getItem(conn, item.id, { lock: true })));
   flash(req, 'success', 'Returned to stock.');
-  res.redirect(safePath(req.body.back, `/inventory/stock/${item.id}`));
+  res.redirect(backPath(req, `/inventory/stock/${item.id}`));
 });
 
 router.post('/:id/delete', async (req, res) => {

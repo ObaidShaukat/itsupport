@@ -113,6 +113,13 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 // ---- Sessions, forms and CSRF ----
 
 app.use(express.urlencoded({ extended: false, limit: '2mb' }));
+// Express 5 leaves req.body undefined when no parser ran (GET links, fetch() without a
+// body). Routes read req.body.x, so give them an empty object as Express 4 did. Multipart
+// uploads are parsed later (src/middleware/multipart.js), which replaces it.
+app.use((req, res, next) => {
+  if (req.body === undefined) req.body = {};
+  next();
+});
 
 const sessionStore = new MySQLStore({
   expiration: SESSION_HOURS * 60 * 60 * 1000,

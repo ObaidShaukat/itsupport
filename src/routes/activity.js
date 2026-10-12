@@ -2,7 +2,7 @@
 // and delete only their own entries.
 const express = require('express');
 const { pool } = require('../db');
-const { str, requireId, flash, notFound, safePath } = require('../lib/http');
+const { str, requireId, flash, notFound, safePath, backPath } = require('../lib/http');
 const { londonDate } = require('../lib/activity');
 const { isDate } = require('../lib/report');
 
@@ -53,7 +53,7 @@ router.get('/', (req, res) => renderForm(res, 200, {
 
 router.post('/', async (req, res) => {
   const entry = readEntry(req.body);
-  const back = safeBack(req.body.back);
+  const back = backPath(req, '/report');
   const { client, error } = await validate(entry);
   if (error) return renderForm(res, 400, { entry, action: '/log-work', back, error });
 
@@ -79,7 +79,7 @@ router.get('/:id/edit', async (req, res) => {
 router.post('/:id', async (req, res) => {
   const row = await ownEntry(req, requireId(req.params.id));
   const entry = { ...readEntry(req.body), id: row.id };
-  const back = safeBack(req.body.back);
+  const back = backPath(req, '/report');
   const { client, error } = await validate(entry);
   if (error) return renderForm(res, 400, { title: 'Edit logged work', entry, action: `/log-work/${row.id}`, back, error });
 
@@ -95,7 +95,7 @@ router.post('/:id/delete', async (req, res) => {
   const row = await ownEntry(req, requireId(req.params.id));
   await pool.query('DELETE FROM activity_log WHERE id = ?', [row.id]);
   flash(req, 'success', 'Logged work deleted.');
-  res.redirect(safeBack(req.body.back));
+  res.redirect(backPath(req, '/report'));
 });
 
 module.exports = router;

@@ -5,7 +5,7 @@
 // against the ticket (entity_type 'reminder', history only).
 const express = require('express');
 const { transaction } = require('../db');
-const { requireId, toId, flash, notFound, safePath } = require('../lib/http');
+const { requireId, toId, flash, notFound, backPath } = require('../lib/http');
 const { logActivity } = require('../lib/activity');
 const {
   SNOOZES, reminderContext, readReminderForm, snoozeUntil, clearReminderNotifications, setRecipients, markDone,
@@ -15,7 +15,7 @@ const {
 const router = express.Router();
 
 const wantsJson = (req) => (req.get('Accept') || '').includes('application/json');
-const ticketBack = (req, ticketId) => safePath(req.body.back, `/tickets/${ticketId}#reminders`);
+const ticketBack = (req, ticketId) => backPath(req, `/tickets/${ticketId}#reminders`);
 const withNote = (text, note) => (note ? `${text}: ${note}` : text);
 
 const reminderEntry = (r, action, summary, changes) => ({

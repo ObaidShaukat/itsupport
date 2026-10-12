@@ -3,7 +3,7 @@
 // Center link, who gets alerts, daily digest, client secret expiry date).
 const express = require('express');
 const { pool } = require('../db');
-const { str, requireId, toId, flash, safePath } = require('../lib/http');
+const { str, requireId, toId, flash, backPath } = require('../lib/http');
 const { logActivity } = require('../lib/activity');
 const { gdapConfig } = require('../lib/gdap/graph');
 const {
@@ -75,7 +75,7 @@ router.post('/:id/link', async (req, res) => {
   const result = await setLink(req.user, id, choice === 'auto' ? { auto: true } : { clientId: toId(choice) });
   if (result.error) flash(req, 'error', result.error);
   else flash(req, 'saved', result.client ? `Saved. Linked to ${result.client.name}.` : 'Saved. Not linked to a client.');
-  res.redirect(safePath(req.body.back, `/gdap#gdap-${id}`));
+  res.redirect(backPath(req, `/gdap#gdap-${id}`));
 });
 
 const relLabel = (r) => `${r.customer_name || 'Unknown customer'} – ${r.display_name || r.relationship_id}`;
@@ -102,7 +102,7 @@ router.post('/:id/hide', async (req, res) => {
     });
   }
   flash(req, 'saved', hide ? `Hidden: ${relLabel(rel)}. Find it under Hidden.` : `Unhidden: ${relLabel(rel)}.`);
-  res.redirect(safePath(req.body.back, '/gdap'));
+  res.redirect(backPath(req, '/gdap'));
 });
 
 // Hides every expired relationship whose customer has an active one.
@@ -119,7 +119,7 @@ router.post('/hide-superseded', async (req, res) => {
     }
   }
   flash(req, 'saved', targets.length ? `Hidden ${targets.length} superseded relationship${targets.length === 1 ? '' : 's'}. Find them under Hidden.` : 'No superseded relationships to hide.');
-  res.redirect(safePath(req.body.back, '/gdap'));
+  res.redirect(backPath(req, '/gdap'));
 });
 
 router.get('/settings', async (req, res) => {

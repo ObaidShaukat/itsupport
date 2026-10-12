@@ -1,6 +1,6 @@
 const express = require('express');
 const { pool, transaction } = require('../db');
-const { str, requireId, toId, flash, notFound, safePath } = require('../lib/http');
+const { str, requireId, toId, flash, notFound, backPath } = require('../lib/http');
 const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } = require('../lib/tickets');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
 const { ticketReminders, reminderUsers, clearReminderNotifications } = require('../lib/reminders');
@@ -13,7 +13,7 @@ const {
 } = require('../lib/ticket-files');
 
 // Where to go back to on the ticket page (a same-site path, else the given anchor).
-const backTo = (req, id, hash) => safePath(req.body.back, `/tickets/${id}${hash}`);
+const backTo = (req, id, hash) => backPath(req, `/tickets/${id}${hash}`);
 const fileList = (files) => files.map((f) => f.original_name).join(', ');
 
 const ticketEntry = (ticket, type, action, summary) => ({
@@ -402,7 +402,7 @@ router.post('/:id/delete', async (req, res) => {
   await pool.query('DELETE FROM tickets WHERE id = ?', [id]);
   await removeTicketFiles(names);
   flash(req, 'success', `Ticket #${id} "${ticket.title}" deleted.`);
-  res.redirect(safePath(req.body.back, `/clients/${ticket.client_id}#tickets`));
+  res.redirect(backPath(req, `/clients/${ticket.client_id}#tickets`));
 });
 
 module.exports = router;
