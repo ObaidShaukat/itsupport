@@ -6,6 +6,7 @@ const { pool, transaction } = require('../../db');
 const { requireId, str, flash, notFound } = require('../../lib/http');
 const { listTabs, getTab, logInv } = require('../../lib/inventory/records');
 const { getPrefix, formatId, PREFIX_PATTERN } = require('../../lib/inventory/userids');
+const { findJunkFields, deleteField } = require('../../lib/inventory/field-admin');
 
 const router = express.Router();
 
@@ -19,7 +20,28 @@ async function recordCounts() {
 router.get('/settings/tabs', async (req, res) => {
   res.render('inventory/settings/tabs', {
     title: 'Inventory settings', tabs: await listTabs(), counts: await recordCounts(), deletable, prefix: await getPrefix(pool),
+    junk: await findJunkFields(pool),
   });
+});
+
+// One-time clean-up: deletes the fields created by mistake ("asdasd", "asdas",
+// "MDP.USER26@GMAIL.COM", any case, on any tab), with their values, in one transaction.
+router.post('/settings/cleanup-fields', async (req, res) => {
+  const junk = await findJunkFields(pool);
+  if (!junk.length) {
+    flash(req, 'info', 'There are no junk fields left to remove.');
+    return res.redirect('/inventory/settings/tabs');
+  }
+  try {
+    await transaction(async (conn) => {
+      for (const f of junk) await deleteField(conn, req.user, f, f.place, { note: ' (clean-up of fields created by mistake)' });
+    });
+    flash(req, 'saved', `Removed ${junk.length} junk field${junk.length === 1 ? '' : 's'}: ${junk.map((f) => `"${f.label}" (${f.place})`).join(', ')}.`);
+  } catch (err) {
+    console.error('Inventory field clean-up failed:', err);
+    flash(req, 'error', `The clean-up could not finish (${err.message}). Nothing was changed.`);
+  }
+  res.redirect('/inventory/settings/tabs');
 });
 
 router.post('/settings/tabs', async (req, res) => {

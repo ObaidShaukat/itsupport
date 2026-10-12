@@ -20,7 +20,7 @@
     <% const shown = fields.filter((x) => x.visible); const back = `/inventory/r/${record.id}#details`; %>
     <div class="card-head">
       <h2>Details</h2>
-      <%- include('../_add-field', { tabId: tab.id, back, types: invFieldTypes }) %>
+      <%- include('../_add-field', { tabId: tab.id, tabName: tab.name, recordId: record.id, back, types: invFieldTypes }) %>
     </div>
     <ul class="inv-details" data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=details">
       <% for (const [i, f] of shown.filter((x) => x.field_type !== 'access').entries()) { const list = shown.filter((x) => x.field_type !== 'access'); %>

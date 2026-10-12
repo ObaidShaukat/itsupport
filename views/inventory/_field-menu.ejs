@@ -1,53 +1,75 @@
 <%#
-  "⋯" menu for one field on a record page: Rename, Change type (not for access toggles),
-  Move up / down, Hide, Delete (confirmation page with a data count). field, back, types,
+  "⋯" menu for one field on a record page, in compact sections each with its own Save:
+  Value for this record (not for access toggles), Rename, Change type (not for access
+  toggles), then Move up / down, Hide and Delete (confirmation page with a data count).
+  Esc or a click outside closes it without saving. field, v, recordId, back, types,
   first / last (disable moves).
 %>
 <details class="edit edit-right field-menu">
   <summary class="icon-btn field-menu-btn" title="Field options" aria-label="Options for <%= field.label %>">⋯</summary>
-  <div class="edit-panel">
-    <form method="post" action="/inventory/fields/<%= field.id %>/rename" class="form">
+  <div class="edit-panel field-menu-panel">
+    <div class="field-menu-head">
+      <strong title="<%= field.label %>"><%= field.label %></strong>
+      <span class="muted small"><%= types[field.field_type] || field.field_type %></span>
+      <button type="button" class="icon-btn" data-cancel title="Close (Esc)" aria-label="Close"><%- icon('x') %></button>
+    </div>
+
+    <% if (field.field_type !== 'access' && locals.recordId) { %>
+      <form method="post" action="/inventory/r/<%= recordId %>/value" class="field-menu-section">
+        <%- csrfField %>
+        <input type="hidden" name="field_id" value="<%= field.id %>">
+        <input type="hidden" name="back" value="<%= back %>">
+        <label class="field-menu-label" for="vi_<%= field.id %>_menu">Value for this record</label>
+        <div class="field-menu-row">
+          <%- include('_value-input', { field, v: locals.v, idSuffix: 'menu' }) %>
+          <button type="submit" class="btn btn-small btn-primary">Save</button>
+        </div>
+      </form>
+    <% } %>
+
+    <form method="post" action="/inventory/fields/<%= field.id %>/rename" class="field-menu-section">
       <%- csrfField %>
       <input type="hidden" name="back" value="<%= back %>">
-      <label class="field">
-        <span>Rename</span>
-        <input type="text" name="label" value="<%= field.label %>" required maxlength="100">
-      </label>
-      <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save name</button></div>
+      <label class="field-menu-label" for="rn_<%= field.id %>">Rename <span class="muted">(all records)</span></label>
+      <div class="field-menu-row">
+        <input id="rn_<%= field.id %>" type="text" name="label" value="<%= field.label %>" required maxlength="100">
+        <button type="submit" class="btn btn-small btn-primary">Save</button>
+      </div>
     </form>
+
     <% if (field.field_type !== 'access') { %>
-      <form method="post" action="/inventory/fields/<%= field.id %>/type" class="form" data-field-form>
+      <form method="post" action="/inventory/fields/<%= field.id %>/type" class="field-menu-section" data-field-form>
         <%- csrfField %>
         <input type="hidden" name="back" value="<%= back %>">
-        <label class="field">
-          <span>Change type</span>
-          <select name="field_type" data-field-type>
+        <label class="field-menu-label" for="ty_<%= field.id %>">Type <span class="muted">(all records)</span></label>
+        <div class="field-menu-row">
+          <select id="ty_<%= field.id %>" name="field_type" data-field-type>
             <% for (const [key, label] of Object.entries(types)) { if (key === 'access') continue; %>
               <option value="<%= key %>" <%= key === field.field_type ? 'selected' : '' %>><%= label %></option>
             <% } %>
           </select>
-        </label>
+          <button type="submit" class="btn btn-small btn-primary">Save</button>
+        </div>
         <label class="field" data-options-field>
-          <span>Options <span class="muted">(one per line)</span></span>
+          <span class="small">Options <span class="muted">(one per line)</span></span>
           <textarea name="options" rows="3"><%= field.options || '' %></textarea>
         </label>
-        <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save type</button></div>
       </form>
     <% } %>
-    <div class="field-menu-actions">
+
+    <div class="field-menu-section field-menu-actions">
       <form method="post" action="/inventory/fields/<%= field.id %>/move" class="inline">
         <%- csrfField %>
         <input type="hidden" name="back" value="<%= back %>">
-        <button type="submit" name="dir" value="up" class="btn btn-small btn-ghost" <%= locals.first ? 'disabled' : '' %>><%- icon('up') %><span>Move up</span></button>
-        <button type="submit" name="dir" value="down" class="btn btn-small btn-ghost" <%= locals.last ? 'disabled' : '' %>><%- icon('down') %><span>Move down</span></button>
+        <button type="submit" name="dir" value="up" class="btn btn-small btn-ghost" <%= locals.first ? 'disabled' : '' %> title="Move up"><%- icon('up') %><span>Up</span></button>
+        <button type="submit" name="dir" value="down" class="btn btn-small btn-ghost" <%= locals.last ? 'disabled' : '' %> title="Move down"><%- icon('down') %><span>Down</span></button>
       </form>
       <form method="post" action="/inventory/fields/<%= field.id %>/hide" class="inline">
         <%- csrfField %>
         <input type="hidden" name="back" value="<%= back %>">
-        <button type="submit" class="btn btn-small btn-ghost" title="Hidden fields can be shown again from Columns"><%- icon('eye') %><span>Hide</span></button>
+        <button type="submit" class="btn btn-small btn-ghost" title="Hide from every record (show it again from Columns)"><%- icon('eye-off') %><span>Hide</span></button>
       </form>
-      <a href="/inventory/fields/<%= field.id %>/delete?back=<%= encodeURIComponent(back) %>" class="btn btn-small btn-danger"><%- icon('trash') %><span>Delete</span></a>
+      <a href="/inventory/fields/<%= field.id %>/delete?back=<%= encodeURIComponent(back) %>" class="btn btn-small btn-danger field-menu-delete" title="Delete from every record"><%- icon('trash') %><span>Delete</span></a>
     </div>
-    <div class="form-actions"><button type="button" class="btn btn-small btn-ghost" data-cancel>Close</button></div>
   </div>
 </details>

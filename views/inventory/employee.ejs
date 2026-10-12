@@ -58,7 +58,7 @@
   <section class="card" id="details">
     <div class="card-head">
       <h2>Details</h2>
-      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, back: back + '#details', types: invFieldTypes }) %><% } %>
+      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, tabName: tab.name, recordId: record.id, back: back + '#details', types: invFieldTypes }) %><% } %>
     </div>
     <ul class="inv-details" <% if (!readOnly) { %>data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=details"<% } %>>
       <% for (const [i, f] of detailFields.entries()) { %>
@@ -73,7 +73,7 @@
   <section class="card" id="access">
     <div class="card-head">
       <h2>Access</h2>
-      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, back: back + '#access', access: true }) %><% } %>
+      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, tabName: tab.name, back: back + '#access', access: true }) %><% } %>
     </div>
     <% if (!accessFields.length) { %>
       <p class="empty">No access columns. <a href="/inventory/t/<%= tab.id %>/columns">Add one</a> (type "Access").</p>

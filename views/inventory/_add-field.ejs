@@ -1,22 +1,35 @@
 <%#
-  "+ Add field" / "+ Add access" button on a record page. Adds the field to the whole tab
-  (empty for everyone else; also a column in the tab's table). tabId, back, access (true
-  for an access toggle), types ({ key: label }, for fields).
+  "+ Add field (all records)" / "+ Add access (all records)" on a record page. Adds the
+  field to the whole tab (empty for everyone else; also a column in the tab's table),
+  optionally with the value for this record. tabId, tabName, recordId, back, access
+  (true for an access toggle), types ({ key: label }, for fields). A name that looks like
+  an email or web address shows a warning ([data-name-check] in app.js; the server also
+  refuses it unless "Use it as the field name anyway" is ticked).
 %>
 <details class="edit edit-right add-field">
-  <summary class="btn btn-small btn-ghost"><%- icon('plus') %><span><%= locals.access ? 'Add access' : 'Add field' %></span></summary>
+  <summary class="btn btn-small btn-ghost"><%- icon('plus') %><span><%= locals.access ? 'Add access (all records)' : 'Add field (all records)' %></span></summary>
   <div class="edit-panel">
-    <form method="post" action="/inventory/t/<%= tabId %>/columns" class="form" data-field-form>
+    <form method="post" action="/inventory/t/<%= tabId %>/columns" class="form" data-field-form data-name-check>
       <%- csrfField %>
       <input type="hidden" name="back" value="<%= back %>">
+      <% if (locals.recordId) { %><input type="hidden" name="record_id" value="<%= recordId %>"><% } %>
       <h3 class="edit-section"><%= locals.access ? 'New access toggle' : 'New field' %></h3>
+      <p class="muted small add-field-help">
+        <% if (locals.access) { %>Adds a new access toggle to every record in <%= locals.tabName || 'this tab' %>, as Not granted.<% } else { %>Adds a new field to every record in <%= locals.tabName || 'this tab' %>. You can fill in the value for this record now.<% } %>
+      </p>
       <label class="field">
-        <span><%= locals.access ? 'Name (e.g. CRM, Portal)' : 'Name' %></span>
-        <input type="text" name="label" required maxlength="100">
+        <span><%= locals.access ? 'Name (e.g. CRM, Portal)' : 'Field name' %></span>
+        <input type="text" name="label" required maxlength="100" autocomplete="off" data-name-input placeholder="<%= locals.access ? 'e.g. CRM' : 'e.g. Personal email, Start date' %>">
       </label>
+      <div class="name-warning" data-name-warning hidden role="alert">
+        <%- icon('flag') %>
+        <div>
+          <strong>This looks like a value, not a field name.</strong> Did you mean to edit a value? Close this and click the value on the page instead.
+          <label class="checkbox-field small"><input type="checkbox" name="name_ok" value="1"> <span>Use it as the field name anyway</span></label>
+        </div>
+      </div>
       <% if (locals.access) { %>
         <input type="hidden" name="field_type" value="access">
-        <p class="muted small">Added for everyone, as Not granted.</p>
       <% } else { %>
         <label class="field">
           <span>Type</span>
@@ -30,11 +43,17 @@
           <span>Options <span class="muted">(one per line)</span></span>
           <textarea name="options" rows="3"></textarea>
         </label>
-        <p class="muted small">Added for everyone (empty for now) and as a column in the table.</p>
+        <% if (locals.recordId) { %>
+          <label class="field">
+            <span>Value for this record <span class="muted">(optional)</span></span>
+            <input type="text" name="value" maxlength="1000" autocomplete="off" data-new-value>
+            <small class="muted">Checked against the type (e.g. a valid email). Passwords and PINs are encrypted. Other records stay empty.</small>
+          </label>
+        <% } %>
       <% } %>
       <input type="hidden" name="visible" value="1">
       <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Add</button>
+        <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add to all records</span></button>
         <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
       </div>
     </form>

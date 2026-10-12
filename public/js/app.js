@@ -2743,3 +2743,123 @@ document.querySelectorAll('form[data-busy-label]').forEach((form) => {
     });
   });
 });
+
+// ---- Inventory: edit a value in place ([data-inline-value] on record pages) ----
+// Click the value (or the pencil) to edit; Enter (Ctrl+Enter in long text) or the tick
+// saves with fetch, Esc or x cancels. The server answers with the new display.
+document.querySelectorAll('[data-inline-value]').forEach((box) => {
+  const display = box.querySelector('[data-inline-display]');
+  const form = box.querySelector('[data-inline-form]');
+  const openBtn = box.querySelector('[data-inline-open]');
+  const error = box.querySelector('[data-inline-error]');
+  if (!display || !form) return;
+  const input = () => form.querySelector('input:not([type="hidden"]):not([type="checkbox"]), textarea, select');
+
+  function open() {
+    if (!form.hidden) return;
+    // One at a time on the page.
+    document.querySelectorAll('[data-inline-value].is-editing').forEach((other) => other !== box && other.dispatchEvent(new Event('inline-close')));
+    box.classList.add('is-editing');
+    form.hidden = false;
+    display.hidden = true;
+    if (openBtn) openBtn.hidden = true;
+    error.hidden = true;
+    const field = input();
+    if (field) {
+      field.focus();
+      if (field.select && field.type !== 'date' && field.tagName !== 'SELECT') field.select();
+      if (field.matches('textarea[data-autogrow]') && typeof autogrow === 'function') autogrow(field);
+    }
+  }
+  function close() {
+    form.reset();
+    form.hidden = true;
+    display.hidden = false;
+    if (openBtn) openBtn.hidden = false;
+    box.classList.remove('is-editing');
+  }
+  box.addEventListener('inline-close', close);
+
+  display.addEventListener('click', (e) => {
+    // Links, reveal / copy buttons and selected text keep working.
+    if (e.target.closest('a, button, [data-secret]')) return;
+    if (String(window.getSelection && window.getSelection()).length) return;
+    open();
+  });
+  if (openBtn) openBtn.addEventListener('click', open);
+  form.querySelector('[data-inline-cancel]').addEventListener('click', close);
+  form.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
+    if (e.key === 'Enter' && e.target.tagName === 'TEXTAREA' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); form.requestSubmit(); }
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const save = form.querySelector('.inv-inline-save');
+    save.disabled = true;
+    error.hidden = true;
+    try {
+      const res = await fetch(form.action, {
+        method: 'POST', credentials: 'same-origin', headers: { Accept: 'application/json' },
+        body: new URLSearchParams(new FormData(form)),
+      });
+      const data = await res.json().catch(() => ({ ok: false, error: 'The value could not be saved. Reload the page and try again.' }));
+      if (!data.ok) {
+        error.textContent = data.error || 'The value could not be saved.';
+        error.hidden = false;
+        input()?.focus();
+        return;
+      }
+      display.innerHTML = data.html;
+      // The new value becomes the form's default (for the next edit and for Cancel).
+      const field = input();
+      if (field && field.type !== 'password') {
+        if (field.tagName === 'SELECT') [...field.options].forEach((o) => { o.defaultSelected = o.value === data.value; });
+        else field.defaultValue = data.value;
+      }
+      close();
+      box.classList.add('is-saved');
+      setTimeout(() => box.classList.remove('is-saved'), 1200);
+    } catch (err) {
+      error.textContent = 'Could not reach the server. Check the connection and try again.';
+      error.hidden = false;
+    } finally {
+      save.disabled = false;
+    }
+  });
+});
+
+// Password / PIN inputs: the eye shows what is being typed (never the saved value).
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-show-typed]');
+  if (!btn) return;
+  const input = document.getElementById(btn.dataset.showTyped);
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.setAttribute('aria-pressed', String(show));
+  btn.title = show ? 'Hide what you type' : 'Show what you type';
+});
+
+// "+ Add field": a name that looks like an email or web address is probably a value.
+document.querySelectorAll('form[data-name-check]').forEach((form) => {
+  const input = form.querySelector('[data-name-input]');
+  const warning = form.querySelector('[data-name-warning]');
+  if (!input || !warning) return;
+  const looksLikeValue = (t) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) || /^(https?:\/\/|www\.)\S+$/i.test(t) || /^[a-z0-9-]+(\.[a-z0-9-]+)+\/\S*$/i.test(t);
+  const sync = () => {
+    const bad = looksLikeValue(input.value.trim());
+    warning.hidden = !bad;
+    if (!bad) warning.querySelector('input[name="name_ok"]').checked = false;
+  };
+  input.addEventListener('input', sync);
+  form.addEventListener('reset', () => setTimeout(sync));
+  form.addEventListener('submit', (e) => {
+    sync();
+    const ok = warning.querySelector('input[name="name_ok"]');
+    if (!warning.hidden && !ok.checked) {
+      e.preventDefault();
+      ok.focus();
+    }
+  });
+  sync();
+});

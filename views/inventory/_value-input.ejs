@@ -1,0 +1,36 @@
+<%#
+  Compact input for one field's value (inline editing and the "⋯" menu), name f_<id>.
+  field, v ({ value, hasSecret }), idSuffix (unique per page). Passwords / PINs: empty
+  keeps the saved one, with an eye to show what is typed and "Remove" when one is saved.
+%>
+<%
+  const name = `f_${field.id}`;
+  const val = (v && v.value) || '';
+  const id = `vi_${field.id}_${locals.idSuffix || 'x'}`;
+  const secret = field.field_type === 'password' || field.field_type === 'pin';
+%>
+<span class="value-input">
+<% if (field.field_type === 'longtext') { %>
+  <textarea id="<%= id %>" name="<%= name %>" rows="3" maxlength="10000" aria-label="<%= field.label %>" data-autogrow><%= val %></textarea>
+<% } else if (field.field_type === 'dropdown') { %>
+  <select id="<%= id %>" name="<%= name %>" aria-label="<%= field.label %>">
+    <option value="">—</option>
+    <% for (const o of field.optionList) { %><option value="<%= o %>" <%= o === val ? 'selected' : '' %>><%= o %></option><% } %>
+  </select>
+<% } else if (secret) { %>
+  <span class="value-secret">
+    <input id="<%= id %>" type="password" name="<%= name %>" maxlength="500" autocomplete="new-password" spellcheck="false" aria-label="<%= field.label %>"
+      <%= field.field_type === 'pin' ? 'inputmode=numeric' : '' %>
+      placeholder="<%= v && v.hasSecret ? 'Saved (encrypted). Type to replace' : 'Encrypted when saved' %>">
+    <button type="button" class="icon-btn" data-show-typed="<%= id %>" title="Show what you type" aria-label="Show what you type"><%- icon('eye') %></button>
+  </span>
+  <% if (v && v.hasSecret) { %>
+    <label class="checkbox-field small"><input type="checkbox" name="clear_<%= field.id %>" value="1"> <span>Remove the saved <%= field.label %></span></label>
+  <% } %>
+<% } else { %>
+  <input id="<%= id %>" name="<%= name %>" value="<%= val %>" maxlength="1000" aria-label="<%= field.label %>"
+    type="<%= { email: 'email', phone: 'tel', date: 'date', link: 'url' }[field.field_type] || 'text' %>"
+    <%= field.field_type === 'number' ? 'inputmode=decimal' : '' %>
+    <%= field.field_type === 'link' ? 'placeholder=https://' : '' %>>
+<% } %>
+</span>

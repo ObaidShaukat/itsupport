@@ -10,8 +10,9 @@ const { requireId, flash, notFound, safePath } = require('../../lib/http');
 const { getTab, dataTab, logInv } = require('../../lib/inventory/records');
 const { getCategory } = require('../../lib/inventory/stock');
 const {
-  FIELD_TYPES, CATEGORY_TYPES, SECRET_TYPES, listFields, readFieldForm,
+  FIELD_TYPES, CATEGORY_TYPES, SECRET_TYPES, listFields, readFieldForm, optionsOf, readValues, saveValues,
 } = require('../../lib/inventory/fields');
+const { deleteField, looksLikeValue } = require('../../lib/inventory/field-admin');
 
 const router = express.Router();
 
@@ -35,7 +36,9 @@ async function fieldScope(field) {
   return field.tab_id ? tabScope(field.tab_id) : categoryScope(field.category_id);
 }
 
-const backTo = (req, scope) => safePath(req.body.back || req.query.back, scope.url);
+// Express 5 leaves req.body undefined on GET requests (e.g. the delete confirmation page),
+// so read it defensively.
+const backTo = (req, scope) => safePath((req.body && req.body.back) || req.query.back, scope.url);
 
 async function getField(id) {
   const [[field]] = await pool.query('SELECT * FROM inventory_fields WHERE id = ?', [id]);
@@ -65,26 +68,70 @@ async function showManager(res, scope) {
 router.get('/t/:id/columns', async (req, res) => showManager(res, await tabScope(requireId(req.params.id))));
 router.get('/stock/categories/:id/fields', async (req, res) => showManager(res, await categoryScope(requireId(req.params.id))));
 
+// Adds a field to every record of the tab (or every item of the category). From a record
+// page it can also take "Value for this record" (record_id + value), checked like any
+// other value before anything is saved. A name that looks like an email or web address
+// is refused unless name_ok=1 ("use it as the field name anyway"), since that is usually
+// a value typed into the wrong box.
 async function addField(req, res, scope) {
+  const back = backTo(req, scope);
   const { field, error } = readFieldForm(req.body, scope.types);
   if (error) {
     flash(req, 'error', error);
-    return res.redirect(backTo(req, scope));
+    return res.redirect(back);
   }
-  await transaction(async (conn) => {
-    const col = scope.owner.tabId ? 'tab_id' : 'category_id';
-    const [[{ next }]] = await conn.query(`SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM inventory_fields WHERE ${col} = ?`, [scope.id]);
-    await conn.query(
-      `INSERT INTO inventory_fields (${col}, label, field_type, options, sort_order, visible, required, width) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [scope.id, field.label, field.field_type, field.options, next, field.visible, field.required, field.width]
-    );
-    await logInv(conn, req.user, {
-      type: 'inv_config', action: 'created', subject: scope.name,
-      summary: `Added the column "${field.label}" (${FIELD_TYPES[field.field_type]}) to ${scope.name}`,
+  if (looksLikeValue(field.label) && req.body.name_ok !== '1') {
+    flash(req, 'error', `"${field.label}" looks like a value, not a field name. Did you mean to edit a value? Click the value on the page to change it, or tick "Use it as the field name anyway".`);
+    return res.redirect(back);
+  }
+  // Optional value for the record the field was added from.
+  let record = null;
+  let change = null;
+  const raw = typeof req.body.value === 'string' ? req.body.value : '';
+  const recordId = scope.owner.tabId ? Number(req.body.record_id) || 0 : 0;
+  if (recordId && raw.trim() && field.field_type !== 'access') {
+    [[record]] = await pool.query('SELECT id, tab_id, status FROM inventory_records WHERE id = ?', [recordId]);
+    if (!record || record.tab_id !== scope.id) {
+      flash(req, 'error', 'That record is not in this tab.');
+      return res.redirect(back);
+    }
+    const draft = { id: 0, label: field.label, field_type: field.field_type, options: field.options, optionList: optionsOf(field), required: false };
+    const read = readValues({ f_0: raw }, [draft]);
+    if (read.errors.length) {
+      flash(req, 'error', `Nothing was added: ${read.errors.join(' ')}`);
+      return res.redirect(back);
+    }
+    change = read.values.get(0) || null;
+  }
+  try {
+    await transaction(async (conn) => {
+      const col = scope.owner.tabId ? 'tab_id' : 'category_id';
+      const [[{ next }]] = await conn.query(`SELECT COALESCE(MAX(sort_order), -1) + 1 AS next FROM inventory_fields WHERE ${col} = ?`, [scope.id]);
+      const [ins] = await conn.query(
+        `INSERT INTO inventory_fields (${col}, label, field_type, options, sort_order, visible, required, width) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [scope.id, field.label, field.field_type, field.options, next, field.visible, field.required, field.width]
+      );
+      await logInv(conn, req.user, {
+        type: 'inv_config', action: 'created', subject: scope.name,
+        summary: `Added the column "${field.label}" (${FIELD_TYPES[field.field_type]}) to ${scope.name}`,
+      });
+      if (record && change) {
+        const saved = { ...field, id: ins.insertId, optionList: optionsOf(field) };
+        await saveValues(conn, record.id, [saved], new Map([[saved.id, change]]), new Map());
+        await conn.query('UPDATE inventory_records SET updated_by = ? WHERE id = ?', [req.user.id, record.id]);
+        await logInv(conn, req.user, {
+          type: 'inv_record', id: record.id, action: 'updated', subject: scope.name, changes: [field.label],
+          summary: `Set ${field.label} on record #${record.id} (${scope.name}) when adding the field`,
+        });
+      }
     });
-  });
-  flash(req, 'success', `"${field.label}" added.`);
-  res.redirect(backTo(req, scope));
+  } catch (err) {
+    console.error('Adding an inventory field failed:', err);
+    flash(req, 'error', `"${field.label}" could not be added: ${err.status ? err.message : 'a database error occurred. Nothing was changed.'}`);
+    return res.redirect(back);
+  }
+  flash(req, 'saved', `Saved. "${field.label}" added to every record${change ? ' with a value for this one' : ''}.`);
+  res.redirect(back);
 }
 router.post('/t/:id/columns', async (req, res) => addField(req, res, await tabScope(requireId(req.params.id))));
 router.post('/stock/categories/:id/fields', async (req, res) => addField(req, res, await categoryScope(requireId(req.params.id))));
@@ -191,20 +238,28 @@ router.get('/fields/:id/delete', async (req, res) => {
   res.render('inventory/fields/delete', { title: `Delete · ${field.label}`, field, area: scope, count, back: backTo(req, scope) });
 });
 
+// Deletes the field's values and the field in one transaction. A failure rolls back
+// and shows a clear message on the page instead of the generic error page.
 router.post('/fields/:id/delete', async (req, res) => {
-  const field = await getField(requireId(req.params.id));
+  const id = requireId(req.params.id);
+  const [[field]] = await pool.query('SELECT * FROM inventory_fields WHERE id = ?', [id]);
+  const fallback = safePath((req.body && req.body.back) || req.query.back, '/inventory');
+  if (!field) {
+    flash(req, 'error', 'That field was already deleted.');
+    return res.redirect(fallback);
+  }
   const scope = await fieldScope(field);
-  const count = (await dataCounts(scope, [field]))[field.id] || 0;
-  await transaction(async (conn) => {
-    await conn.query('UPDATE stock_categories SET group_by = \'none\', group_field_id = NULL WHERE group_field_id = ?', [field.id]);
-    await conn.query('DELETE FROM inventory_fields WHERE id = ?', [field.id]);
-    await logInv(conn, req.user, {
-      type: 'inv_config', action: 'deleted', subject: scope.name,
-      summary: `Deleted the column "${field.label}" from ${scope.name}${count ? ` (data in ${count} record${count === 1 ? '' : 's'} removed)` : ''}`,
-    });
-  });
-  flash(req, 'success', `"${field.label}" deleted.`);
-  res.redirect(backTo(req, scope));
+  const back = backTo(req, scope);
+  // Back to the Columns page or the record, never to a page about this field.
+  const target = back.startsWith(`/inventory/fields/${field.id}`) ? scope.url : back;
+  try {
+    const count = await transaction((conn) => deleteField(conn, req.user, field, scope.name));
+    flash(req, 'saved', `"${field.label}" deleted${count ? ` with its data in ${count} record${count === 1 ? '' : 's'}` : ''}.`);
+  } catch (err) {
+    console.error(`Deleting inventory field ${field.id} failed:`, err);
+    flash(req, 'error', `"${field.label}" could not be deleted: ${err.status ? err.message : `a database error occurred (${err.code || 'unknown'}). Nothing was changed.`}`);
+  }
+  res.redirect(target);
 });
 
 // New column order (field ids). From the Columns page it lists every field; from a table

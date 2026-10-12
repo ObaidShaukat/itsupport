@@ -1,19 +1,34 @@
 <%#
   One field on a record page (an <li> inside ul.inv-details). field, v ({ value, hasSecret }
-  or undefined), recordId; manage: { back, types, first, last } adds the drag handle and
-  the "⋯" menu (Rename, Change type, Move, Hide, Delete).
+  or undefined), recordId; manage: { back, types, first, last } makes it editable: the
+  drag handle, the "⋯" menu (Value, Rename, Type, Move, Hide, Delete) and inline editing
+  (click the value: Enter or the tick saves, Esc cancels; [data-inline-value] in app.js).
+  Without manage (e.g. an ex employee) the value is read-only.
 %>
+<% const editable = locals.manage && field.field_type !== 'access'; %>
 <li class="inv-detail" data-id="<%= field.id %>">
   <div class="inv-detail-label">
     <% if (locals.manage) { %><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span><% } %>
     <span class="inv-detail-name"><%= field.label %></span>
-    <% if (locals.manage) { %><%- include('_field-menu', { field, back: manage.back, types: manage.types, first: manage.first, last: manage.last }) %><% } %>
+    <% if (locals.manage) { %><%- include('_field-menu', { field, v, recordId, back: manage.back, types: manage.types, first: manage.first, last: manage.last }) %><% } %>
   </div>
-  <div class="inv-detail-value">
-    <% if (field.field_type === 'password' || field.field_type === 'pin') { %>
-      <%- include('_secret', { recordId, field, hasSecret: Boolean(v && v.hasSecret) }) %>
-    <% } else { %>
-      <%- include('_cell', { cell: { kind: field.field_type === 'access' ? 'access' : field.field_type, value: v ? v.value : null, granted: Boolean(v && v.value === 'granted') } }) %>
+  <div class="inv-detail-value <%= editable ? 'inv-value' : '' %>" <%= editable ? 'data-inline-value' : '' %>>
+    <div class="inv-value-display" data-inline-display <% if (editable) { %>title="Click to edit <%= field.label %>"<% } %>>
+      <%- include('_value-display', { field, v, recordId }) %>
+    </div>
+    <% if (editable) { %>
+      <button type="button" class="inv-value-edit" data-inline-open aria-label="Edit <%= field.label %>" title="Edit <%= field.label %>"><%- icon('edit') %></button>
+      <form method="post" action="/inventory/r/<%= recordId %>/value" class="inv-inline-form" data-inline-form hidden>
+        <%- csrfField %>
+        <input type="hidden" name="field_id" value="<%= field.id %>">
+        <input type="hidden" name="back" value="<%= manage.back %>">
+        <div class="inv-inline-row">
+          <%- include('_value-input', { field, v, idSuffix: 'inline' }) %>
+          <button type="submit" class="icon-btn inv-inline-save" title="Save (Enter)" aria-label="Save <%= field.label %>"><%- icon('check') %></button>
+          <button type="button" class="icon-btn" data-inline-cancel title="Cancel (Esc)" aria-label="Cancel"><%- icon('x') %></button>
+        </div>
+        <p class="field-error small" data-inline-error role="alert" hidden></p>
+      </form>
     <% } %>
   </div>
 </li>

@@ -2430,3 +2430,68 @@ dialog.lightbox::backdrop { background: rgba(10, 6, 30, 0.88); }
 .gdap-table tr.gdap-group-start td { border-top: 2px solid #D1D1D6; }
 .gdap-bulk { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--sp-2); margin: calc(-1 * var(--sp-1)) 0 var(--sp-3); }
 @media (hover: none) { .gdap-eye { opacity: 1; } }
+
+/* ==== Inventory: inline values, field menu, Add field ==== */
+.inv-value { position: relative; display: flex; align-items: flex-start; gap: 4px; }
+.inv-value-display { flex: 1; min-width: 0; min-height: 22px; border-radius: 4px; cursor: text; }
+.inv-value-display[hidden] { display: none; }
+.inv-value:hover .inv-value-display { box-shadow: 0 0 0 4px var(--blue-soft); background: var(--blue-soft); }
+.inv-value-edit { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 0.12s; }
+.inv-value-edit .icon { width: 13px; height: 13px; }
+.inv-value:hover .inv-value-edit, .inv-value-edit:focus-visible { opacity: 1; }
+.inv-value-edit:hover { color: var(--blue); background: var(--blue-soft); }
+.inv-value-edit[hidden] { display: none; }
+@media (hover: none) { .inv-value-edit { opacity: 1; } }
+.inv-empty .inv-add-hint { display: none; color: var(--blue); font-weight: 600; font-size: var(--fs-table); }
+.inv-value:hover .inv-empty .muted { display: none; }
+.inv-value:hover .inv-empty .inv-add-hint { display: inline; }
+.inv-value.is-saved .inv-value-display { animation: saved-flash 1.2s ease-out; }
+@keyframes saved-flash { 0% { background: var(--green-soft); box-shadow: 0 0 0 4px var(--green-soft); } 100% { background: transparent; box-shadow: none; } }
+.inv-inline-form { flex: 1; min-width: 0; }
+.inv-inline-form[hidden] { display: none; }
+.inv-inline-row { display: flex; align-items: center; gap: 4px; }
+.inv-inline-row > input, .inv-inline-row > select, .inv-inline-row > textarea, .inv-inline-row > .value-secret { flex: 1; min-width: 0; min-height: 30px; padding-top: 4px; padding-bottom: 4px; font-size: var(--fs-table); }
+.inv-inline-row .icon-btn { flex: none; width: 28px; height: 28px; }
+.inv-inline-save { color: #FFFFFF; background: var(--blue); border-color: var(--blue); }
+.inv-inline-save:hover { background: var(--blue-hover); color: #FFFFFF; }
+.inv-inline-form .field-error { margin: 4px 0 0; }
+.inv-inline-form .checkbox-field { margin-top: 4px; font-weight: 400; }
+.value-secret { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.value-secret input { flex: 1; min-width: 0; }
+.value-secret .icon-btn { width: 28px; height: 28px; }
+.value-secret .icon-btn[aria-pressed="true"] { color: var(--blue); }
+
+/* "⋯" menu: compact sections, one Save each */
+.field-menu .edit-panel.field-menu-panel { width: min(340px, calc(100vw - 2rem)); padding: 0; display: block; overflow: hidden; }
+.field-menu-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-soft); }
+.field-menu-head strong { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--indigo); font-size: var(--fs-table); }
+.field-menu-head .muted { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field-menu-head .icon-btn { width: 26px; height: 26px; flex: none; }
+.field-menu-section { display: grid; gap: 6px; margin: 0; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.field-menu-section:last-child { border-bottom: 0; }
+.field-menu-label { font-size: 0.7857rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--purple); }
+.field-menu-label .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.field-menu-row { display: flex; align-items: center; gap: 6px; }
+.field-menu-row > input, .field-menu-row > select, .field-menu-row > textarea, .field-menu-row > .value-secret { flex: 1; min-width: 0; min-height: 30px; padding-top: 4px; padding-bottom: 4px; font-size: var(--fs-table); }
+.field-menu-row > .btn { flex: none; }
+.field-menu-section .field { gap: 2px; }
+.field-menu-section .checkbox-field { font-size: 0.8571rem; }
+.field-menu-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; background: var(--surface-soft); }
+.field-menu-actions .field-menu-delete { margin-left: auto; }
+
+/* "+ Add field (all records)" */
+.add-field-help { margin: 0 0 var(--sp-2); }
+.name-warning { display: flex; gap: 8px; padding: 8px 10px; border: 1px solid #F3D19C; border-radius: var(--radius-sm); background: #FFF6E5; color: #7A4B00; font-size: var(--fs-table); }
+.name-warning[hidden] { display: none; }
+.name-warning > .icon { flex: none; width: 15px; height: 15px; margin-top: 2px; color: #B26B00; }
+.name-warning .checkbox-field { margin-top: 6px; color: var(--text); }
+
+/* Settings: junk field clean-up */
+.card-warning { border-color: #F3D19C; box-shadow: inset 4px 0 0 #F0B04A, var(--shadow); }
+.junk-list { margin: 0 0 var(--sp-3); padding-left: 1.2rem; font-size: var(--fs-table); }
+.junk-list li { margin: 2px 0; }
+.value-input { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.value-input > input, .value-input > select, .value-input > textarea { width: 100%; min-height: 30px; padding-top: 4px; padding-bottom: 4px; font-size: var(--fs-table); }
+.value-input .checkbox-field { font-size: 0.8571rem; font-weight: 400; }
+.inv-inline-row, .field-menu-row { align-items: flex-start; }
+.field-menu-actions form { display: inline-flex; align-items: center; gap: 4px; margin: 0; }

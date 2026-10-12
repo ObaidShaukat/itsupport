@@ -59,6 +59,21 @@
       <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add tab</span></button></div>
     </form>
   </section>
+  <% if (junk.length) { %>
+    <section class="card card-warning" id="cleanup">
+      <h2>Clean up fields created by mistake</h2>
+      <p class="muted small">These fields look like values typed into "+ Add field" by mistake. Removing them deletes the fields and any values in them from every record.</p>
+      <ul class="junk-list">
+        <% for (const f of junk) { %>
+          <li><strong><%= f.label %></strong> <span class="muted">in <%= f.place %><%= f.value_count ? ` · values in ${f.value_count} record${f.value_count === 1 ? '' : 's'}` : ' · no values' %></span></li>
+        <% } %>
+      </ul>
+      <form method="post" action="/inventory/settings/cleanup-fields" class="form-actions" data-confirm="Delete <%= junk.length %> field<%= junk.length === 1 ? '' : 's' %> (<%= junk.map((f) => f.label).join(', ') %>) and their values from every record? This cannot be undone." data-confirm-ok="Remove fields">
+        <%- csrfField %>
+        <button type="submit" class="btn btn-danger"><%- icon('trash') %><span>Remove <%= junk.length %> field<%= junk.length === 1 ? '' : 's' %></span></button>
+      </form>
+    </section>
+  <% } %>
   <section class="card" id="user-id">
     <h2>Employee User-IDs</h2>
     <p class="muted small">New employees get the lowest free number among active employees, e.g. <strong><%= prefix %>-001</strong>. Ex employees keep theirs. Changing the prefix does not rename existing IDs.</p>

@@ -244,6 +244,61 @@ router.get('/r/:id', async (req, res) => {
   });
 });
 
+// One field's value, edited in place on a record page (or from the field's "⋯" menu).
+// Same rules as the full edit form: type checks, required fields, passwords / PINs
+// encrypted (empty keeps the saved one, clear_<id> removes it) and Employee User-IDs.
+// fetch() (Accept: application/json) gets { ok, html } with the new display; forms
+// are redirected back with a message.
+router.post('/r/:id/value', async (req, res) => {
+  const ctx = await getRecord(pool, requireId(req.params.id));
+  const json = (req.get('Accept') || '').includes('application/json');
+  const back = safePath(req.body.back, `/inventory/r/${ctx.record.id}`);
+  const fail = (status, error) => {
+    if (json) return res.status(status).json({ ok: false, error });
+    flash(req, 'error', error);
+    return res.redirect(back);
+  };
+  if (isEmployees(ctx.tab) && ctx.record.status === 'inactive') return fail(400, 'Reactivate this employee before editing.');
+  const field = ctx.fields.find((f) => f.id === toId(req.body.field_id));
+  if (!field || field.field_type === 'access') return fail(400, 'That field is not on this record.');
+  const uidError = field.role === 'user_id' ? await prepareUserId(req, ctx.tab, ctx.fields, ctx.record.id) : null;
+  if (uidError) return fail(400, uidError);
+  // Only this field: make sure it is read even if the column is hidden.
+  const { values, errors } = readValues(req.body, [{ ...field, visible: true }], ctx.values);
+  if (errors.length) return fail(400, errors.join(' '));
+  let labels = [];
+  try {
+    labels = await transaction(async (conn) => {
+      if (field.role === 'user_id' && values.has(field.id)) await settleUserId(conn, ctx.tab, ctx.fields.map((f) => (f.id === field.id ? { ...f, visible: true } : f)), values, ctx.record.id);
+      const changed = await saveValues(conn, ctx.record.id, ctx.fields, values, ctx.values);
+      if (!changed.length) return changed;
+      await conn.query('UPDATE inventory_records SET updated_by = ? WHERE id = ?', [req.user.id, ctx.record.id]);
+      const after = new Map(ctx.values);
+      for (const [k, c] of values) if ('value' in c) after.set(k, { value: c.value });
+      const title = recordTitle(ctx.record, ctx.fields, after);
+      await logInv(conn, req.user, {
+        type: 'inv_record', id: ctx.record.id, action: 'updated', subject: title, changes: changed,
+        summary: `Edited ${title} (${ctx.tab.name}): ${changed.join(', ')}`,
+      });
+      return changed;
+    });
+  } catch (err) {
+    if (err.status) return fail(err.status === 409 ? 409 : 400, err.message);
+    console.error(`Saving inventory field ${field.id} on record ${ctx.record.id} failed:`, err);
+    return fail(500, 'The value could not be saved because of a database error. Nothing was changed.');
+  }
+  if (!json) {
+    flash(req, 'saved', labels.length ? `Saved. ${field.label} updated.` : 'Saved. Nothing changed.');
+    return res.redirect(back);
+  }
+  const [[row]] = await pool.query('SELECT value, value_enc FROM inventory_values WHERE record_id = ? AND field_id = ?', [ctx.record.id, field.id]);
+  const v = row ? { value: row.value, hasSecret: Boolean(row.value_enc) } : undefined;
+  res.render('inventory/_value-display', { field, v, recordId: ctx.record.id, layout: false }, (err, html) => {
+    if (err) return res.status(500).json({ ok: false, error: 'Saved, but the page could not be refreshed. Reload to see it.' });
+    return res.json({ ok: true, changed: labels.length > 0, value: v && !v.hasSecret ? v.value || '' : '', html });
+  });
+});
+
 // Access switch on the profile: Granted / Not granted.
 router.post('/r/:id/access', async (req, res) => {
   const ctx = await getRecord(pool, requireId(req.params.id));
