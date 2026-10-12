@@ -15,7 +15,7 @@ function gdapConfig() {
   const clientId = (process.env.MS_CLIENT_ID || '').trim();
   const secret = (process.env.MS_CLIENT_SECRET || '').trim();
   const missing = [['MS_TENANT_ID', tenant], ['MS_CLIENT_ID', clientId], ['MS_CLIENT_SECRET', secret]].filter(([, v]) => !v).map(([k]) => k);
-  if (missing.length) return { configured: false, message: `GDAP not configured: add ${missing.join(', ')} to .env and restart the portal.` };
+  if (missing.length) return { configured: false, message: `Microsoft Partner (GDAP) not configured: add ${missing.join(', ')} to .env and restart the portal.` };
   return { configured: true, tenant, clientId, secret };
 }
 

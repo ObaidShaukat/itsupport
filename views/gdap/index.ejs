@@ -20,7 +20,7 @@
 
 <% if (!config.configured) { %>
   <div class="flash flash-error gdap-banner" role="alert">
-    <strong>Microsoft Partner (GDAP) not configured.</strong> <%= config.message %>
+    <strong><%= config.message.split(":")[0] %>.</strong> <%= config.message.split(":").slice(1).join(":").trim() %>
     See the README (Microsoft Partner) for the app registration and its read-only permission.
   </div>
 <% } else if (failed) { %>

@@ -5,11 +5,11 @@ const express = require('express');
 const { pool } = require('../db');
 const { str, requireId, toId, flash, backPath } = require('../lib/http');
 const { logActivity } = require('../lib/activity');
-const { gdapConfig } = require('../lib/microsoft-partner/graph');
+const { gdapConfig } = require('../lib/gdap/graph');
 const {
   listRelationships, lastSync, getSettings, saveSetting, LIVE, DEFAULT_PARTNER_URL, alertDays,
-} = require('../lib/microsoft-partner/data');
-const { syncGdap, setLink } = require('../lib/microsoft-partner/sync');
+} = require('../lib/gdap/data');
+const { syncGdap, setLink } = require('../lib/gdap/sync');
 
 const router = express.Router();
 
