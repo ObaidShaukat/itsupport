@@ -1,17 +1,47 @@
 <%- include('../partials/head') %>
-<header class="page-head">
-  <div>
+<%
+  const page = `/tickets/${ticket.id}`;
+  const commentCount = comments.length;
+  const iso = (d) => (d ? new Date(d).toISOString() : '');
+  const when = (d) => `<time datetime="${iso(d)}" title="${fmtDate(d)}">${fmtAgo(d)}</time>`;
+%>
+<header class="tk-head">
+  <div class="tk-head-main">
     <p class="crumbs"><a href="/tickets">Tickets</a> / <a href="/clients/<%= ticket.client_id %>"><%= ticket.client_name %></a></p>
-    <h1><span class="muted">#<%= ticket.id %></span> <%= ticket.title %></h1>
-    <%- include('../partials/record-meta', { meta }) %>
+    <h1 class="tk-title"><span class="tk-no">#<%= ticket.id %></span> <%= ticket.title %></h1>
+    <div class="tk-controls">
+      <a class="tk-client" href="/clients/<%= ticket.client_id %>" title="Open client"><%- icon('briefcase') %><span><%= ticket.client_name %></span></a>
+      <form method="post" action="<%= page %>/status" class="tk-inline" data-autosubmit>
+        <%- csrfField %>
+        <label class="visually-hidden" for="tk-status">Status</label>
+        <select id="tk-status" name="status" class="pill-select status-select is-<%= ticket.status %>">
+          <% for (const [key, label] of Object.entries(ticketStatuses)) { %>
+            <option value="<%= key %>" <%= ticket.status === key ? 'selected' : '' %>><%= label %></option>
+          <% } %>
+        </select>
+        <noscript><button type="submit" class="btn btn-small">Save</button></noscript>
+      </form>
+      <form method="post" action="<%= page %>/priority" class="tk-inline" data-autosubmit>
+        <%- csrfField %>
+        <label class="visually-hidden" for="tk-priority">Priority</label>
+        <select id="tk-priority" name="priority" class="pill-select priority-select is-<%= ticket.priority %>">
+          <% for (const key of ['urgent', 'high', 'normal', 'low']) { %>
+            <option value="<%= key %>" <%= ticket.priority === key ? 'selected' : '' %>><%= ticketPriorities[key] %> priority</option>
+          <% } %>
+        </select>
+        <noscript><button type="submit" class="btn btn-small">Save</button></noscript>
+      </form>
+    </div>
+    <p class="tk-sub">
+      Opened by <%= ticket.created_by_name || 'Deleted user' %> <%- when(ticket.created_at) %>
+      <% if (ticket.updated_at && ticket.updated_by_name) { %> · Updated by <%= ticket.updated_by_name %> <%- when(ticket.updated_at) %><% } %>
+    </p>
   </div>
   <div class="actions">
-    <%- include('../partials/priority', { priority: ticket.priority }) %>
-    <%- include('../partials/status', { status: ticket.status }) %>
     <details class="edit edit-right">
-      <summary class="btn"><%- icon('edit') %><span>Edit</span></summary>
-      <div class="edit-panel">
-        <form method="post" action="/tickets/<%= ticket.id %>" class="form">
+      <summary class="btn btn-small"><%- icon('edit') %><span>Edit</span></summary>
+      <div class="edit-panel edit-panel-wide">
+        <form method="post" action="<%= page %>" class="form">
           <%- csrfField %>
           <label class="field">
             <span>Title</span>
@@ -19,127 +49,165 @@
           </label>
           <label class="field">
             <span>Description</span>
-            <textarea name="description" rows="5" maxlength="10000"><%= ticket.description || '' %></textarea>
+            <textarea name="description" rows="6" maxlength="10000" data-autogrow><%= ticket.description || '' %></textarea>
           </label>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Save</button>
+            <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
             <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
           </div>
         </form>
       </div>
     </details>
-    <%- include('../partials/delete', {
-      action: `/tickets/${ticket.id}/delete`,
-      confirm: `Delete ticket '${ticket.title}'? This cannot be undone.`,
-      text: 'Delete',
-    }) %>
+    <form method="post" action="<%= page %>/delete" class="inline" data-confirm="Delete ticket '<%= ticket.title %>' with its comments and attachments? This cannot be undone.">
+      <%- csrfField %>
+      <button type="submit" class="btn btn-small btn-danger"><%- icon('trash') %><span>Delete</span></button>
+    </form>
   </div>
 </header>
 
-<div class="grid-2 grid-wide-left">
-  <div>
-    <section class="card">
-      <h2>Description</h2>
+<div class="tk-layout">
+  <div class="tk-main">
+    <section class="card tk-card" aria-labelledby="tk-desc-title">
+      <h2 class="tk-section-title" id="tk-desc-title">Description</h2>
       <% if (ticket.description) { %>
-        <p class="pre-line"><%= ticket.description %></p>
+        <div class="tk-description pre-line"><%= ticket.description %></div>
       <% } else { %>
-        <p class="empty">No description.</p>
+        <p class="empty small">No description.</p>
       <% } %>
     </section>
 
-    <section class="card" id="reminders">
-      <%- include('../partials/reminders-panel', { reminders, ticket, users }) %>
-    </section>
-
-    <section class="card" id="comments">
-      <h2>Comments</h2>
-      <% if (!comments.length) { %>
-        <p class="empty">No comments yet.</p>
-      <% } else { %>
-        <ul class="comments">
-          <% for (const c of comments) { %>
-            <li class="comment" id="comment-<%= c.id %>">
-              <div class="comment-meta"><%- avatar({ id: c.user_id, name: c.username }, 'sm') %><strong><%= c.username || 'Deleted user' %></strong> <span class="muted small"><%= fmtDate(c.created_at) %></span></div>
-              <p class="pre-line"><%- c.html %></p>
+    <section class="tk-timeline" id="timeline" aria-labelledby="tk-feed-title">
+      <h2 class="tk-section-title" id="tk-feed-title">Activity <span class="muted">· <%= commentCount %> comment<%= commentCount === 1 ? '' : 's' %></span></h2>
+      <ol class="tk-feed" id="comments">
+        <% for (const entry of timeline) { %>
+          <% if (entry.type === 'event') { const h = entry.item; %>
+            <li class="tk-event">
+              <span class="tk-event-icon" aria-hidden="true"><%- icon(h.new_priority ? 'flag' : h.old_status ? 'arrow-right' : 'plus') %></span>
+              <span class="tk-event-text">
+                <strong><%= h.username || 'Deleted user' %></strong>
+                <% if (h.new_priority) { %>
+                  changed priority <%= ticketPriorities[h.old_priority] || '' %> → <strong><%= ticketPriorities[h.new_priority] %></strong>
+                <% } else if (h.old_status) { %>
+                  changed status <%- include('../partials/status', { status: h.old_status }) %> → <%- include('../partials/status', { status: h.new_status }) %>
+                <% } else { %>
+                  opened the ticket
+                <% } %>
+                <span class="muted">· <%- when(h.created_at) %></span>
+              </span>
+            </li>
+          <% } else { const c = entry.item; const mine = c.user_id === currentUser.id; %>
+            <li class="tk-comment" id="comment-<%= c.id %>">
+              <span class="tk-comment-avatar"><%- avatar({ id: c.user_id, name: c.username }, 'sm') %></span>
+              <article class="tk-bubble">
+                <header class="tk-bubble-head">
+                  <strong><%= c.username || 'Deleted user' %></strong>
+                  <span class="muted"><%- when(c.created_at) %><% if (c.updated_at) { %> · <span title="Edited <%= fmtDate(c.updated_at) %>">edited</span><% } %></span>
+                  <% if (mine) { %>
+                    <div class="tk-bubble-actions">
+                      <details class="edit edit-right">
+                        <summary class="icon-btn" title="Edit comment" aria-label="Edit comment"><%- icon('edit') %></summary>
+                        <div class="edit-panel edit-panel-wide">
+                          <form method="post" action="<%= page %>/comments/<%= c.id %>" class="form">
+                            <%- csrfField %>
+                            <label class="field">
+                              <span>Comment</span>
+                              <textarea name="body" rows="4" maxlength="10000" data-autogrow><%= c.body %></textarea>
+                            </label>
+                            <div class="form-actions">
+                              <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+                              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                            </div>
+                          </form>
+                        </div>
+                      </details>
+                      <form method="post" action="<%= page %>/comments/<%= c.id %>/delete" class="inline" data-confirm="Delete this comment<%= c.files.length ? ' and its attachments' : '' %>? This cannot be undone.">
+                        <%- csrfField %>
+                        <button type="submit" class="icon-btn icon-btn-danger" title="Delete comment" aria-label="Delete comment"><%- icon('trash') %></button>
+                      </form>
+                    </div>
+                  <% } %>
+                </header>
+                <% if (c.body) { %><div class="tk-bubble-body pre-line"><%- c.html %></div><% } %>
+                <% if (c.files.length) { %><div class="tk-bubble-files"><%- include('../partials/attachment-list', { files: c.files, ticketId: ticket.id, back: `${page}#comment-${c.id}` }) %></div><% } %>
+              </article>
             </li>
           <% } %>
-        </ul>
-      <% } %>
-      <form method="post" action="/tickets/<%= ticket.id %>/comments" class="form">
+        <% } %>
+      </ol>
+
+      <form method="post" action="<%= page %>/comments" enctype="multipart/form-data" class="tk-composer" id="composer" data-composer data-dropzone data-paste-files>
         <%- csrfField %>
-        <label class="field">
-          <span>Add a comment <span class="muted">(type @ to mention someone)</span></span>
+        <span class="tk-comment-avatar"><%- avatar({ id: currentUser.id, name: currentUser.name }, 'sm') %></span>
+        <div class="tk-composer-box">
+          <label for="tk-comment" class="visually-hidden">Add a comment</label>
           <div class="mention-box" data-mention-box>
             <div class="mention-backdrop" aria-hidden="true"></div>
-            <textarea name="body" rows="4" required maxlength="10000" autocomplete="off"></textarea>
+            <textarea id="tk-comment" name="body" rows="2" maxlength="10000" autocomplete="off" data-autogrow
+                      placeholder="Write a comment… type @ to mention someone, paste or drop files"></textarea>
           </div>
-        </label>
+          <div class="tk-composer-bar">
+            <%- include('../partials/file-drop', { id: 'tk-comment-files', label: 'Attach' }) %>
+            <span class="muted small tk-composer-hint"><kbd>Ctrl</kbd>+<kbd>Enter</kbd> to post</span>
+            <button type="submit" class="btn btn-primary btn-small"><%- icon('send') %><span>Post</span></button>
+          </div>
+          <p class="field-error small" data-composer-error role="alert" hidden>Write a comment or attach a file.</p>
+          <div class="tk-drop-hint" aria-hidden="true"><%- icon('upload') %><span>Drop files to attach</span></div>
+        </div>
         <template data-mention-users>
           <% for (const u of mentionable) { %>
             <li role="option" data-name="<%= u.name %>"><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %></span></li>
           <% } %>
         </template>
-        <button type="submit" class="btn btn-primary">Post comment</button>
       </form>
     </section>
   </div>
 
-  <div>
-    <section class="card">
-      <h2>Status</h2>
-      <form method="post" action="/tickets/<%= ticket.id %>/status" class="form">
+  <aside class="tk-side" aria-label="Ticket details">
+    <section class="card tk-card">
+      <h2 class="tk-section-title">Details</h2>
+      <dl class="tk-details">
+        <dt>Client</dt><dd><a href="/clients/<%= ticket.client_id %>"><%= ticket.client_name %></a></dd>
+        <dt>Status</dt><dd><%- include('../partials/status', { status: ticket.status }) %></dd>
+        <dt>Priority</dt><dd><%- include('../partials/priority', { priority: ticket.priority }) %></dd>
+        <dt>Created by</dt><dd><span class="person"><%- avatar({ id: ticket.created_by, name: ticket.created_by_name }, 'xs') %><%= ticket.created_by_name || 'Deleted user' %></span></dd>
+        <dt>Created</dt><dd title="<%= fmtDate(ticket.created_at) %>"><%= fmtShort(ticket.created_at) %></dd>
+        <dt>Updated by</dt><dd><% if (ticket.updated_by_name) { %><span class="person"><%- avatar({ id: ticket.updated_by, name: ticket.updated_by_name }, 'xs') %><%= ticket.updated_by_name %></span><% } else { %>–<% } %></dd>
+        <dt>Updated</dt><dd title="<%= fmtDate(ticket.updated_at) %>"><%= fmtShort(ticket.updated_at) %></dd>
+      </dl>
+    </section>
+
+    <section class="card tk-card" id="reminders">
+      <%- include('../partials/reminders-panel', { reminders, ticket, users }) %>
+    </section>
+
+    <section class="card tk-card" id="attachments">
+      <div class="card-head">
+        <h2 class="tk-section-title"><%- icon('paperclip') %> Attachments <span class="muted small">(<%= files.length %>)</span></h2>
+      </div>
+      <form method="post" action="<%= page %>/attachments" enctype="multipart/form-data" class="tk-attach-form" data-dropzone data-attach-form>
         <%- csrfField %>
-        <div class="status-options">
-          <% for (const [key, label] of Object.entries(ticketStatuses)) { %>
-            <label class="status-option">
-              <input type="radio" name="status" value="<%= key %>" <%= ticket.status === key ? 'checked' : '' %>>
-              <span class="badge badge-<%= key %>"><%= label %></span>
-            </label>
-          <% } %>
+        <input type="hidden" name="back" value="<%= page %>#attachments">
+        <div class="tk-dropzone">
+          <%- icon('upload') %>
+          <span>Drop files here or</span>
+          <%- include('../partials/file-drop', { id: 'tk-ticket-files', label: 'Choose files' }) %>
         </div>
-        <button type="submit" class="btn btn-primary">Update status</button>
-      </form>
-    </section>
-
-    <section class="card">
-      <h2>Priority</h2>
-      <form method="post" action="/tickets/<%= ticket.id %>/priority" class="form">
-        <%- csrfField %>
-        <div class="status-options priority-options">
-          <% for (const key of ['urgent', 'high', 'normal', 'low']) { %>
-            <label class="status-option">
-              <input type="radio" name="priority" value="<%= key %>" <%= ticket.priority === key ? 'checked' : '' %>>
-              <%- include('../partials/priority', { priority: key }) %>
-            </label>
-          <% } %>
+        <p class="muted small">Images, PDFs, Office documents, zip, logs, videos. Max 100 MB each.</p>
+        <div class="form-actions" data-attach-actions hidden>
+          <button type="submit" class="btn btn-primary btn-small"><%- icon('upload') %><span>Upload</span></button>
         </div>
-        <button type="submit" class="btn btn-primary">Update priority</button>
       </form>
+      <% if (files.length) { %>
+        <%- include('../partials/attachment-list', { files, ticketId: ticket.id, back: `${page}#attachments`, showWho: true }) %>
+      <% } else { %>
+        <p class="empty small">No attachments yet.</p>
+      <% } %>
     </section>
 
-    <section class="card">
-      <h2>Status &amp; priority history</h2>
-      <ul class="timeline">
-        <% for (const h of history) { %>
-          <li>
-            <div>
-              <% if (h.new_priority) { %>
-                Priority <%= ticketPriorities[h.old_priority] || '' %> <%- icon('arrow-right') %> <strong><%= ticketPriorities[h.new_priority] %></strong>
-              <% } else if (h.old_status) { %>
-                <%= ticketStatuses[h.old_status] %> <%- icon('arrow-right') %> <strong><%= ticketStatuses[h.new_status] %></strong>
-              <% } else { %>
-                Created as <strong><%= ticketStatuses[h.new_status] %></strong>
-              <% } %>
-            </div>
-            <div class="muted small"><%= h.username || 'Deleted user' %> · <%= fmtDate(h.created_at) %></div>
-          </li>
-        <% } %>
-      </ul>
+    <section class="card tk-card">
+      <%- include('../partials/history', { entries: activity.slice().reverse(), open: false }) %>
     </section>
-
-    <section class="card">
-      <%- include('../partials/history', { entries: activity.slice().reverse(), open: true }) %>
-    </section>
-  </div>
+  </aside>
 </div>
+<%- include('../partials/lightbox') %>
 <%- include('../partials/foot') %>

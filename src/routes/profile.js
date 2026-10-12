@@ -29,7 +29,7 @@ const failed = (req, res, message, hash = '') => {
 
 router.get('/', async (req, res) => {
   const [[me]] = await pool.query(
-    'SELECT id, username, display_name, job_title, avatar_file, reminder_channel, date_format, email_signature, created_at FROM users WHERE id = ?',
+    'SELECT id, username, display_name, job_title, avatar_file, notify_channels, date_format, email_signature, created_at FROM users WHERE id = ?',
     [req.user.id]
   );
   const sessions = await listSessions(req.user.id, req.sessionID);

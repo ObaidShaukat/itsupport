@@ -3,6 +3,7 @@ const express = require('express');
 const { pool } = require('../db');
 const { notFound } = require('../lib/http');
 const { isStoredName, storedPath, inlineType } = require('../lib/uploads');
+const { ticketFilePath } = require('../lib/ticket-files');
 
 const router = express.Router();
 
@@ -11,11 +12,13 @@ router.get('/:name', async (req, res, next) => {
   if (!isStoredName(name)) throw notFound();
 
   const [[file]] = await pool.query(`
-    SELECT original_name, kind FROM service_tutorials WHERE file_name = ?
+    SELECT original_name, kind, 'root' AS area FROM service_tutorials WHERE file_name = ?
     UNION ALL
-    SELECT original_name, kind FROM kb_attachments WHERE file_name = ?
+    SELECT original_name, kind, 'root' AS area FROM kb_attachments WHERE file_name = ?
+    UNION ALL
+    SELECT original_name, kind, 'tickets' AS area FROM ticket_attachments WHERE file_name = ?
     LIMIT 1
-  `, [name, name]);
+  `, [name, name, name]);
   if (!file) throw notFound();
 
   res.set({
@@ -34,7 +37,7 @@ router.get('/:name', async (req, res, next) => {
   }
 
   // sendFile handles Range requests, so videos can seek.
-  res.sendFile(storedPath(name), (err) => {
+  res.sendFile(file.area === 'tickets' ? ticketFilePath(name) : storedPath(name), (err) => {
     if (!err) return;
     if (err.code === 'ENOENT' && !res.headersSent) return next(notFound());
     if (!res.headersSent) next(err);

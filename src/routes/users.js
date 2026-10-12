@@ -19,7 +19,7 @@ const password = (value) => (typeof value === 'string' ? value : '');
 const displayName = (value) => str(value, 100) || null;
 
 router.get('/', async (req, res) => {
-  const [users] = await pool.query("SELECT id, username, display_name, job_title, avatar_file, reminder_channel, date_format, email_signature, role, created_at FROM users ORDER BY COALESCE(NULLIF(display_name, ''), username)");
+  const [users] = await pool.query("SELECT id, username, display_name, job_title, avatar_file, notify_channels, date_format, email_signature, role, created_at FROM users ORDER BY COALESCE(NULLIF(display_name, ''), username)");
   res.render('users/index', { title: 'Users', users, reminderChannels: REMINDER_CHANNELS });
 });
 

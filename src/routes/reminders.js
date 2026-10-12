@@ -9,7 +9,7 @@ const { requireId, toId, flash, notFound, safePath } = require('../lib/http');
 const { logActivity } = require('../lib/activity');
 const {
   SNOOZES, reminderContext, readReminderForm, snoozeUntil, clearReminderNotifications, setRecipients, markDone,
-  snoozeFor, namesOf, readRecipients, claimAddedEmails, emailAddedRecipients,
+  snoozeFor, namesOf, readRecipients, claimAddedEmails, emailAddedRecipients, pushAddedRecipients,
 } = require('../lib/reminders');
 
 const router = express.Router();
@@ -40,15 +40,26 @@ async function afterRecipientsChange(conn, r, added) {
   return claimAddedEmails(conn, r.id, added, { wasDone });
 }
 
-// Emails never break the save; problems are in email_log.
-async function sendAddedEmails(rows, adderName) {
-  if (!rows || !rows.length) return;
-  try {
-    await emailAddedRecipients(rows, adderName);
-  } catch (err) {
-    console.error('Reminder "added you" emails failed:', err.message);
+// After commit: emails (only for a reminder already due or done) and a desktop "added
+// you" notification to everyone just added except the person doing it. Never breaks the
+// save; email problems are in email_log.
+async function sendAddedEmails(rows, adderName, push) {
+  if (rows && rows.length) {
+    try {
+      await emailAddedRecipients(rows, adderName);
+    } catch (err) {
+      console.error('Reminder "added you" emails failed:', err.message);
+    }
+  }
+  if (push && push.ids.length) {
+    try {
+      await pushAddedRecipients(push.ids, push.reminder, adderName);
+    } catch (err) {
+      console.error('Reminder "added you" desktop notifications failed:', err.message);
+    }
   }
 }
+const addedPush = (req, reminder, added) => ({ reminder, ids: (added || []).filter((id) => id !== req.user.id) });
 
 function done(req, res, ticketId, message, type = 'success') {
   if (wantsJson(req)) return res.json({ ok: true });
@@ -79,13 +90,15 @@ router.post('/', async (req, res) => {
       [ticket.id, form.note, form.remindAt, form.userIds[0], req.user.id, req.user.id]
     );
     await setRecipients(conn, r.insertId, form.userIds);
+    const reminder = { id: r.insertId, note: form.note, ticket_id: ticket.id, ticket_title: ticket.title };
     await logActivity(conn, req.user, reminderEntry(
       { ticket_id: ticket.id, ticket_title: ticket.title, client_id: ticket.client_id, client_name: ticket.client_name },
       'created', withNote(`Added a reminder for ${form.names} on ${fmt(form.remindAt)}`, form.note)
     ));
-    return {};
+    return { push: addedPush(req, reminder, form.userIds) };
   });
   if (result.error) return failed(req, res, ticketId, result.error);
+  await sendAddedEmails([], req.user.name, result.push);
   return done(req, res, ticketId, 'Saved. Reminder added.', 'saved');
 });
 
@@ -109,10 +122,10 @@ router.post('/:id', async (req, res) => {
     const emails = await afterRecipientsChange(conn, r, added);
     await logActivity(conn, req.user, reminderEntry(r, 'updated',
       withNote(`Edited a reminder for ${form.names} on ${fmt(form.remindAt)}`, form.note), changes));
-    return { r, changed: true, emails };
+    return { r, changed: true, emails, push: addedPush(req, { ...r, note: form.note }, added) };
   });
   if (result.error) return failed(req, res, result.r.ticket_id, result.error);
-  await sendAddedEmails(result.emails, req.user.name);
+  await sendAddedEmails(result.emails, req.user.name, result.push);
   return done(req, res, result.r.ticket_id, result.changed ? 'Saved. Reminder updated.' : 'Saved. Nothing changed.', 'saved');
 });
 
@@ -136,10 +149,10 @@ router.post('/:id/recipients', async (req, res) => {
     await conn.query('UPDATE reminders SET updated_by = ? WHERE id = ?', [req.user.id, r.id]);
     await logActivity(conn, req.user, reminderEntry(r, 'updated',
       withNote(`Changed who a reminder is for (${parts.join('; ')}); now for ${people.names}`, r.note), ['for']));
-    return { r, changed: true, emails };
+    return { r, changed: true, emails, push: addedPush(req, r, added) };
   });
   if (result.error) return failed(req, res, result.r.ticket_id, result.error);
-  await sendAddedEmails(result.emails, req.user.name);
+  await sendAddedEmails(result.emails, req.user.name, result.push);
   return done(req, res, result.r.ticket_id, result.changed ? 'Saved. People updated.' : 'Saved. Nothing changed.', 'saved');
 });
 

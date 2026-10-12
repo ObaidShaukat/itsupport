@@ -61,7 +61,8 @@ async function listTickets({ clientId = null, status, priority, sort, dir }) {
            c.id AS client_id, c.name AS client_name,
            COALESCE(NULLIF(cu.display_name, ''), cu.username) AS created_by, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by,
            (SELECT MIN(r.remind_at) FROM reminders r
-            WHERE r.ticket_id = t.id AND r.status = 'pending') AS next_reminder_at
+            WHERE r.ticket_id = t.id AND r.status = 'pending') AS next_reminder_at,
+           (SELECT COUNT(*) FROM ticket_attachments a WHERE a.ticket_id = t.id) AS attachment_count
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     LEFT JOIN users cu ON cu.id = t.created_by

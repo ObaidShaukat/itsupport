@@ -1,16 +1,18 @@
 <%#
-  Reminder notifications and date format. prefs: { reminder_channel, date_format };
-  reminderChannels: labels from src/lib/profile.js; dateFormats: app.locals.
+  Notifications (any combination of popup / email / desktop) and date format.
+  prefs: { notify_channels, date_format }; reminderChannels: labels (src/lib/notify.js);
+  dateFormats: app.locals.
 %>
+<% const ticked = String(prefs.notify_channels || 'popup,email,desktop').split(','); %>
 <fieldset class="field choice-group">
-  <legend>Reminder notifications</legend>
+  <legend>Notifications</legend>
   <% for (const [key, label] of Object.entries(reminderChannels)) { %>
     <label class="choice">
-      <input type="radio" name="reminder_channel" value="<%= key %>" <%= (prefs.reminder_channel || 'both') === key ? 'checked' : '' %>>
+      <input type="checkbox" name="notify_channels" value="<%= key %>" <%= ticked.includes(key) ? 'checked' : '' %>>
       <span><%= label %></span>
     </label>
   <% } %>
-  <small class="muted">How ticket reminders reach you: a popup in the portal, an email, or both.</small>
+  <small class="muted">How reminders, @mentions and "added to a reminder" reach you. Desktop notifications also need to be turned on in each browser (My profile).</small>
 </fieldset>
 <fieldset class="field choice-group">
   <legend>Date format</legend>

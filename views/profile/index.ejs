@@ -101,6 +101,23 @@
       </form>
     </section>
 
+    <section class="card" id="notifications">
+      <h2>Desktop notifications</h2>
+      <% if (!push.enabled) { %>
+        <p class="muted small"><%= push.message %></p>
+      <% } else { %>
+        <div class="push-toggle" data-push-toggle>
+          <p class="small" data-push-state>Checking this browser…</p>
+          <div class="form-actions">
+            <button type="button" class="btn btn-primary btn-small" data-push-on hidden><%- icon('bell') %><span>Turn on in this browser</span></button>
+            <button type="button" class="btn btn-small" data-push-test hidden>Send a test</button>
+            <button type="button" class="btn btn-ghost btn-small" data-push-off hidden>Turn off in this browser</button>
+          </div>
+          <p class="muted small">Shows reminders, @mentions and reminders you are added to as desktop notifications, even when the portal tab is in the background or closed (while the browser is running). Turn it on in each browser you use. <% if (!push.wanted) { %><strong>"Desktop notification" is not ticked under Preferences, so none will be sent.</strong><% } %></p>
+        </div>
+      <% } %>
+    </section>
+
     <section class="card" id="password">
       <h2>Password</h2>
       <form method="post" action="/profile/password" class="form">

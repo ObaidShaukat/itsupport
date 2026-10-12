@@ -38,6 +38,9 @@
               <% if (t.next_reminder_at) { %>
                 <a href="/tickets/<%= t.id %>#reminders" class="row-reminder" title="Next reminder: <%= fmtDate(t.next_reminder_at) %>" aria-label="Next reminder: <%= fmtDate(t.next_reminder_at) %>"><%- icon('bell') %></a>
               <% } %>
+              <% if (Number(t.attachment_count)) { %>
+                <a href="/tickets/<%= t.id %>#attachments" class="row-files" title="<%= t.attachment_count %> attachment<%= Number(t.attachment_count) === 1 ? '' : 's' %>" aria-label="<%= t.attachment_count %> attachments"><%- icon('paperclip') %><span><%= t.attachment_count %></span></a>
+              <% } %>
             </td>
             <td title="<%= t.client_name %>"><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td>
             <td><%- include('status', { status: t.status }) %></td>

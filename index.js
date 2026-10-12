@@ -16,7 +16,9 @@ const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./src/lib/tickets');
 const { ACTION_LABELS, londonDate } = require('./src/lib/activity');
 const { STOCK_STATUSES, FIELD_TYPES } = require('./src/lib/inventory/fields');
 const { mailStatus } = require('./src/lib/mailer');
-const { sendDueReminderEmails } = require('./src/lib/reminders');
+const { sendDueReminderEmails, sendDueReminderPushes } = require('./src/lib/reminders');
+const { pushStatus } = require('./src/lib/push');
+const { channelsOf } = require('./src/lib/notify');
 const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
 const { avatarHelper } = require('./src/lib/avatars');
 const { setStore } = require('./src/lib/sessions');
@@ -175,6 +177,9 @@ app.use(async (req, res, next) => {
     // Profile pictures (or initials) wherever a user is shown: avatar({ id, name }).
     const [people] = await pool.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name, avatar_file FROM users");
     res.locals.avatar = avatarHelper(people);
+    // Desktop notifications: the VAPID public key for the banner / My profile toggle.
+    const push = pushStatus();
+    res.locals.push = { enabled: push.enabled, publicKey: push.publicKey || '', message: push.message || '', wanted: channelsOf(req.user).has('desktop') };
   }
   next();
 });
@@ -193,6 +198,7 @@ app.use('/report', require('./src/routes/report'));
 app.use('/activity', require('./src/routes/activity-log'));
 app.use('/reminders', require('./src/routes/reminders'));
 app.use('/notifications', require('./src/routes/notifications'));
+app.use('/push', require('./src/routes/push'));
 app.use('/inventory', require('./src/routes/inventory'));
 
 // ---- Errors ----
@@ -220,10 +226,13 @@ const server = app.listen(PORT, () => {
 // Allow up to an hour per request so large uploads (up to 500 MB) are not cut off.
 server.requestTimeout = 60 * 60 * 1000;
 
-// Reminder emails: every minute, email each newly due reminder to its user (once per
-// due time, see src/lib/reminders.js). Without SMTP settings this does nothing.
+// Reminder emails and desktop notifications: every minute, email / push each newly due
+// reminder to its recipients (once per due time, see src/lib/reminders.js). Without SMTP
+// or VAPID settings that part does nothing.
 const mail = mailStatus();
 if (!mail.enabled) console.warn(mail.message);
+const pushSetup = pushStatus();
+if (!pushSetup.enabled) console.warn(pushSetup.message);
 let emailing = false;
 async function emailDueReminders() {
   if (emailing) return;
@@ -232,6 +241,12 @@ async function emailDueReminders() {
     await sendDueReminderEmails();
   } catch (err) {
     console.error('Reminder emails failed:', err.message);
+  }
+  // Desktop notifications for due reminders, on the same timer.
+  try {
+    await sendDueReminderPushes();
+  } catch (err) {
+    console.error('Reminder desktop notifications failed:', err.message);
   } finally {
     emailing = false;
   }

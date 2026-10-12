@@ -7,7 +7,7 @@ const { trackSession } = require('../lib/sessions');
 async function requireAuth(req, res, next) {
   if (!req.session.userId) return res.redirect('/login');
 
-  const [[user]] = await pool.query('SELECT id, username, display_name, job_title, avatar_file, reminder_channel, date_format, role, report_view FROM users WHERE id = ?', [req.session.userId]);
+  const [[user]] = await pool.query('SELECT id, username, display_name, job_title, avatar_file, notify_channels, date_format, role, report_view FROM users WHERE id = ?', [req.session.userId]);
   if (!user) {
     return req.session.destroy(() => res.redirect('/login'));
   }

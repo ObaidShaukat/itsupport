@@ -5,7 +5,16 @@ const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } =
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
 const { ticketReminders, reminderUsers, clearReminderNotifications } = require('../lib/reminders');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
-const { mentionUsers, mentionNames, mentionHtml, recordMentions, emailMentions } = require('../lib/mentions');
+const {
+  mentionUsers, mentionNames, mentionHtml, recordMentions, emailMentions, pushMentions,
+} = require('../lib/mentions');
+const {
+  ticketUploads, insertAttachments, keepTicketFiles, removeTicketFiles, attachmentNames, fileSize,
+} = require('../lib/ticket-files');
+
+// Where to go back to on the ticket page (a same-site path, else the given anchor).
+const backTo = (req, id, hash) => safePath(req.body.back, `/tickets/${id}${hash}`);
+const fileList = (files) => files.map((f) => f.original_name).join(', ');
 
 const ticketEntry = (ticket, type, action, summary) => ({
   type, id: ticket.id, action, summary, clientId: ticket.client_id, clientName: ticket.client_name, subject: ticket.title,
@@ -96,21 +105,40 @@ router.get('/:id', async (req, res) => {
   `, [id]);
   if (!ticket) throw notFound();
   const [comments] = await pool.query(`
-    SELECT tc.id, tc.body, tc.created_at, tc.user_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
+    SELECT tc.id, tc.body, tc.created_at, tc.updated_at, tc.user_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
     FROM ticket_comments tc
     LEFT JOIN users u ON u.id = tc.user_id
     WHERE tc.ticket_id = ?
     ORDER BY tc.created_at, tc.id
   `, [id]);
   const mentions = await mentionNames(pool, comments.map((c) => c.id));
-  for (const c of comments) c.html = mentionHtml(c.body, mentions.get(c.id));
+  const [files] = await pool.query(`
+    SELECT a.id, a.comment_id, a.file_name, a.original_name, a.size_bytes, a.kind, a.created_at, a.uploaded_by,
+           COALESCE(NULLIF(u.display_name, ''), u.username) AS uploaded_name
+    FROM ticket_attachments a
+    LEFT JOIN users u ON u.id = a.uploaded_by
+    WHERE a.ticket_id = ?
+    ORDER BY a.created_at, a.id
+  `, [id]);
+  for (const f of files) f.size = fileSize(f.size_bytes);
+  for (const c of comments) {
+    c.html = mentionHtml(c.body, mentions.get(c.id));
+    c.files = files.filter((f) => f.comment_id === c.id);
+  }
+  const ticketFiles = files.filter((f) => !f.comment_id);
   const [history] = await pool.query(`
-    SELECT th.old_status, th.new_status, th.old_priority, th.new_priority, th.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
+    SELECT th.id, th.user_id, th.old_status, th.new_status, th.old_priority, th.new_priority, th.created_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS username
     FROM ticket_history th
     LEFT JOIN users u ON u.id = th.user_id
     WHERE th.ticket_id = ?
     ORDER BY th.created_at DESC, th.id DESC
   `, [id]);
+  // One timeline, oldest first (newest at the bottom, next to the comment box): comments
+  // and status / priority changes.
+  const timeline = [
+    ...history.map((h) => ({ type: 'event', at: new Date(h.created_at).getTime(), order: 0, item: h })),
+    ...comments.map((c) => ({ type: 'comment', at: new Date(c.created_at).getTime(), order: 1, item: c })),
+  ].sort((a, b) => a.at - b.at || a.order - b.order || a.item.id - b.item.id);
   const activity = await historyFor(['ticket', 'ticket_comment', 'reminder'], [id]);
   const meta = recordMeta(activity, 'ticket', { createdBy: ticket.created_by_name, createdAt: ticket.created_at });
   const reminders = await ticketReminders(id);
@@ -121,7 +149,9 @@ router.get('/:id', async (req, res) => {
     "UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND type = 'mention' AND read_at IS NULL AND link LIKE ?",
     [req.user.id, `/tickets/${id}#%`]
   );
-  res.render('tickets/show', { title: `Ticket #${ticket.id}`, ticket, comments, history, activity, meta, reminders, users, mentionable });
+  res.render('tickets/show', {
+    title: `Ticket #${ticket.id}`, ticket, comments, history, timeline, files, ticketFiles, activity, meta, reminders, users, mentionable,
+  });
 });
 
 router.post('/:id/status', async (req, res) => {
@@ -146,7 +176,7 @@ router.post('/:id/status', async (req, res) => {
     return true;
   });
 
-  flash(req, changed ? 'success' : 'info', changed ? `Status changed to ${TICKET_STATUSES[status]}.` : 'Status unchanged.');
+  flash(req, changed ? 'saved' : 'info', changed ? `Saved. Status changed to ${TICKET_STATUSES[status]}.` : 'Status unchanged.');
   res.redirect(`/tickets/${id}`);
 });
 
@@ -172,7 +202,7 @@ router.post('/:id/priority', async (req, res) => {
     return true;
   });
 
-  flash(req, changed ? 'success' : 'info', changed ? `Priority changed to ${TICKET_PRIORITIES[priority]}.` : 'Priority unchanged.');
+  flash(req, changed ? 'saved' : 'info', changed ? `Saved. Priority changed to ${TICKET_PRIORITIES[priority]}.` : 'Priority unchanged.');
   res.redirect(`/tickets/${id}`);
 });
 
@@ -201,40 +231,161 @@ router.post('/:id', async (req, res) => {
       changes,
     });
   });
-  flash(req, 'success', 'Ticket updated.');
+  flash(req, 'saved', 'Saved. Ticket updated.');
   res.redirect(`/tickets/${id}`);
 });
 
+// After commit: email and desktop notifications for the people newly @mentioned.
+async function notifyMentions({ notify, author, ticket, body, commentId }) {
+  if (!notify.length) return;
+  try {
+    await emailMentions({ users: notify, author, ticket, body, commentId });
+  } catch (err) {
+    console.error('Mention emails failed:', err.message);
+  }
+  try {
+    await pushMentions({ users: notify, author, ticket, body, commentId });
+  } catch (err) {
+    console.error('Mention desktop notifications failed:', err.message);
+  }
+}
+
+// A comment: text and / or attachments (multipart "files", max 100 MB each; pasted
+// screenshots arrive as files too).
 router.post('/:id/comments', async (req, res) => {
   const id = requireId(req.params.id);
   const body = str(req.body.body, 10000);
-  if (!body) {
-    flash(req, 'error', 'Comment cannot be empty.');
-    return res.redirect(`/tickets/${id}#comments`);
+  const upload = ticketUploads(req);
+  if (upload.error) {
+    flash(req, 'error', upload.error);
+    return res.redirect(`/tickets/${id}#composer`);
+  }
+  const { files } = upload;
+  if (!body && !files.length) {
+    flash(req, 'error', 'Write a comment or attach a file.');
+    return res.redirect(`/tickets/${id}#composer`);
   }
   const author = { id: req.user.id, name: req.user.name };
   const saved = await transaction(async (conn) => {
     const ticket = await ticketContext(conn, id, true);
     const [r] = await conn.query('INSERT INTO ticket_comments (ticket_id, user_id, body) VALUES (?, ?, ?)', [id, req.user.id, body]);
-    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', body));
-    // @mentions: stored, a bell notification and (after commit) an email for each person
-    // mentioned except the author. Logged on the ticket History, never on the Daily Report.
+    await insertAttachments(conn, { ticketId: id, commentId: r.insertId, userId: req.user.id, files });
+    const attached = files.length ? ` (attached ${fileList(files)})` : '';
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'commented', `${body || 'Added attachments'}${attached}`));
+    // @mentions: stored, a bell notification and (after commit) an email and desktop
+    // notification for each person mentioned except the author. Logged on the ticket
+    // History, never on the Daily Report.
     const { mentioned, notify } = await recordMentions(conn, { commentId: r.insertId, ticket, author, body });
     if (mentioned.length) {
       await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'sent',
-        `Mentioned ${mentioned.map((u) => u.name).join(', ')} in a comment${notify.length ? ' (notified by bell and email)' : ''}`));
+        `Mentioned ${mentioned.map((u) => u.name).join(', ')} in a comment${notify.length ? ' (notified)' : ''}`));
     }
     await conn.query('UPDATE tickets SET updated_by = ?, updated_at = NOW() WHERE id = ?', [req.user.id, id]);
     return { ticket, commentId: r.insertId, notify };
   });
-  if (saved.notify.length) {
-    try {
-      await emailMentions({ users: saved.notify, author, ticket: saved.ticket, body, commentId: saved.commentId });
-    } catch (err) {
-      console.error('Mention emails failed:', err.message);
-    }
-  }
+  await keepTicketFiles(req, files);
+  await notifyMentions({ ...saved, author, body });
   res.redirect(`/tickets/${id}#comment-${saved.commentId}`);
+});
+
+// The author edits their comment's text. People newly @mentioned are notified; nobody
+// already mentioned is notified again.
+router.post('/:id/comments/:cid', async (req, res) => {
+  const id = requireId(req.params.id);
+  const cid = requireId(req.params.cid);
+  const body = str(req.body.body, 10000);
+  const author = { id: req.user.id, name: req.user.name };
+  const result = await transaction(async (conn) => {
+    const ticket = await ticketContext(conn, id, true);
+    const [[comment]] = await conn.query('SELECT id, user_id, body FROM ticket_comments WHERE id = ? AND ticket_id = ? FOR UPDATE', [cid, id]);
+    if (!comment) throw notFound();
+    if (comment.user_id !== req.user.id) return { error: 'Only the person who wrote a comment can edit it.' };
+    const [[{ n }]] = await conn.query('SELECT COUNT(*) AS n FROM ticket_attachments WHERE comment_id = ?', [cid]);
+    if (!body && !Number(n)) return { error: 'A comment needs text or an attachment. Delete it instead.' };
+    if (body === comment.body) return { ticket, notify: [] };
+    await conn.query('UPDATE ticket_comments SET body = ?, updated_at = NOW() WHERE id = ?', [body, cid]);
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'updated', `Edited a comment: ${body || '(no text)'}`));
+    const { notify } = await recordMentions(conn, { commentId: cid, ticket, author, body });
+    if (notify.length) {
+      await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'sent',
+        `Mentioned ${notify.map((u) => u.name).join(', ')} in an edited comment (notified)`));
+    }
+    await conn.query('UPDATE tickets SET updated_by = ?, updated_at = NOW() WHERE id = ?', [req.user.id, id]);
+    return { ticket, notify, changed: true };
+  });
+  if (result.error) {
+    flash(req, 'error', result.error);
+    return res.redirect(`/tickets/${id}#comment-${cid}`);
+  }
+  await notifyMentions({ notify: result.notify, author, ticket: result.ticket, body, commentId: cid });
+  if (result.changed) flash(req, 'saved', 'Saved. Comment updated.');
+  res.redirect(`/tickets/${id}#comment-${cid}`);
+});
+
+// The author deletes their comment with its attachments (rows and files).
+router.post('/:id/comments/:cid/delete', async (req, res) => {
+  const id = requireId(req.params.id);
+  const cid = requireId(req.params.cid);
+  const result = await transaction(async (conn) => {
+    const ticket = await ticketContext(conn, id, true);
+    const [[comment]] = await conn.query('SELECT id, user_id, body FROM ticket_comments WHERE id = ? AND ticket_id = ? FOR UPDATE', [cid, id]);
+    if (!comment) throw notFound();
+    if (comment.user_id !== req.user.id) return { error: 'Only the person who wrote a comment can delete it.' };
+    const names = await attachmentNames(conn, { commentId: cid });
+    await conn.query('DELETE FROM ticket_comments WHERE id = ?', [cid]);
+    // Its @mention notifications are no longer useful.
+    await conn.query("UPDATE notifications SET read_at = NOW() WHERE type = 'mention' AND read_at IS NULL AND link = ?", [`/tickets/${id}#comment-${cid}`]);
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket_comment', 'deleted',
+      `Deleted a comment: ${comment.body || '(no text)'}${names.length ? ` (with ${names.length} attachment${names.length === 1 ? '' : 's'})` : ''}`));
+    await conn.query('UPDATE tickets SET updated_by = ?, updated_at = NOW() WHERE id = ?', [req.user.id, id]);
+    return { names };
+  });
+  if (result.error) {
+    flash(req, 'error', result.error);
+    return res.redirect(`/tickets/${id}#comment-${cid}`);
+  }
+  await removeTicketFiles(result.names);
+  flash(req, 'saved', 'Comment deleted.');
+  res.redirect(`/tickets/${id}#timeline`);
+});
+
+// Files attached to the ticket itself (Attachments panel: drop, paperclip or paste).
+router.post('/:id/attachments', async (req, res) => {
+  const id = requireId(req.params.id);
+  const upload = ticketUploads(req);
+  if (upload.error || !upload.files.length) {
+    flash(req, 'error', upload.error || 'Choose one or more files to attach.');
+    return res.redirect(backTo(req, id, '#attachments'));
+  }
+  const { files } = upload;
+  await transaction(async (conn) => {
+    const ticket = await ticketContext(conn, id, true);
+    await insertAttachments(conn, { ticketId: id, userId: req.user.id, files });
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket', 'uploaded', `Attached ${fileList(files)}`));
+    await conn.query('UPDATE tickets SET updated_by = ?, updated_at = NOW() WHERE id = ?', [req.user.id, id]);
+  });
+  await keepTicketFiles(req, files);
+  flash(req, 'saved', `Saved. ${files.length === 1 ? 'File' : `${files.length} files`} attached.`);
+  res.redirect(backTo(req, id, '#attachments'));
+});
+
+// Deletes one attachment (of the ticket or of a comment): the row and the file.
+router.post('/:id/attachments/:aid/delete', async (req, res) => {
+  const id = requireId(req.params.id);
+  const aid = requireId(req.params.aid);
+  const file = await transaction(async (conn) => {
+    const ticket = await ticketContext(conn, id, true);
+    const [[row]] = await conn.query('SELECT id, file_name, original_name, comment_id FROM ticket_attachments WHERE id = ? AND ticket_id = ?', [aid, id]);
+    if (!row) throw notFound();
+    await conn.query('DELETE FROM ticket_attachments WHERE id = ?', [aid]);
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket', 'deleted',
+      `Deleted the attachment ${row.original_name}${row.comment_id ? ' from a comment' : ''}`));
+    await conn.query('UPDATE tickets SET updated_by = ?, updated_at = NOW() WHERE id = ?', [req.user.id, id]);
+    return row;
+  });
+  await removeTicketFiles([file.file_name]);
+  flash(req, 'saved', `Deleted ${file.original_name}.`);
+  res.redirect(backTo(req, id, file.comment_id ? `#comment-${file.comment_id}` : '#attachments'));
 });
 
 // Deletes the ticket with its comments and status history (ON DELETE CASCADE).
@@ -246,7 +397,10 @@ router.post('/:id/delete', async (req, res) => {
   await logActivity(null, req.user, ticketEntry(ticket, 'ticket', 'deleted', `Deleted ticket #${id}: ${ticket.title}`));
   // Reminders go with the ticket (ON DELETE CASCADE); their notifications go first.
   await clearReminderNotifications(pool, { ticketId: id, remove: true });
+  // Attachment rows go with the ticket; their files are deleted from disk.
+  const names = await attachmentNames(pool, { ticketId: id });
   await pool.query('DELETE FROM tickets WHERE id = ?', [id]);
+  await removeTicketFiles(names);
   flash(req, 'success', `Ticket #${id} "${ticket.title}" deleted.`);
   res.redirect(safePath(req.body.back, `/clients/${ticket.client_id}#tickets`));
 });

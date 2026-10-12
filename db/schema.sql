@@ -20,7 +20,11 @@ CREATE TABLE IF NOT EXISTS users (
   -- (uploads/avatars), how ticket reminders reach them, and how dates are shown.
   job_title VARCHAR(100) NULL,
   avatar_file VARCHAR(64) NULL,
+  -- No longer used (replaced by notify_channels); kept so existing installs keep working.
   reminder_channel ENUM('popup', 'email', 'both') NOT NULL DEFAULT 'both',
+  -- How reminders, @mentions and "added to a reminder" reach them: any of popup (in the
+  -- portal), email and desktop (Web Push), comma separated.
+  notify_channels VARCHAR(40) NOT NULL DEFAULT 'popup,email,desktop',
   date_format ENUM('d_mon_yyyy', 'dd_mm_yyyy') NOT NULL DEFAULT 'd_mon_yyyy',
   password_hash VARCHAR(255) NOT NULL,
   role VARCHAR(20) NOT NULL DEFAULT 'admin',
@@ -122,6 +126,8 @@ CREATE TABLE IF NOT EXISTS client_service_notes (
   client_service_id INT UNSIGNED NOT NULL,
   user_id INT UNSIGNED NULL,
   body TEXT NOT NULL,
+  -- Set when the author edits the comment ("edited" in the timeline).
+  updated_at DATETIME NULL,
   action_id INT UNSIGNED NULL,
   issue_id INT UNSIGNED NULL,
   report_detail VARCHAR(255) NULL,
@@ -527,11 +533,49 @@ CREATE TABLE IF NOT EXISTS reminder_recipients (
   user_id INT UNSIGNED NOT NULL,
   snoozed_until DATETIME NULL,
   sent_at DATETIME NULL,
+  -- When the desktop (Web Push) notification for the current due time was sent.
+  pushed_at DATETIME NULL,
   done_at DATETIME NULL,
   PRIMARY KEY (reminder_id, user_id),
   KEY idx_reminder_recipients_user (user_id, done_at),
   CONSTRAINT fk_reminder_recipients_reminder FOREIGN KEY (reminder_id) REFERENCES reminders (id) ON DELETE CASCADE,
   CONSTRAINT fk_reminder_recipients_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Files attached to a ticket (comment_id NULL) or to one of its comments. Stored in
+-- UPLOAD_DIR/tickets with random names, served only to signed-in users via /files/:name.
+CREATE TABLE IF NOT EXISTS ticket_attachments (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  ticket_id INT UNSIGNED NOT NULL,
+  comment_id INT UNSIGNED NULL,
+  file_name VARCHAR(64) NOT NULL,
+  original_name VARCHAR(255) NOT NULL,
+  size_bytes BIGINT UNSIGNED NOT NULL,
+  kind ENUM('image', 'video', 'pdf', 'file') NOT NULL,
+  uploaded_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_ticket_attachments_file (file_name),
+  KEY idx_ticket_attachments_ticket (ticket_id, comment_id),
+  CONSTRAINT fk_ticket_attachments_ticket FOREIGN KEY (ticket_id) REFERENCES tickets (id) ON DELETE CASCADE,
+  CONSTRAINT fk_ticket_attachments_comment FOREIGN KEY (comment_id) REFERENCES ticket_comments (id) ON DELETE CASCADE,
+  CONSTRAINT fk_ticket_attachments_user FOREIGN KEY (uploaded_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Desktop notifications (Web Push): one row per browser a user turned them on in.
+-- Expired subscriptions (the push service answers 404 / 410) are deleted automatically.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id INT UNSIGNED NOT NULL,
+  endpoint VARCHAR(700) NOT NULL,
+  p256dh VARCHAR(255) NOT NULL,
+  auth VARCHAR(100) NOT NULL,
+  user_agent VARCHAR(255) NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_push_subscriptions_endpoint (endpoint),
+  KEY idx_push_subscriptions_user (user_id),
+  CONSTRAINT fk_push_subscriptions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- @mentions in ticket comments (each mentioned user is emailed and notified once).

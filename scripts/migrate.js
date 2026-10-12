@@ -20,7 +20,10 @@ const ADDED_COLUMNS = [
   ['users', 'avatar_file', 'VARCHAR(64) NULL AFTER job_title'],
   ['users', 'reminder_channel', "ENUM('popup', 'email', 'both') NOT NULL DEFAULT 'both' AFTER avatar_file"],
   ['users', 'date_format', "ENUM('d_mon_yyyy', 'dd_mm_yyyy') NOT NULL DEFAULT 'd_mon_yyyy' AFTER reminder_channel"],
+  ['users', 'notify_channels', "VARCHAR(40) NOT NULL DEFAULT 'popup,email,desktop' AFTER reminder_channel"],
   ['reminders', 'email_sent_at', 'DATETIME NULL AFTER snoozed_until'],
+  ['reminder_recipients', 'pushed_at', 'DATETIME NULL AFTER sent_at'],
+  ['ticket_comments', 'updated_at', 'DATETIME NULL AFTER body'],
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
   // Inventory entries also point at the person they concern (person timeline).
   ['activity_log', 'related_person_id', 'INT UNSIGNED NULL AFTER changes'],
@@ -75,6 +78,15 @@ const ONE_TIME_STEPS = [
       FROM reminders WHERE for_user_id IS NOT NULL
     `);
     await conn.query('UPDATE reminders SET snoozed_until = NULL, email_sent_at = NULL');
+  }],
+  // Notification preference becomes any combination of popup / email / desktop; the old
+  // popup / email / both choice is kept and desktop is added (it only works once the user
+  // turns desktop notifications on in their browser).
+  ['notify_channels_v1', async (conn) => {
+    await conn.query(`
+      UPDATE users SET notify_channels = CASE reminder_channel
+        WHEN 'popup' THEN 'popup,desktop' WHEN 'email' THEN 'email,desktop' ELSE 'popup,email,desktop' END
+    `);
   }],
   ['inventory_v2_defaults', async (conn) => {
     await conn.beginTransaction();

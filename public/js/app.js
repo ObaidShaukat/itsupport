@@ -2357,3 +2357,358 @@ document.querySelectorAll('[data-autohide]').forEach((toastEl) => {
     setTimeout(() => toastEl.remove(), 300);
   }, 3500);
 });
+
+// ---- Ticket page: inline status / priority, auto-growing boxes, files, lightbox ----
+
+// <form data-autosubmit> with a <select>: changing it saves straight away.
+document.querySelectorAll('form[data-autosubmit] select').forEach((select) => {
+  select.addEventListener('change', () => {
+    select.classList.add('is-saving');
+    select.form.requestSubmit();
+  });
+});
+
+// <textarea data-autogrow>: grows with its text (up to 60% of the window).
+function autogrow(area) {
+  area.style.height = 'auto';
+  const max = Math.round(window.innerHeight * 0.6);
+  area.style.height = `${Math.min(area.scrollHeight + 2, max)}px`;
+  area.style.overflowY = area.scrollHeight + 2 > max ? 'auto' : 'hidden';
+}
+document.querySelectorAll('textarea[data-autogrow]').forEach((area) => {
+  area.addEventListener('input', () => autogrow(area));
+  autogrow(area);
+  // Hidden when the page loads (e.g. inside an edit popover): size it when shown.
+  area.closest('details')?.addEventListener('toggle', () => autogrow(area));
+  area.form?.addEventListener('reset', () => setTimeout(() => autogrow(area)));
+});
+
+// File picking ([data-file-pick]): paperclip (the hidden file input), drag and drop onto
+// the form ([data-dropzone]) and, in the comment box ([data-paste-files]), pasted
+// screenshots. Chosen files show as chips with x; the input's FileList is rebuilt with
+// DataTransfer, so the form posts exactly the files shown. Max 100 MB each.
+const MAX_ATTACH = 100 * 1024 * 1024;
+const sizeText = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+function screenshotName(type) {
+  const p = londonParts(new Date());
+  const ext = (type.split('/')[1] || 'png').replace('jpeg', 'jpg');
+  return `screenshot-${p.date}-${p.time.replace(':', '')}.${ext}`;
+}
+document.querySelectorAll('[data-file-pick]').forEach((pick) => {
+  const input = pick.querySelector('[data-file-input]');
+  const chips = pick.querySelector('[data-file-chips]');
+  const error = pick.querySelector('[data-file-error]');
+  const form = pick.closest('form');
+  if (!input || !form || typeof DataTransfer === 'undefined') return;
+  let files = [];
+  const showError = (msg) => { error.textContent = msg || ''; error.hidden = !msg; };
+
+  function sync() {
+    const dt = new DataTransfer();
+    files.forEach((f) => dt.items.add(f));
+    input.files = dt.files;
+    chips.replaceChildren(...files.map((f, i) => {
+      const li = document.createElement('li');
+      li.className = 'file-chip';
+      if (f.type.startsWith('image/')) {
+        const img = document.createElement('img');
+        img.alt = '';
+        img.src = URL.createObjectURL(f);
+        img.onload = () => URL.revokeObjectURL(img.src);
+        li.appendChild(img);
+      } else {
+        li.appendChild(svgIconEl('file'));
+      }
+      const name = document.createElement('span');
+      name.className = 'file-chip-name';
+      name.textContent = f.name;
+      name.title = f.name;
+      const size = document.createElement('span');
+      size.className = 'muted';
+      size.textContent = sizeText(f.size);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'file-chip-remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remove ${f.name}`);
+      remove.addEventListener('click', (e) => {
+        e.stopPropagation();
+        files.splice(i, 1);
+        sync();
+      });
+      li.append(name, size, remove);
+      return li;
+    }));
+    form.dispatchEvent(new CustomEvent('files-changed', { detail: { count: files.length } }));
+  }
+
+  function add(list) {
+    const incoming = [...list];
+    const big = incoming.filter((f) => f.size > MAX_ATTACH);
+    const ok = incoming.filter((f) => f.size <= MAX_ATTACH);
+    showError(big.length ? `${big.map((f) => f.name).join(', ')} ${big.length === 1 ? 'is' : 'are'} over 100 MB and ${big.length === 1 ? 'was' : 'were'} not added.` : '');
+    files = files.concat(ok).slice(0, 20);
+    sync();
+  }
+  form.addFiles = add;
+
+  input.addEventListener('change', () => {
+    const chosen = [...input.files];
+    // The input now holds only the new choice: put back the earlier ones too.
+    add(chosen);
+  });
+  form.addEventListener('reset', () => { files = []; setTimeout(sync); showError(''); });
+
+  if (form.hasAttribute('data-dropzone')) {
+    let depth = 0;
+    form.addEventListener('dragenter', (e) => {
+      if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+      e.preventDefault();
+      depth += 1;
+      form.classList.add('is-dragging');
+    });
+    form.addEventListener('dragover', (e) => {
+      if (![...(e.dataTransfer?.types || [])].includes('Files')) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    form.addEventListener('dragleave', () => {
+      depth = Math.max(0, depth - 1);
+      if (!depth) form.classList.remove('is-dragging');
+    });
+    form.addEventListener('drop', (e) => {
+      if (!e.dataTransfer?.files?.length) return;
+      e.preventDefault();
+      depth = 0;
+      form.classList.remove('is-dragging');
+      add(e.dataTransfer.files);
+    });
+  }
+
+  if (form.hasAttribute('data-paste-files')) {
+    form.addEventListener('paste', (e) => {
+      const items = [...(e.clipboardData?.items || [])].filter((it) => it.kind === 'file');
+      if (!items.length) return;
+      e.preventDefault();
+      add(items.map((it) => {
+        const f = it.getAsFile();
+        // Screenshots arrive as "image.png": give them a useful name.
+        return f && (/^image\.\w+$/i.test(f.name) || !f.name) && f.type.startsWith('image/') ? new File([f], screenshotName(f.type), { type: f.type }) : f;
+      }).filter(Boolean));
+    });
+  }
+});
+
+// An <svg><use></svg> icon element (the bell code has its own copy).
+function svgIconEl(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('class', 'icon');
+  svg.setAttribute('aria-hidden', 'true');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', `#i-${name}`);
+  svg.appendChild(use);
+  return svg;
+}
+
+// Attachments panel: chosen or dropped files upload straight away.
+document.querySelectorAll('form[data-attach-form]').forEach((form) => {
+  form.addEventListener('files-changed', (e) => {
+    if (!e.detail.count) return;
+    form.classList.add('is-uploading');
+    const label = form.querySelector('.tk-dropzone span');
+    if (label) label.textContent = 'Uploading…';
+    form.requestSubmit();
+  });
+});
+
+// Comment box: Ctrl+Enter (Cmd+Enter) posts; empty comments get an inline message.
+document.querySelectorAll('form[data-composer]').forEach((form) => {
+  const area = form.querySelector('textarea[name="body"]');
+  const error = form.querySelector('[data-composer-error]');
+  const button = form.querySelector('button[type="submit"]');
+  const hasFiles = () => Boolean(form.querySelector('[data-file-input]')?.files?.length);
+  area.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  area.addEventListener('input', () => { error.hidden = true; });
+  form.addEventListener('files-changed', () => { error.hidden = true; });
+  form.addEventListener('submit', (e) => {
+    if (!area.value.trim() && !hasFiles()) {
+      e.preventDefault();
+      error.hidden = false;
+      area.focus();
+      return;
+    }
+    button.disabled = true;
+    button.querySelector('span').textContent = hasFiles() ? 'Uploading…' : 'Posting…';
+  });
+});
+
+// Image lightbox: [data-lightbox="group"] links open the image large; arrows, swipe,
+// Esc and a click on the backdrop work as expected.
+(() => {
+  const dialog = document.querySelector('[data-lightbox-dialog]');
+  if (!dialog || typeof dialog.showModal !== 'function') return;
+  const img = dialog.querySelector('[data-lightbox-img]');
+  const caption = dialog.querySelector('[data-lightbox-caption]');
+  const download = dialog.querySelector('[data-lightbox-download]');
+  const prev = dialog.querySelector('[data-lightbox-prev]');
+  const next = dialog.querySelector('[data-lightbox-next]');
+  let group = [];
+  let index = 0;
+  function show(i) {
+    index = (i + group.length) % group.length;
+    const link = group[index];
+    img.src = link.href;
+    img.alt = link.querySelector('img')?.alt || '';
+    caption.textContent = `${link.dataset.caption || ''}${group.length > 1 ? `  (${index + 1} of ${group.length})` : ''}`;
+    download.href = `${link.href}?download=1`;
+    prev.hidden = next.hidden = group.length < 2;
+  }
+  document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[data-lightbox]');
+    if (!link || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    e.preventDefault();
+    // Each picture once, in page order (the same file can be listed twice).
+    const seen = new Set();
+    group = [...document.querySelectorAll(`a[data-lightbox="${link.dataset.lightbox}"]`)].filter((a) => !seen.has(a.href) && seen.add(a.href));
+    show(Math.max(0, group.findIndex((a) => a.href === link.href)));
+    dialog.showModal();
+  });
+  prev.addEventListener('click', () => show(index - 1));
+  next.addEventListener('click', () => show(index + 1));
+  dialog.querySelector('[data-lightbox-close]').addEventListener('click', () => dialog.close());
+  dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
+  dialog.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') show(index - 1);
+    if (e.key === 'ArrowRight') show(index + 1);
+  });
+  let startX = null;
+  dialog.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; }, { passive: true });
+  dialog.addEventListener('touchend', (e) => {
+    if (startX === null) return;
+    const dx = e.changedTouches[0].clientX - startX;
+    if (Math.abs(dx) > 50) show(index + (dx < 0 ? 1 : -1));
+    startX = null;
+  });
+  dialog.addEventListener('close', () => { img.removeAttribute('src'); });
+})();
+
+// ---- Desktop notifications (Web Push) ----
+// <meta name="push-key"> is present when VAPID is set up. The service worker (/sw.js)
+// shows the notifications. The banner asks once (until dismissed) while this browser has
+// not decided; My profile has the on / off / test buttons for this browser.
+(() => {
+  const meta = document.querySelector('meta[name="push-key"]');
+  const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+  const banner = document.querySelector('[data-push-banner]');
+  const toggle = document.querySelector('[data-push-toggle]');
+  if (!meta || !supported) {
+    if (toggle) toggle.querySelector('[data-push-state]').textContent = 'This browser does not support desktop notifications (or the page is not on https).';
+    return;
+  }
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const DISMISS_KEY = 'itsupport-push-dismissed';
+  const keyBytes = (base64) => {
+    const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+    const raw = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    return Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  };
+  const b64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const post = (url, data) => fetch(url, {
+    method: 'POST', credentials: 'same-origin',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ _csrf: token, ...data }),
+  }).then((r) => r.json().catch(() => ({ ok: false, error: 'Unexpected reply.' })));
+
+  const ready = navigator.serviceWorker.register('/sw.js').then(() => navigator.serviceWorker.ready);
+  const current = () => ready.then((reg) => reg.pushManager.getSubscription());
+
+  async function save(sub) {
+    const json = sub.toJSON();
+    return post('/push/subscribe', { endpoint: sub.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth });
+  }
+  async function enable() {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return { ok: false, error: 'Notifications are blocked for this site. Allow them in the browser\'s site settings, then try again.' };
+    const reg = await ready;
+    const sub = (await reg.pushManager.getSubscription())
+      || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(meta.content) });
+    return save(sub);
+  }
+  async function disable() {
+    const sub = await current();
+    if (!sub) return { ok: true };
+    const endpoint = sub.endpoint;
+    await sub.unsubscribe().catch(() => {});
+    return post('/push/unsubscribe', { endpoint });
+  }
+
+  // Already allowed: make sure the server knows this browser (once per tab session).
+  if (Notification.permission === 'granted') {
+    current().then((sub) => {
+      try { if (sessionStorage.getItem('itsupport-push-synced')) return; } catch (err) { /* ignore */ }
+      if (sub) save(sub).then(() => { try { sessionStorage.setItem('itsupport-push-synced', '1'); } catch (err) { /* ignore */ } });
+    }).catch(() => {});
+  }
+
+  if (banner) {
+    let dismissed = false;
+    try { dismissed = Boolean(localStorage.getItem(DISMISS_KEY)); } catch (err) { /* ignore */ }
+    if (Notification.permission === 'default' && !dismissed) banner.hidden = false;
+    banner.querySelector('[data-push-dismiss]').addEventListener('click', () => {
+      banner.hidden = true;
+      try { localStorage.setItem(DISMISS_KEY, '1'); } catch (err) { /* ignore */ }
+    });
+    banner.querySelector('[data-push-enable]').addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      const result = await enable().catch((err) => ({ ok: false, error: err.message }));
+      const text = banner.querySelector('.push-banner-text');
+      if (result.ok) {
+        text.textContent = 'Desktop notifications are on for this browser.';
+        e.target.remove();
+        setTimeout(() => { banner.hidden = true; }, 3000);
+      } else {
+        text.textContent = result.error || 'Could not turn on desktop notifications.';
+        e.target.disabled = false;
+      }
+    });
+  }
+
+  if (toggle) {
+    const state = toggle.querySelector('[data-push-state]');
+    const on = toggle.querySelector('[data-push-on]');
+    const off = toggle.querySelector('[data-push-off]');
+    const test = toggle.querySelector('[data-push-test]');
+    async function render(message) {
+      const sub = await current().catch(() => null);
+      const blocked = Notification.permission === 'denied';
+      on.hidden = Boolean(sub) || blocked;
+      off.hidden = test.hidden = !sub;
+      state.textContent = message || (blocked
+        ? 'Notifications are blocked for this site in this browser. Allow them in the browser\'s site settings to turn them on.'
+        : sub ? 'On in this browser.' : 'Off in this browser.');
+      state.classList.toggle('is-on', Boolean(sub));
+    }
+    on.addEventListener('click', async () => {
+      on.disabled = true;
+      const r = await enable().catch((err) => ({ ok: false, error: err.message }));
+      on.disabled = false;
+      render(r.ok ? 'On in this browser.' : r.error);
+    });
+    off.addEventListener('click', async () => {
+      await disable().catch(() => {});
+      render('Off in this browser.');
+    });
+    test.addEventListener('click', async () => {
+      test.disabled = true;
+      const r = await post('/push/test', {});
+      test.disabled = false;
+      state.textContent = r.ok ? 'Test sent: it should appear in a moment.' : r.error;
+    });
+    render();
+  }
+})();

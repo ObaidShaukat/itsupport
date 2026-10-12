@@ -1,4 +1,5 @@
 const express = require('express');
+const { attachmentNames, removeTicketFiles } = require('../lib/ticket-files');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound } = require('../lib/http');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
@@ -184,7 +185,10 @@ router.post('/clients/:id/delete', async (req, res) => {
     type: 'client', id, action: 'deleted', clientId: id, clientName: client.name,
     subject: client.name, summary: `Deleted client ${client.name} with its tickets and services`,
   });
+  // Ticket attachments go with the tickets (ON DELETE CASCADE); their files are deleted.
+  const ticketFiles = await attachmentNames(pool, { clientId: id });
   await pool.query('DELETE FROM clients WHERE id = ?', [id]);
+  await removeTicketFiles(ticketFiles);
   flash(req, 'success', 'Client deleted.');
   res.redirect('/clients');
 });

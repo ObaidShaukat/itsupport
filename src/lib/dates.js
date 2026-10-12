@@ -21,7 +21,8 @@ const formatter = (key, options) => {
 };
 
 // { fmtDate(datetime) -> "7 Oct 2026, 15:00", fmtDay(date) -> "7 Oct 2026", fmtTime(datetime) -> "15:00",
-//   fmtShort(datetime) -> "7 Oct, 15:00" (07/10, 15:00; the year is added when it is not this year) }
+//   fmtShort(datetime) -> "7 Oct, 15:00" (07/10, 15:00; the year is added when it is not this year),
+//   fmtAgo(datetime) -> "2h ago" (the short date after a week) }
 // fmtDay takes a DATE column ("YYYY-MM-DD", shown as that calendar day) or a timestamp
 // (shown as its UK day). Empty values give ''.
 function formattersFor(format) {
@@ -56,7 +57,21 @@ function formattersFor(format) {
     if (year.format(d) !== year.format(new Date())) return fmtDate(d);
     return `${shortDay.format(d)}, ${time.format(d)}`;
   };
-  return { fmtDate, fmtDay, fmtTime, fmtShort };
+  // "just now", "5m ago", "2h ago", "yesterday", "3 days ago", then the short date.
+  const fmtAgo = (value) => {
+    const d = valid(value);
+    if (!d) return '';
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    if (days === 1) return 'yesterday';
+    if (days < 7) return `${days} days ago`;
+    return fmtShort(d);
+  };
+  return { fmtDate, fmtDay, fmtTime, fmtShort, fmtAgo };
 }
 
 module.exports = { DATE_FORMATS, DEFAULT_FORMAT, isDateFormat, formattersFor };

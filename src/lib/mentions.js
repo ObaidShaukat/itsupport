@@ -56,12 +56,19 @@ async function mentionNames(db, commentIds) {
   return out;
 }
 
-// Inside the comment transaction: stores the mentions and the bell notifications.
-// Returns the users to email (everyone mentioned except the author).
+// Inside the comment transaction (new or edited comment): stores the mentions and a bell
+// notification for each newly mentioned user. Returns { mentioned, notify }: notify is
+// who to email / push (newly mentioned, never the author). On an edit, people who were
+// already mentioned are not notified again and removed mentions are dropped.
 async function recordMentions(conn, { commentId, ticket, author, body }) {
   const users = findMentioned(body, await mentionUsers(conn));
+  const [before] = await conn.query('SELECT user_id FROM comment_mentions WHERE comment_id = ?', [commentId]);
+  const already = new Set(before.map((r) => r.user_id));
+  const keep = new Set(users.map((u) => u.id));
+  const gone = [...already].filter((id) => !keep.has(id));
+  if (gone.length) await conn.query('DELETE FROM comment_mentions WHERE comment_id = ? AND user_id IN (?)', [commentId, gone]);
   for (const u of users) await conn.query('INSERT IGNORE INTO comment_mentions (comment_id, user_id) VALUES (?, ?)', [commentId, u.id]);
-  const others = users.filter((u) => u.id !== author.id);
+  const others = users.filter((u) => u.id !== author.id && !already.has(u.id));
   const title = `${author.name} mentioned you on #${ticket.id} ${ticket.title}`.slice(0, 255);
   for (const u of others) {
     await conn.query(
@@ -119,4 +126,15 @@ async function emailMentions({ users, author, ticket, body, commentId }) {
   }
 }
 
-module.exports = { mentionUsers, findMentioned, mentionHtml, mentionNames, recordMentions, emailMentions, mentionEmail };
+// After the comment is saved: a desktop notification for each newly mentioned user.
+async function pushMentions({ users, author, ticket, body, commentId }) {
+  const { pushToUsers } = require('./push'); // eslint-disable-line global-require
+  await pushToUsers(users.map((u) => u.id), {
+    title: `${author.name} mentioned you on #${ticket.id} ${ticket.title}`,
+    body: body || 'Open the ticket to see the comment.',
+    url: `/tickets/${ticket.id}#comment-${commentId}`,
+    tag: `mention-${commentId}`,
+  });
+}
+
+module.exports = { mentionUsers, findMentioned, mentionHtml, mentionNames, recordMentions, emailMentions, mentionEmail, pushMentions };

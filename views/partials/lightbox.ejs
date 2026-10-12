@@ -1,0 +1,11 @@
+<%# Image lightbox for [data-lightbox] links (app.js): arrows / swipe between images of the same group, Esc or a click outside closes. %>
+<dialog class="lightbox" data-lightbox-dialog aria-label="Image preview">
+  <figure class="lightbox-figure">
+    <img alt="" data-lightbox-img>
+    <figcaption data-lightbox-caption></figcaption>
+  </figure>
+  <button type="button" class="lightbox-btn lightbox-close" data-lightbox-close aria-label="Close"><%- icon('x') %></button>
+  <button type="button" class="lightbox-btn lightbox-prev" data-lightbox-prev aria-label="Previous image"><%- icon('left') %></button>
+  <button type="button" class="lightbox-btn lightbox-next" data-lightbox-next aria-label="Next image"><%- icon('right') %></button>
+  <a class="lightbox-btn lightbox-download" data-lightbox-download aria-label="Download" title="Download"><%- icon('download') %></a>
+</dialog>

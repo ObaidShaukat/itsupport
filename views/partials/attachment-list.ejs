@@ -1,0 +1,50 @@
+<%#
+  Ticket / comment attachments. files: [{ id, file_name, original_name, size, kind,
+  uploaded_name, created_at }]; ticketId; back: page to return to after a delete.
+  Images are thumbnails that open the lightbox ([data-lightbox] in app.js); other files
+  show an icon, the name and size with a download link. Delete asks for confirmation.
+%>
+<%
+  const images = files.filter((f) => f.kind === 'image');
+  const others = files.filter((f) => f.kind !== 'image');
+  const kindIcon = { pdf: 'file', video: 'monitor', file: 'file' };
+  const ext = (name) => ((/\.([a-z0-9]{1,6})$/i.exec(name) || [])[1] || 'file').toUpperCase();
+%>
+<% if (images.length) { %>
+  <ul class="att-thumbs">
+    <% for (const f of images) { %>
+      <li class="att-thumb">
+        <a href="/files/<%= f.file_name %>" data-lightbox="ticket-<%= ticketId %>" data-caption="<%= f.original_name %> · <%= f.size %>" title="<%= f.original_name %> (<%= f.size %>)">
+          <img src="/files/<%= f.file_name %>" alt="<%= f.original_name %>" loading="lazy">
+        </a>
+        <div class="att-thumb-actions">
+          <a href="/files/<%= f.file_name %>?download=1" class="att-mini" title="Download <%= f.original_name %>" aria-label="Download <%= f.original_name %>"><%- icon('download') %></a>
+          <form method="post" action="/tickets/<%= ticketId %>/attachments/<%= f.id %>/delete" class="inline" data-confirm="Delete <%= f.original_name %>? This cannot be undone.">
+            <%- csrfField %>
+            <input type="hidden" name="back" value="<%= back %>">
+            <button type="submit" class="att-mini att-mini-danger" title="Delete <%= f.original_name %>" aria-label="Delete <%= f.original_name %>"><%- icon('trash') %></button>
+          </form>
+        </div>
+      </li>
+    <% } %>
+  </ul>
+<% } %>
+<% if (others.length) { %>
+  <ul class="att-files">
+    <% for (const f of others) { %>
+      <li class="att-file">
+        <span class="att-type att-type-<%= f.kind %>" aria-hidden="true"><%- icon(kindIcon[f.kind] || 'file') %><span><%= ext(f.original_name) %></span></span>
+        <span class="att-file-main">
+          <a href="/files/<%= f.file_name %><%= f.kind === 'file' ? '?download=1' : '' %>" <%= f.kind === 'file' ? '' : 'target="_blank" rel="noopener"' %> class="att-name" title="<%= f.original_name %>"><%= f.original_name %></a>
+          <span class="muted small"><%= f.size %><% if (locals.showWho && f.uploaded_name) { %> · <%= f.uploaded_name %><% } %></span>
+        </span>
+        <a href="/files/<%= f.file_name %>?download=1" class="att-mini" title="Download <%= f.original_name %>" aria-label="Download <%= f.original_name %>"><%- icon('download') %></a>
+        <form method="post" action="/tickets/<%= ticketId %>/attachments/<%= f.id %>/delete" class="inline" data-confirm="Delete <%= f.original_name %>? This cannot be undone.">
+          <%- csrfField %>
+          <input type="hidden" name="back" value="<%= back %>">
+          <button type="submit" class="att-mini att-mini-danger" title="Delete <%= f.original_name %>" aria-label="Delete <%= f.original_name %>"><%- icon('trash') %></button>
+        </form>
+      </li>
+    <% } %>
+  </ul>
+<% } %>

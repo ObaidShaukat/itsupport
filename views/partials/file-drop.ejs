@@ -1,0 +1,12 @@
+<%#
+  File picker used by the comment box and the Attachments panel: a paperclip button
+  (hidden <input type="file" name="files" multiple>), drag and drop onto the closest
+  [data-dropzone], and (comment box) pasted screenshots. Chosen files show as chips with
+  x before sending ([data-file-pick] in app.js). id: unique id; label: button text.
+%>
+<div class="file-pick" data-file-pick>
+  <input type="file" name="files" id="<%= id %>" multiple class="visually-hidden" data-file-input>
+  <label for="<%= id %>" class="btn btn-small btn-ghost file-pick-button" title="Attach files (max 100 MB each)"><%- icon('paperclip') %><span><%= locals.label || 'Attach' %></span></label>
+  <ul class="file-chips" data-file-chips aria-live="polite"></ul>
+  <p class="field-error small" data-file-error role="alert" hidden></p>
+</div>

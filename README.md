@@ -48,10 +48,11 @@ Fill in:
 | `SESSION_SECRET` | Long random string. Generate one with `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"` |
 | `COOKIE_SECURE` | `true` when users reach the portal over HTTPS |
 | `TRUST_PROXY` | `true` when running behind nginx, IIS or another reverse proxy |
-| `UPLOAD_DIR` | Optional. Folder for uploaded files (profile pictures go in its `avatars` subfolder). Defaults to `uploads/` in the app folder |
+| `UPLOAD_DIR` | Optional. Folder for uploaded files (profile pictures go in its `avatars` subfolder, ticket attachments in `tickets`). Defaults to `uploads/` in the app folder |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` | Mail server for reminder emails and sent reports. Port 587 uses STARTTLS (465 uses TLS) |
 | `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` | Address and name emails are sent from (e.g. `it@cleartwo.co.uk`, `Cleartwo IT Support`) |
 | `APP_URL` | Address of the portal, e.g. `https://support.cleartwo.co.uk`, used for the "Open ticket" button in reminder emails |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Desktop notifications (Web Push). Generate the keys once with `npx web-push generate-vapid-keys` (in the app folder) and keep them; `VAPID_SUBJECT` is `mailto:` plus a contact address, e.g. `mailto:it@cleartwo.co.uk`. Browsers only allow desktop notifications when the portal is on https. Left empty, desktop notifications are off and the rest works as before |
 | `ENCRYPTION_KEY` | 64 hex characters used to encrypt inventory passwords and PINs. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and keep a safe copy: if it is lost or changed, saved passwords cannot be read |
 
 If any of the SMTP or `MAIL_FROM_EMAIL` settings is missing, email is turned off: the portal keeps working, reminders still pop up, and Send report explains what to add. Restart the portal after changing `.env`.
@@ -109,7 +110,11 @@ pm2 restart itsupport
 
 ## Tickets
 
-Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as glowing LED flags (Low green, Normal cyan, High amber, Urgent red) that all pulse together. Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time).
+Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as glowing LED flags (Low green, Normal cyan, High amber, Urgent red) that all pulse together. Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time). A paperclip with a number in the list shows how many attachments a ticket has.
+
+- **Ticket page:** the header has the number, title, client (link) and the status and priority as dropdowns that save as soon as you change them, with who opened and last updated it. On the left: the description, then one timeline with the comments (newest at the bottom) and status / priority changes. On the right: Details, Reminders, Attachments and History (on a phone these move below). Comments show the author, picture and time ("2h ago"; hover for the full date); hover your own comment to edit or delete it.
+- **Comment box:** pinned at the bottom of the timeline. It grows as you type, supports @mentions, the paperclip, dropping files onto it and pasting screenshots (Ctrl+V). Ctrl+Enter posts.
+- **Attachments:** attach files to the ticket (Attachments panel: drop files or Choose files, they upload straight away) or to a comment. Any file type, up to 100 MB each, several at once. Images show as thumbnails that open large (arrow keys move between them); other files show an icon, name and size with a download button. Deleting asks first and removes the file from disk; deleting a comment, ticket or client removes its files too. Attachments are stored in `uploads/tickets` (or `UPLOAD_DIR/tickets`) and only signed-in users can open them. Uploads and deletes are in the ticket History, never on the Daily Report.
 
 ## Inventory (internal)
 
@@ -137,6 +142,16 @@ Type `@` in a ticket's comment box to pick a portal user (avatar and name; type 
 - When the comment is posted, each person mentioned (except the author) gets a bell notification and an email from `MAIL_FROM_NAME <MAIL_FROM_EMAIL>`, subject "{Author} mentioned you on #{ticket} {title}", with the client, ticket title, the comment and an Open ticket button (needs `APP_URL`). The email goes to their username when it is an email address; every attempt is in `email_log`.
 - Mentions are stored in `comment_mentions` (created by `npm run migrate`) and logged in the ticket's History, never on the Daily Report.
 
+## Desktop notifications
+
+Desktop notifications use Web Push (the `web-push` package, a service worker at `/sw.js` and the `push_subscriptions` table, created by `npm run migrate`). To turn them on:
+
+1. In the app folder run `npx web-push generate-vapid-keys` and put the two keys in `.env` as `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`, with `VAPID_SUBJECT=mailto:it@cleartwo.co.uk`.
+2. Restart the portal (`pm2 restart itsupport`). The portal must be on https for browsers to allow notifications.
+3. Each person clicks **Enable** on the banner (or My profile → Desktop notifications) and allows notifications in their browser.
+
+They are sent for reminders when due, @mentions and being added to a reminder, to people who have "Desktop notification" ticked under Notifications. The in-portal popup and email work as before. Clicking one opens the ticket. Subscriptions a browser no longer uses are removed automatically.
+
 ## Ticket reminders
 
 Each ticket page has a **Reminders** panel listing pending reminders (soonest first) and done ones. You can add, edit, delete and mark them done.
@@ -159,7 +174,8 @@ Each ticket page has a **Reminders** panel listing pending reminders (soonest fi
 - **My profile:** click your name or picture in the sidebar or top bar. You can change:
   - **Profile picture:** choose a JPG, PNG or WebP (phone photos are fine) and a Crop picture popup opens: drag to move, zoom with the slider, mouse wheel or a pinch, rotate 90°, or reset, with a live preview of the round picture. Save uploads just the cropped square (a 512 × 512 JPG); Cancel, Esc or a click outside cancels. It is stored at 256 × 256 and shown in the sidebar, top bar, comments, history, the Users list and created / updated by columns. Without a picture you get a coloured circle with your initials. Remove picture takes it away.
   - **Display name and job title:** the job title shows under your name on your profile and in the Users list, and `{job_title}` in your signature is replaced by it.
-  - **Reminder notifications:** Popup only, Email only, or Both (default).
+  - **Notifications:** any combination of Popup in the portal, Email and Desktop notification (all three by default). They apply to reminders, @mentions and being added to a reminder.
+  - **Desktop notifications:** turn them on (or off) for the browser you are using, and send yourself a test. After signing in, a banner also offers "Enable desktop notifications" until you allow or dismiss it. They appear even when the portal tab is in the background or closed, as long as the browser is running. Turn them on in each browser you use.
   - **Date format:** "7 Oct 2026" (default) or "07/10/2026", used for every date the portal shows you. Times are 24-hour UK time.
   - **Email signature** and **password** (your current password is needed; changing it signs out your other sessions).
   - **Active sessions:** every device you are signed in on, with browser, IP address, when you signed in and when it was last active. "This device" is marked. Sign out any other session, or all other sessions at once.
@@ -183,9 +199,9 @@ Every create, update and delete (tickets, comments, client services, steps, note
 
 ## Uploads
 
-Tutorials (on each service) and knowledge base attachments are stored on disk in `uploads/`, or in `UPLOAD_DIR` if you set it. Files are saved under random names, kept out of `public/`, and only served to signed-in users at `/files/<name>`.
+Tutorials (on each service), knowledge base attachments and ticket attachments (in the `tickets` subfolder) are stored on disk in `uploads/`, or in `UPLOAD_DIR` if you set it. Files are saved under random names, kept out of `public/`, and only served to signed-in users at `/files/<name>`.
 
-- **Size limit:** 500 MB per file. Large uploads are allowed up to an hour per request.
+- **Size limit:** 500 MB per file (100 MB for ticket attachments). Large uploads are allowed up to an hour per request.
 - **What opens in the browser:** images (png, jpg, gif, webp, avif, bmp), videos (mp4, webm) and PDFs. Every other file type, including SVG and HTML, is always downloaded, never opened in the page.
 - **Reverse proxy:** if nginx sits in front of the app, raise its limits or large uploads will fail with "413 Request Entity Too Large":
 
@@ -197,7 +213,7 @@ Tutorials (on each service) and knowledge base attachments are stored on disk in
 
   IIS (`maxAllowedContentLength`) and other proxies have equivalent settings.
 - **Backups:** `uploads/` is git-ignored and is not in the database. Back it up together with the MySQL database.
-- **Cleanup:** deleting a tutorial, an attachment, an article, a service or a category also deletes its files from disk.
+- **Cleanup:** deleting a tutorial, an attachment, an article, a service, a category, a comment, a ticket or a client also deletes its files from disk.
 
 ## Branding assets
 

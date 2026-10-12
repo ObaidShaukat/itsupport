@@ -15,6 +15,8 @@ const { str, toId } = require('./http');
 const { londonDate, londonDayStart, londonLocalToUtc, toLondonInput } = require('./activity');
 const { addDays } = require('./report');
 const { formattersFor } = require('./dates');
+const { channelsOf } = require('./notify');
+const { pushToUser, pushToUsers } = require('./push');
 
 const DUE_AT = 'COALESCE(rr.snoozed_until, r.remind_at)';
 const USER_NAME = (alias) => `COALESCE(NULLIF(${alias}.display_name, ''), ${alias}.username)`;
@@ -147,8 +149,13 @@ async function claimAddedEmails(conn, reminderId, addedIds, { wasDone = false } 
     JOIN clients c ON c.id = t.client_id
     JOIN users u ON u.id = rr.user_id
     WHERE rr.reminder_id = ? AND rr.user_id IN (?) AND rr.sent_at IS NULL AND rr.done_at IS NULL
-      AND u.reminder_channel IN ('email', 'both')
+      AND FIND_IN_SET('email', u.notify_channels)
   `, [reminderId, addedIds]);
+  const [[state]] = await conn.query('SELECT remind_at <= NOW() AS past FROM reminders WHERE id = ?', [reminderId]);
+  // Already due (or done): their desktop "added you" notification stands in for the due one.
+  if (wasDone || Number(state && state.past)) {
+    await conn.query('UPDATE reminder_recipients SET pushed_at = NOW() WHERE reminder_id = ? AND user_id IN (?) AND pushed_at IS NULL', [reminderId, addedIds]);
+  }
   const now = rows.filter((r) => wasDone || Number(r.is_past));
   for (const r of now) await conn.query('UPDATE reminder_recipients SET sent_at = NOW() WHERE reminder_id = ? AND user_id = ?', [r.id, r.user_id]);
   return now;
@@ -207,7 +214,7 @@ async function setRecipients(conn, reminderId, userIds, { resetTimes = false } =
     await conn.query('INSERT INTO reminder_recipients (reminder_id, user_id) VALUES (?, ?)', [reminderId, uid]);
   }
   if (resetTimes) {
-    await conn.query('UPDATE reminder_recipients SET snoozed_until = NULL, sent_at = NULL WHERE reminder_id = ?', [reminderId]);
+    await conn.query('UPDATE reminder_recipients SET snoozed_until = NULL, sent_at = NULL, pushed_at = NULL WHERE reminder_id = ?', [reminderId]);
     await clearReminderNotifications(conn, { reminderId });
   }
   await conn.query('UPDATE reminders SET for_user_id = ? WHERE id = ?', [userIds[0] || null, reminderId]);
@@ -236,7 +243,7 @@ async function markDone(conn, reminder, userId, { everyone = false } = {}) {
 
 // One recipient snoozes it for themselves.
 async function snoozeFor(conn, reminder, userId, until) {
-  const [r] = await conn.query('UPDATE reminder_recipients SET snoozed_until = ?, sent_at = NULL WHERE reminder_id = ? AND user_id = ? AND done_at IS NULL',
+  const [r] = await conn.query('UPDATE reminder_recipients SET snoozed_until = ?, sent_at = NULL, pushed_at = NULL WHERE reminder_id = ? AND user_id = ? AND done_at IS NULL',
     [until, reminder.id, userId]);
   await clearReminderNotifications(conn, { reminderId: reminder.id, userId });
   return r.affectedRows > 0;
@@ -274,11 +281,11 @@ async function createDueNotifications(userId) {
 // The bell: the user's own pending reminders that are due now (today, UK), missed (due
 // before today) or upcoming (next 7 days), plus unread @mentions. Toasts are the due and
 // missed reminders; isNew is true the first time one is shown (the sound plays once).
-// users.reminder_channel: 'popup' and 'both' get notifications, toasts and the sound;
-// 'email' only still sees the bell list, but no popups.
+// users.notify_channels: with 'popup' they get notifications, toasts and the sound;
+// without it they still see the bell list, but no popups.
 async function bellFor(user, fmtDate) {
   const userId = user.id;
-  const popup = user.reminder_channel !== 'email';
+  const popup = channelsOf(user).has('popup');
   if (popup) await createDueNotifications(userId);
   const todayStart = londonDayStart(londonDate());
   const [rows] = await pool.query(`
@@ -380,7 +387,7 @@ async function sendDueReminderEmails() {
       JOIN tickets t ON t.id = r.ticket_id
       JOIN clients c ON c.id = t.client_id
       JOIN users u ON u.id = rr.user_id
-      WHERE r.status = 'pending' AND rr.done_at IS NULL AND rr.sent_at IS NULL AND u.reminder_channel IN ('email', 'both')
+      WHERE r.status = 'pending' AND rr.done_at IS NULL AND rr.sent_at IS NULL AND FIND_IN_SET('email', u.notify_channels)
         AND ${DUE_AT} <= NOW() AND ${DUE_AT} > DATE_SUB(NOW(), INTERVAL 1 DAY)
       ORDER BY ${DUE_AT}, r.id
       LIMIT 50
@@ -401,8 +408,56 @@ async function sendDueReminderEmails() {
   return claimed.length;
 }
 
+// ---- Desktop notifications (Web Push) ----
+// Called with the email timer: each recipient with "desktop" in notify_channels and a
+// browser subscribed gets one push per due time (pushed_at is claimed first; snooze and
+// time edits clear it). Like emails, only reminders due in the last 24 hours.
+async function sendDueReminderPushes() {
+  const { pushStatus } = require('./push'); // eslint-disable-line global-require
+  if (!pushStatus().enabled) return 0;
+  const claimed = await transaction(async (conn) => {
+    const [due] = await conn.query(`
+      SELECT r.id, r.note, r.ticket_id, rr.user_id, ${DUE_AT} AS due_at, t.title, c.name AS client_name
+      FROM reminder_recipients rr
+      JOIN reminders r ON r.id = rr.reminder_id
+      JOIN tickets t ON t.id = r.ticket_id
+      JOIN clients c ON c.id = t.client_id
+      JOIN users u ON u.id = rr.user_id
+      WHERE r.status = 'pending' AND rr.done_at IS NULL AND rr.pushed_at IS NULL AND FIND_IN_SET('desktop', u.notify_channels)
+        AND EXISTS (SELECT 1 FROM push_subscriptions s WHERE s.user_id = rr.user_id)
+        AND ${DUE_AT} <= NOW() AND ${DUE_AT} > DATE_SUB(NOW(), INTERVAL 1 DAY)
+      ORDER BY ${DUE_AT}, r.id
+      LIMIT 100
+      FOR UPDATE
+    `);
+    for (const r of due) await conn.query('UPDATE reminder_recipients SET pushed_at = NOW() WHERE reminder_id = ? AND user_id = ?', [r.id, r.user_id]);
+    return due;
+  });
+  for (const r of claimed) {
+    await pushToUser(r.user_id, {
+      title: `Reminder: ${r.note || `#${r.ticket_id} ${r.title}`}`,
+      body: `#${r.ticket_id} ${r.title} · ${r.client_name}`,
+      url: `/tickets/${r.ticket_id}#reminders`,
+      tag: `reminder-${r.id}`,
+    }).catch((err) => console.error('Reminder desktop notification failed:', err.message));
+  }
+  return claimed.length;
+}
+
+// "{User} added you to a reminder" as a desktop notification to the people just added.
+async function pushAddedRecipients(userIds, reminder, adderName) {
+  if (!userIds.length) return;
+  const ticket = `#${reminder.ticket_id} ${reminder.ticket_title}`;
+  await pushToUsers(userIds, {
+    title: `${adderName} added you to a reminder`,
+    body: reminder.note ? `${reminder.note} (${ticket})` : ticket,
+    url: `/tickets/${reminder.ticket_id}#reminders`,
+    tag: `reminder-added-${reminder.id}`,
+  });
+}
+
 module.exports = {
-  sendDueReminderEmails, reminderEmail,
+  sendDueReminderEmails, sendDueReminderPushes, pushAddedRecipients, reminderEmail,
   SNOOZES, reminderUsers, ticketReminders, reminderContext, readReminderForm, readRecipients, readWhen, snoozeUntil,
   claimAddedEmails, emailAddedRecipients,
   clearReminderNotifications, setRecipients, markDone, snoozeFor, namesOf, bellFor,

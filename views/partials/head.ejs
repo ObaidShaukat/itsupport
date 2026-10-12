@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <% if (locals.csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>"><% } %>
+  <% if (locals.currentUser && locals.push && push.enabled) { %><meta name="push-key" content="<%= push.publicKey %>" data-wanted="<%= push.wanted ? '1' : '0' %>"><% } %>
   <title><%= locals.title ? title + ' · ' : '' %>Cleartwo IT Support</title>
   <% if (fonts.needPoppins) { %>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -58,7 +59,7 @@
           <%- icon('bell') %><span class="bell-count" data-bell-count hidden>0</span>
         </button>
         <div class="bell-panel card" data-bell-panel hidden>
-          <div class="bell-head"><strong>Reminders</strong></div>
+          <div class="bell-head"><strong>Notifications</strong></div>
           <div class="bell-list" data-bell-list><p class="empty small">Loading…</p></div>
         </div>
       </div>
@@ -70,6 +71,14 @@
 <div class="shell shell-bare">
   <main class="main">
 <% } %>
+    <% if (locals.currentUser && locals.push && push.enabled && push.wanted) { %>
+      <div class="push-banner" data-push-banner role="region" aria-label="Desktop notifications" hidden>
+        <span class="push-banner-icon" aria-hidden="true"><%- icon('bell') %></span>
+        <span class="push-banner-text"><strong>Enable desktop notifications</strong> for reminders, @mentions and reminders you are added to, even when this tab is in the background.</span>
+        <button type="button" class="btn btn-primary btn-small" data-push-enable>Enable</button>
+        <button type="button" class="icon-btn" data-push-dismiss title="Not now" aria-label="Not now"><%- icon('x') %></button>
+      </div>
+    <% } %>
     <% if (locals.flash && flash.type !== 'saved') { %>
       <div class="flash flash-<%= flash.type %>" role="status"><%= flash.message %></div>
     <% } %>
