@@ -1,22 +1,22 @@
 <%- include('../partials/head') %>
 <header class="page-head">
   <div>
-    <h1>General IT Support</h1>
-    <p class="muted">Known issues and how to fix them.</p>
+    <h1>Articles</h1>
+    <p class="muted">Known issues and how to fix them, written up as articles.</p>
   </div>
   <div class="actions">
-    <a href="/kb/new" class="btn btn-primary"><%- icon('plus') %><span>New article</span></a>
+    <a href="/articles/new" class="btn btn-primary"><%- icon('plus') %><span>New article</span></a>
   </div>
 </header>
 
-<%- include('../partials/search', { target: '#kb-list', placeholder: 'Search titles, tags and issues' }) %>
+<%- include('../partials/search', { target: '#kb-list', placeholder: 'Search articles: titles, tags and issues' }) %>
 
 <section class="card" id="kb-list">
   <% if (categories.length) { %>
     <nav class="filters" aria-label="Filter by category">
-      <a href="/kb" class="<%= !category ? 'active' : '' %>">All <span class="count"><%= total %></span></a>
+      <a href="/articles" class="<%= !category ? 'active' : '' %>">All <span class="count"><%= total %></span></a>
       <% for (const c of categories) { %>
-        <a href="/kb?category=<%= encodeURIComponent(c.name) %>" class="<%= category === c.name ? 'active' : '' %>"><%= c.name %> <span class="count"><%= c.count %></span></a>
+        <a href="/articles?category=<%= encodeURIComponent(c.name) %>" class="<%= category === c.name ? 'active' : '' %>"><%= c.name %> <span class="count"><%= c.count %></span></a>
       <% } %>
     </nav>
   <% } %>
@@ -29,7 +29,7 @@
       <% for (const a of articles) { %>
         <li class="row" data-filter-item data-search="<%= [a.title, a.category, a.tags, a.issue_preview].filter(Boolean).join(' ') %>">
           <div class="row-main">
-            <a href="/kb/<%= a.id %>" class="kb-title"><%= a.title %></a>
+            <a href="/articles/<%= a.id %>" class="kb-title"><%= a.title %></a>
             <div class="kb-meta">
               <span class="chip chip-category"><%= a.category %></span>
               <% for (const t of a.tagList) { %><span class="chip"><%= t %></span><% } %>

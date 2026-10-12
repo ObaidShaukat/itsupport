@@ -20,7 +20,7 @@ const PREVIEW_ROWS = 300; // per sheet
 
 router.get('/workbook', async (req, res) => {
   const tabs = await listTabs();
-  res.render('inventory/workbook/index', { title: 'Inventory workbook', tabs, key: keyStatus(), error: req.query.error || null });
+  res.render('inventory/workbook/index', { title: 'Import / Export (Excel)', tabs, key: keyStatus(), error: req.query.error || null });
 });
 
 // ---- Export ----
@@ -99,7 +99,7 @@ router.get('/workbook/import/:token', async (req, res) => {
     sheets.push({ i, sheet, scope, targets, columns, newTypes: scope.kind === 'stock' ? CATEGORY_TYPES : Object.keys(FIELD_TYPES) });
   }
   res.render('inventory/workbook/map', {
-    title: 'Import workbook', stage, token: req.params.token, sheets, tabs: tabs.filter((t) => t.kind !== 'ex_employees'),
+    title: 'Import / Export: import', stage, token: req.params.token, sheets, tabs: tabs.filter((t) => t.kind !== 'ex_employees'),
     fieldTypes: FIELD_TYPES, error: req.query.error || null, notice: req.query.notice || null,
   });
 });
@@ -162,7 +162,7 @@ router.get('/workbook/import/:token/preview', async (req, res) => {
   for (const r of results) for (const k of Object.keys(totals)) totals[k] += r.plan.counts[k];
   const skippedSheets = stage.sheets.filter((s) => s.target === 'skip');
   res.render('inventory/workbook/preview', {
-    title: 'Import workbook', stage, token: req.params.token, results, totals, skippedSheets, previewRows: PREVIEW_ROWS,
+    title: 'Import / Export: import', stage, token: req.params.token, results, totals, skippedSheets, previewRows: PREVIEW_ROWS,
   });
 });
 
@@ -211,7 +211,7 @@ router.post('/workbook/import/:token/confirm', async (req, res) => {
   });
   const report = await errorReport(results);
   files.deleteStage(req.params.token);
-  res.render('inventory/workbook/done', { title: 'Workbook imported', stage, results, report });
+  res.render('inventory/workbook/done', { title: 'Import / Export: imported', stage, results, report });
 });
 
 module.exports = router;

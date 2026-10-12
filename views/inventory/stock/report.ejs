@@ -2,7 +2,7 @@
 <header class="page-head">
   <div>
     <h1>Stock breakdown</h1>
-    <p class="muted">Category, brand and model with how many there are and who is using them (sold and disposed items are left out). Laptops, desktops and Macs are grouped Windows / Apple; mice by connection type.</p>
+    <p class="muted">Category, brand and model with how many there are, how many are in stock and who is using them (sold and disposed items are left out). Laptops, desktops and Macs are grouped Windows / Apple; mice by connection type.</p>
   </div>
   <div class="actions">
     <a href="/inventory/stock/report.csv" class="btn"><%- icon('download') %><span>CSV</span></a>
@@ -11,40 +11,74 @@
 </header>
 <%- include('_nav', { active: 'report' }) %>
 
-<%- include('../../partials/search', { target: '#breakdown', placeholder: 'Search category, brand, model or person' }) %>
-<div id="breakdown" class="breakdown">
+<div class="bd-cards">
+  <div class="bd-card"><span class="bd-card-value"><%= totals.total %></span><span class="bd-card-label">Total items</span></div>
+  <div class="bd-card bd-card-assigned"><span class="bd-card-value"><%= totals.assigned %></span><span class="bd-card-label">Assigned</span></div>
+  <div class="bd-card bd-card-stock"><span class="bd-card-value"><%= totals.available %></span><span class="bd-card-label">In stock</span></div>
+  <div class="bd-card bd-card-repair"><span class="bd-card-value"><%= totals.repair %></span><span class="bd-card-label">Repair / Damaged</span></div>
+</div>
+
+<div class="bd-toolbar">
+  <%- include('../../partials/search', { target: '#breakdown', placeholder: 'Search category, brand, model or person' }) %>
+  <div class="bd-toggle-all">
+    <button type="button" class="btn btn-small btn-ghost" data-bd-all="open"><%- icon('down') %><span>Expand all</span></button>
+    <button type="button" class="btn btn-small btn-ghost" data-bd-all="close"><%- icon('up') %><span>Collapse all</span></button>
+  </div>
+</div>
+
+<div id="breakdown" class="breakdown" data-breakdown>
   <% const withItems = report.filter((c) => c.total); %>
   <% if (!withItems.length) { %><p class="empty card">No stock yet.</p><% } %>
   <% for (const cat of withItems) { %>
-    <section class="card breakdown-cat" data-filter-group>
-      <div class="card-head">
+    <details class="card breakdown-cat" data-filter-group open>
+      <summary class="bd-cat-head">
+        <span class="bd-chevron" aria-hidden="true"><%- icon('down') %></span>
         <h2 data-filter-label><%= cat.name %></h2>
         <span class="chip chip-category"><%= cat.total %> in total</span>
-      </div>
+        <span class="bd-instock <%= cat.available ? 'has-stock' : '' %>"><%= cat.available %> in stock</span>
+      </summary>
       <div class="table-wrap">
         <table class="table breakdown-table">
-          <thead><tr><th class="w-20">Brand</th><th>Model</th><th class="num w-num">Quantity</th><th class="num w-num">Available</th><th class="w-25">Employees using it</th></tr></thead>
-          <tbody>
-            <% for (const g of cat.groups) { %>
-              <% if (g.name) { %><tr class="group-row"><td colspan="5"><%= g.name %> <span class="muted">· <%= g.total %></span></td></tr><% } %>
-              <% for (const b of g.brands) { %>
-                <% for (const [i, m] of b.models.entries()) { %>
-                  <tr data-filter-item data-search="<%= cat.name %> <%= g.name || '' %> <%= b.brand %> <%= m.model %> <%= m.employees.join(' ') %>">
-                    <td><%= i === 0 ? b.brand : '' %></td>
-                    <td><%= m.model %></td>
+          <thead><tr><th class="bd-brand-col">Brand</th><th class="bd-model-col">Model</th><th class="num bd-num-col">Qty</th><th class="num bd-avail-col">Available</th><th>Employees using it</th></tr></thead>
+          <% for (const g of cat.groups) { %>
+            <% if (g.name) { %>
+              <tbody class="bd-group"><tr class="group-row"><td colspan="5"><strong><%= g.name %></strong> <span class="muted">· <%= g.total %> (<%= g.available %> in stock)</span></td></tr></tbody>
+            <% } %>
+            <% for (const b of g.brands) { %>
+              <tbody class="bd-brand" data-bd-brand>
+                <tr class="brand-row">
+                  <td colspan="5">
+                    <button type="button" class="bd-brand-toggle" data-bd-toggle aria-expanded="true">
+                      <span class="bd-chevron" aria-hidden="true"><%- icon('down') %></span>
+                      <strong><%= b.brand %></strong> <span class="muted">· <%= b.total %> (<%= b.available %> in stock)</span>
+                    </button>
+                  </td>
+                </tr>
+                <% for (const m of b.models) { %>
+                  <tr class="model-row" data-filter-item data-search="<%= cat.name %> <%= g.name || '' %> <%= b.brand %> <%= m.model %> <%= m.employees.map((e) => e.name).join(' ') %>">
+                    <td class="muted bd-brand-cell"></td>
+                    <td title="<%= m.model %>"><%= m.model %></td>
                     <td class="num"><%= m.quantity %></td>
-                    <td class="num"><%= m.available || '' %></td>
-                    <td title="<%= m.employees.join(', ') %>"><%= m.employees.join(', ') || '—' %></td>
+                    <td class="num"><span class="bd-avail <%= m.available ? 'has-stock' : '' %>"><%= m.available %></span></td>
+                    <td class="bd-people">
+                      <% if (m.employees.length) { %>
+                        <span class="bd-chips">
+                          <% for (const e of m.employees) { %>
+                            <a href="/inventory/r/<%= e.id %>" class="bd-chip" title="Open <%= e.name %>'s profile"><%- avatar({ name: e.name }, 'xs') %><span><%= e.name %></span><% if (e.count > 1) { %><span class="bd-count">(<%= e.count %>)</span><% } %></a>
+                          <% } %>
+                        </span>
+                      <% } else { %>
+                        <% if (m.available) { %><span class="bd-instock-badge">In stock</span><% } else { %><span class="muted small">Not in use</span><% } %>
+                      <% } %>
+                    </td>
                   </tr>
                 <% } %>
-                <tr class="total-row"><td><%= b.brand %> total</td><td></td><td class="num"><%= b.total %></td><td></td><td></td></tr>
-              <% } %>
+              </tbody>
             <% } %>
-            <tr class="grand-row"><td><%= cat.name %> total</td><td></td><td class="num"><%= cat.total %></td><td></td><td></td></tr>
-          </tbody>
+          <% } %>
         </table>
       </div>
-    </section>
+    </details>
   <% } %>
   <p class="empty" data-filter-empty hidden>Nothing matches your search.</p>
 </div>

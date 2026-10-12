@@ -38,10 +38,10 @@ async function claim(db, key, threshold, endDate) {
 }
 
 // Branded email: heading, intro, rows (label/value), optional list, button to the page.
-function alertEmail({ subject, heading, intro, rows = [], list = null, buttonText = 'Open GDAP' }) {
+function alertEmail({ subject, heading, intro, rows = [], list = null, buttonText = 'Open Microsoft Partner' }) {
   const { escapeHtml: e, appUrl } = mailer();
   const base = appUrl();
-  const link = base ? `${base}/gdap` : '';
+  const link = base ? `${base}/microsoft-partner` : '';
   const font = 'font-family: Arial, Helvetica, sans-serif;';
   const rowHtml = rows.map(([label, value]) => `<tr><td style="${font} padding: 5px 12px 5px 0; color: #6E6E73; font-size: 13px; vertical-align: top; white-space: nowrap;">${e(label)}</td>`
     + `<td style="${font} padding: 5px 0; color: #000000; font-size: 14px;">${e(value)}</td></tr>`).join('');
@@ -54,18 +54,18 @@ ${list.map((r) => `<tr>${[r.customer, r.end, r.days, r.extend].map((v, i) => `<t
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background: #FFFFFF; border: 1px solid #E5E5EA; border-radius: 12px; overflow: hidden;">
 <tr><td style="${font} background: #200D6C; color: #FFFFFF; padding: 18px 24px; font-size: 16px; font-weight: bold;">Cleartwo <span style="color: #B9A6F0; font-weight: normal;">IT Support</span></td></tr>
 <tr><td style="padding: 24px;">
-<p style="${font} margin: 0 0 6px; color: #6741C3; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">GDAP</p>
+<p style="${font} margin: 0 0 6px; color: #6741C3; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Microsoft Partner</p>
 <p style="${font} margin: 0 0 12px; color: #200D6C; font-size: 19px; font-weight: bold; line-height: 1.35;">${e(heading)}</p>
 ${intro ? `<p style="${font} margin: 0 0 16px; color: #000000; font-size: 14px; line-height: 1.5;">${e(intro)}</p>` : ''}
 ${rowHtml ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 20px;">${rowHtml}</table>` : ''}
 ${listHtml}
-${link ? `<a href="${e(link)}" style="${font} display: inline-block; background: #0390D7; color: #FFFFFF; text-decoration: none; font-weight: bold; font-size: 14px; padding: 12px 22px; border-radius: 999px;">${e(buttonText)}</a>` : `<p style="${font} margin: 0; font-size: 14px;">Open GDAP in the IT Support portal.</p>`}
+${link ? `<a href="${e(link)}" style="${font} display: inline-block; background: #0390D7; color: #FFFFFF; text-decoration: none; font-weight: bold; font-size: 14px; padding: 12px 22px; border-radius: 999px;">${e(buttonText)}</a>` : `<p style="${font} margin: 0; font-size: 14px;">Open Microsoft Partner in the IT Support portal.</p>`}
 </td></tr></table>
-<p style="${font} color: #6E6E73; font-size: 12px; margin: 14px 0 0;">You get this because you receive GDAP alerts in the IT Support portal.</p>
+<p style="${font} color: #6E6E73; font-size: 12px; margin: 14px 0 0;">You get this because you receive Microsoft Partner (GDAP) alerts in the IT Support portal.</p>
 </td></tr></table></body></html>`;
   const text = [heading, '', intro || '', ...rows.map(([l, v]) => `${l}: ${v}`),
     ...(list ? ['', ...list.map((r) => `- ${r.customer}: ends ${r.end} (${r.days}), auto-extend ${r.extend}`)] : []),
-    link ? `\nOpen GDAP: ${link}` : ''].join('\n');
+    link ? `\nOpen Microsoft Partner: ${link}` : ''].join('\n');
   return { subject: subject.replace(/\s+/g, ' ').slice(0, 200), html, text };
 }
 
@@ -95,7 +95,7 @@ async function deliver(users, { title, body, link, email, tag }) {
   return reached;
 }
 
-const log = (user, entry) => logActivity(null, user, { type: 'gdap', subject: 'GDAP', ...entry }).catch((err) => console.error('GDAP log failed:', err.message));
+const log = (user, entry) => logActivity(null, user, { type: 'gdap', subject: 'Microsoft Partner', ...entry }).catch((err) => console.error('GDAP log failed:', err.message));
 const fmtFor = (format) => require('../dates').formattersFor(format); // eslint-disable-line global-require
 const ukDay = (d) => fmtFor('d_mon_yyyy').fmtDay(d);
 
@@ -113,7 +113,7 @@ async function runExpiryAlerts() {
     if (!(await claim(pool, r.relationship_id, t, endDate))) continue;
     const customer = r.customer_name || r.display_name || 'Unknown customer';
     const roles = r.roleList.map((x) => x.name).join(', ') || 'None';
-    const subject = t === 0 ? `GDAP expired: ${customer}` : `GDAP expiring in ${r.days} day${r.days === 1 ? '' : 's'}: ${customer}`;
+    const subject = t === 0 ? `Microsoft Partner: GDAP expired: ${customer}` : `Microsoft Partner: GDAP expiring in ${r.days} day${r.days === 1 ? '' : 's'}: ${customer}`;
     const title = subject;
     const body = `${r.display_name || 'Relationship'} · ends ${ukDay(r.end_at)} · auto-extend ${r.autoExtendText}`;
     const email = alertEmail({
@@ -123,7 +123,7 @@ async function runExpiryAlerts() {
       rows: [['Customer', customer], ['Relationship', r.display_name || '–'], ['Roles', roles], ['End date', ukDay(r.end_at)], ['Auto-extend', r.autoExtendText], ...(r.client_name ? [['Portal client', r.client_name]] : [])],
     });
     if (!users.length) continue;
-    const reached = await deliver(users, { title, body, link: `/gdap#gdap-${r.id}`, email, tag: `gdap-${r.id}-${t}` });
+    const reached = await deliver(users, { title, body, link: `/microsoft-partner#gdap-${r.id}`, email, tag: `gdap-${r.id}-${t}` });
     sent += 1;
     await log(null, {
       id: r.id, action: 'sent', clientId: r.client_id, clientName: r.client_name,
@@ -146,7 +146,7 @@ async function runDigest() {
   if (!(await claim(pool, '__digest__', 0, londonDate()))) return false;
   const colour = { bad: '#C4281C', warn: '#B26B00', ok: '#1D7A46' };
   const email = alertEmail({
-    subject: `GDAP digest: ${soon.length} relationship${soon.length === 1 ? '' : 's'} ending in the next 30 days`,
+    subject: `Microsoft Partner: GDAP digest: ${soon.length} relationship${soon.length === 1 ? '' : 's'} ending in the next 30 days`,
     heading: `${soon.length} GDAP relationship${soon.length === 1 ? '' : 's'} ending in the next 30 days`,
     intro: 'Soonest first.',
     list: soon.map((r) => ({ customer: r.customer_name || r.display_name || '–', end: ukDay(r.end_at), days: r.daysLabel, extend: r.autoExtendText, colour: colour[r.band] || '#000000' })),
@@ -174,15 +174,15 @@ async function runSecretReminder() {
   if (t === null) return false;
   if (!(await claim(pool, '__secret__', t, day))) return false;
   const when = fmtFor('d_mon_yyyy').fmtDay(day);
-  const subject = t === 0 ? 'GDAP: the Microsoft client secret has expired' : `GDAP: the Microsoft client secret expires in ${info.days} day${info.days === 1 ? '' : 's'}`;
+  const subject = t === 0 ? 'Microsoft Partner: the Microsoft client secret has expired' : `Microsoft Partner: the Microsoft client secret expires in ${info.days} day${info.days === 1 ? '' : 's'}`;
   const email = alertEmail({
     subject,
-    heading: subject.replace('GDAP: t', 'T'),
-    intro: 'Create a new client secret for the GDAP app in Entra ID (App registrations > Certificates & secrets), put it in MS_CLIENT_SECRET in .env, restart the portal, and update "Client secret expires on" in GDAP settings. Until then GDAP syncs will fail.',
+    heading: subject.replace('Microsoft Partner: t', 'T'),
+    intro: 'Create a new client secret for the GDAP app in Entra ID (App registrations > Certificates & secrets), put it in MS_CLIENT_SECRET in .env, restart the portal, and update "Client secret expires on" in Microsoft Partner settings. Until then GDAP syncs will fail.',
     rows: [['Expires on', when]],
-    buttonText: 'Open GDAP settings',
+    buttonText: 'Open Microsoft Partner settings',
   });
-  const reached = await deliver(await adminUsers(pool), { title: subject, body: `Expires on ${when}. Renew it before GDAP syncing stops.`, link: '/gdap/settings', email, tag: 'gdap-secret' });
+  const reached = await deliver(await adminUsers(pool), { title: subject, body: `Expires on ${when}. Renew it before GDAP syncing stops.`, link: '/microsoft-partner/settings', email, tag: 'gdap-secret' });
   await log(null, { action: 'sent', summary: `${subject} (sent to ${reached.join(', ') || 'nobody'})` });
   return true;
 }
@@ -191,12 +191,12 @@ async function runSecretReminder() {
 async function alertSyncFailure(error) {
   if (!(await claim(pool, '__sync__', 0, londonDate()))) return false;
   const email = alertEmail({
-    subject: 'GDAP sync failed',
+    subject: 'Microsoft Partner: GDAP sync failed',
     heading: 'The GDAP sync with Microsoft failed',
     intro: 'GDAP end dates and alerts are not being updated until this is fixed.',
     rows: [['Error', String(error).slice(0, 500)]],
   });
-  const reached = await deliver(await adminUsers(pool), { title: 'GDAP sync failed', body: String(error).slice(0, 300), link: '/gdap', email, tag: 'gdap-sync' });
+  const reached = await deliver(await adminUsers(pool), { title: 'Microsoft Partner: GDAP sync failed', body: String(error).slice(0, 300), link: '/microsoft-partner', email, tag: 'gdap-sync' });
   await log(null, { action: 'sent', summary: `GDAP sync failure alert sent to ${reached.join(', ') || 'nobody'}` });
   return true;
 }

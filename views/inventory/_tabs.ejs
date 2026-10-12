@@ -6,7 +6,7 @@
   <% for (const t of (locals.invTabs || [])) { %>
     <a href="<%= t.href %>" class="<%= locals.active === t.id ? 'active' : '' %>"><%= t.name %></a>
   <% } %>
-  <a href="/inventory/workbook" class="inv-tabs-settings <%= locals.active === 'workbook' ? 'active' : '' %>" title="Export or import the whole inventory as one Excel workbook"><%- icon('file') %><span>Workbook</span></a>
+  <a href="/inventory/workbook" class="btn btn-small inv-io-btn <%= locals.active === 'workbook' ? 'is-active' : '' %>" title="Download all inventory as one Excel file, edit it, and upload it back"><%- icon('download') %><span>Import / Export</span></a>
   <a href="/inventory/settings/tabs" class="inv-tabs-extra <%= locals.active === 'settings' ? 'active' : '' %>" title="Inventory tabs settings"><%- icon('sliders') %><span>Tabs</span></a>
 </nav>
 <% if (locals.invKey && !invKey.ok) { %>

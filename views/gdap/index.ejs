@@ -2,16 +2,16 @@
 <%
   const last = sync.last;
   const failed = last && last.status === 'failed';
-  const back = `/gdap${filter !== 'all' ? `?f=${filter}` : ''}`;
+  const back = `/microsoft-partner${filter !== 'all' ? `?f=${filter}` : ''}`;
 %>
 <header class="page-head">
   <div>
-    <h1>GDAP</h1>
-    <p class="muted">Granular delegated admin relationships with customers, read from Microsoft (read only). End dates, roles and alerts.</p>
+    <h1>Microsoft Partner</h1>
+    <p class="muted">GDAP (granular delegated admin) relationships with customers, read from Microsoft Partner Center (read only). End dates, roles and alerts.</p>
   </div>
   <div class="actions">
-    <a href="/gdap/settings" class="btn btn-small btn-ghost"><%- icon('sliders') %><span>Settings</span></a>
-    <form method="post" action="/gdap/sync" class="inline" data-busy-label="Syncing…">
+    <a href="/microsoft-partner/settings" class="btn btn-small btn-ghost"><%- icon('sliders') %><span>Settings</span></a>
+    <form method="post" action="/microsoft-partner/sync" class="inline" data-busy-label="Syncing…">
       <%- csrfField %>
       <button type="submit" class="btn btn-small btn-primary" <%= config.configured ? '' : 'disabled' %>><%- icon('down') %><span>Sync now</span></button>
     </form>
@@ -20,8 +20,8 @@
 
 <% if (!config.configured) { %>
   <div class="flash flash-error gdap-banner" role="alert">
-    <strong>GDAP not configured.</strong> <%= config.message %>
-    See the README (GDAP) for the app registration and its read-only permission.
+    <strong>Microsoft Partner (GDAP) not configured.</strong> <%= config.message %>
+    See the README (Microsoft Partner) for the app registration and its read-only permission.
   </div>
 <% } else if (failed) { %>
   <div class="flash flash-error gdap-banner" role="alert">
@@ -41,17 +41,17 @@
 </div>
 
 <div class="gdap-cards">
-  <a href="/gdap?f=active" class="gdap-card gdap-card-ok <%= filter === 'active' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.active %></span><span class="gdap-card-label">Active</span></a>
-  <a href="/gdap?f=expiring30" class="gdap-card gdap-card-warn <%= filter === 'expiring30' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.soon30 %></span><span class="gdap-card-label">Expiring ≤ 30 days</span></a>
-  <a href="/gdap?f=expiring30" class="gdap-card gdap-card-bad"><span class="gdap-card-value"><%= summary.soon7 %></span><span class="gdap-card-label">Expiring ≤ 7 days</span></a>
-  <a href="/gdap?f=expired" class="gdap-card gdap-card-expired <%= filter === 'expired' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.expired %></span><span class="gdap-card-label">Expired</span></a>
+  <a href="/microsoft-partner?f=active" class="gdap-card gdap-card-ok <%= filter === 'active' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.active %></span><span class="gdap-card-label">Active</span></a>
+  <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-warn <%= filter === 'expiring30' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.soon30 %></span><span class="gdap-card-label">Expiring ≤ 30 days</span></a>
+  <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-bad"><span class="gdap-card-value"><%= summary.soon7 %></span><span class="gdap-card-label">Expiring ≤ 7 days</span></a>
+  <a href="/microsoft-partner?f=expired" class="gdap-card gdap-card-expired <%= filter === 'expired' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.expired %></span><span class="gdap-card-label">Expired</span></a>
 </div>
 
 <section class="card">
   <div class="ticket-filters">
     <nav class="filters" aria-label="Filter GDAP relationships">
       <% for (const [key, f] of Object.entries(filters)) { %>
-        <a href="/gdap<%= key === 'all' ? '' : `?f=${key}` %>" class="<%= filter === key ? 'active' : '' %>"><%= f.label %> <span class="count"><%= counts[key] %></span></a>
+        <a href="/microsoft-partner<%= key === 'all' ? '' : `?f=${key}` %>" class="<%= filter === key ? 'active' : '' %>"><%= f.label %> <span class="count"><%= counts[key] %></span></a>
       <% } %>
     </nav>
     <%- include('../partials/search', { target: '#gdap-rows', placeholder: 'Search customer, client, relationship or role' }) %>
@@ -59,7 +59,7 @@
   <% if (supersededCount) { %>
     <div class="gdap-bulk">
       <span class="muted small"><%= supersededCount %> expired relationship<%= supersededCount === 1 ? '' : 's' %> where the customer already has an active one.</span>
-      <form method="post" action="/gdap/hide-superseded" class="inline" data-confirm="Hide <%= supersededCount %> superseded relationship<%= supersededCount === 1 ? '' : 's' %>? They stop showing and never alert. You can unhide them under Hidden." data-confirm-ok="Hide all superseded">
+      <form method="post" action="/microsoft-partner/hide-superseded" class="inline" data-confirm="Hide <%= supersededCount %> superseded relationship<%= supersededCount === 1 ? '' : 's' %>? They stop showing and never alert. You can unhide them under Hidden." data-confirm-ok="Hide all superseded">
         <%- csrfField %>
         <input type="hidden" name="back" value="<%= back %>">
         <button type="submit" class="btn btn-small btn-ghost"><%- icon('eye-off') %><span>Hide all superseded</span></button>
@@ -88,7 +88,7 @@
         <% for (const r of rows) { const groupStart = grouped && prevKey !== null && prevKey !== r.customerKey; prevKey = r.customerKey; %>
           <tr id="gdap-<%= r.id %>" class="gdap-row gdap-row-<%= r.band %> <%= groupStart ? 'gdap-group-start' : '' %> <%= r.hidden ? 'is-hidden' : '' %>" data-filter-item data-search="<%= [r.customer_name, r.client_name, r.display_name, r.customer_tenant_id, ...r.roleList.map((x) => x.name)].filter(Boolean).join(' ') %>">
             <td class="gdap-hide-cell">
-              <form method="post" action="/gdap/<%= r.id %>/hide" class="inline">
+              <form method="post" action="/microsoft-partner/<%= r.id %>/hide" class="inline">
                 <%- csrfField %>
                 <input type="hidden" name="hide" value="<%= r.hidden ? '0' : '1' %>">
                 <input type="hidden" name="back" value="<%= back %>">
@@ -101,7 +101,7 @@
               <details class="edit">
                 <summary class="icon-btn gdap-link-edit" title="Link to client" aria-label="Link <%= r.customer_name || 'customer' %> to a client"><%- icon('link') %></summary>
                 <div class="edit-panel">
-                  <form method="post" action="/gdap/<%= r.id %>/link" class="form">
+                  <form method="post" action="/microsoft-partner/<%= r.id %>/link" class="form">
                     <%- csrfField %>
                     <input type="hidden" name="back" value="<%= back %>#gdap-<%= r.id %>">
                     <label class="field">

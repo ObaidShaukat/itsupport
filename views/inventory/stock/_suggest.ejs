@@ -1,0 +1,10 @@
+<%#
+  Brand / model suggestions for stock forms: brand-suggest lists every brand; model-suggest
+  is filled by app.js with the models of the brand typed ([data-model-map], JSON by lower-case
+  brand). suggest: { brands, models } from src/lib/inventory/brands.js.
+%>
+<% if (suggest) { %>
+  <datalist id="brand-suggest"><% for (const b of suggest.brands) { %><option value="<%= b %>"></option><% } %></datalist>
+  <datalist id="model-suggest"></datalist>
+  <div hidden data-model-map="<%= JSON.stringify(suggest.models) %>"></div>
+<% } %>

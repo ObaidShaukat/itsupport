@@ -1,4 +1,5 @@
-// General IT Support: knowledge base articles with Markdown issue/solution and attachments.
+// Articles (formerly "General IT Support" / the knowledge base, at /articles; /kb redirects):
+// Markdown issue / solution and attachments. Internally still kb_* tables and entity_type kb_article.
 const express = require('express');
 const { pool, transaction } = require('../db');
 const { str, requireId, flash, notFound } = require('../lib/http');
@@ -108,7 +109,7 @@ router.get('/', async (req, res) => {
   const total = categoryRows.reduce((sum, r) => sum + Number(r.count), 0);
   for (const a of articles) a.tagList = tagList(a.tags);
   res.render('kb/index', {
-    title: 'General IT Support',
+    title: 'Articles',
     articles,
     category,
     categories: categoryRows.map((r) => ({ name: r.category, count: Number(r.count) })),
@@ -120,14 +121,14 @@ router.get('/', async (req, res) => {
 
 router.get('/new', (req, res) => renderForm(res, 200, {
   article: { title: '', category: DEFAULT_CATEGORY, tags: '', issue: '', solution: '' },
-  action: '/kb',
+  action: '/articles',
   error: null,
 }));
 
 router.post('/', async (req, res) => {
   const article = readArticle(req.body);
   const error = req.uploadError || (!article.title ? 'Title is required.' : null);
-  if (error) return renderForm(res, 400, { article, action: '/kb', error });
+  if (error) return renderForm(res, 400, { article, action: '/articles', error });
 
   const id = await transaction(async (conn) => {
     const [result] = await conn.query(`
@@ -141,7 +142,7 @@ router.post('/', async (req, res) => {
   });
   req.keepUploads = true;
   flash(req, 'success', 'Article created.');
-  res.redirect(`/kb/${id}`);
+  res.redirect(`/articles/${id}`);
 });
 
 // ---- View ----
@@ -183,7 +184,7 @@ router.get('/:id/edit', async (req, res) => {
   const [[article]] = await pool.query('SELECT id, title, category, tags, issue, solution FROM kb_articles WHERE id = ?', [id]);
   if (!article) throw notFound();
   for (const key of ['tags', 'issue', 'solution']) article[key] ??= '';
-  return renderForm(res, 200, { article, action: `/kb/${id}`, error: null, attachments: await attachmentsFor(id) });
+  return renderForm(res, 200, { article, action: `/articles/${id}`, error: null, attachments: await attachmentsFor(id) });
 });
 
 router.post('/:id', async (req, res) => {
@@ -193,7 +194,7 @@ router.post('/:id', async (req, res) => {
   if (error) {
     const [[exists]] = await pool.query('SELECT id FROM kb_articles WHERE id = ?', [id]);
     if (!exists) throw notFound();
-    return renderForm(res, 400, { article, action: `/kb/${id}`, error, attachments: await attachmentsFor(id) });
+    return renderForm(res, 400, { article, action: `/articles/${id}`, error, attachments: await attachmentsFor(id) });
   }
 
   const added = await transaction(async (conn) => {
@@ -220,19 +221,19 @@ router.post('/:id', async (req, res) => {
   });
   req.keepUploads = true;
   flash(req, 'success', added ? `Article updated, ${added} file${added === 1 ? '' : 's'} attached.` : 'Article updated.');
-  res.redirect(`/kb/${id}`);
+  res.redirect(`/articles/${id}`);
 });
 
 router.post('/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
   const [files] = await pool.query('SELECT file_name FROM kb_attachments WHERE article_id = ?', [id]);
   const [[article]] = await pool.query('SELECT title FROM kb_articles WHERE id = ?', [id]);
-  if (!article) return res.redirect('/kb');
+  if (!article) return res.redirect('/articles');
   await pool.query('DELETE FROM kb_articles WHERE id = ?', [id]);
   await logArticle(null, req, id, 'deleted', article.title, `Deleted article ${article.title}`);
   await removeStoredFiles(files.map((f) => f.file_name));
   flash(req, 'success', 'Article deleted.');
-  res.redirect('/kb');
+  res.redirect('/articles');
 });
 
 router.post('/attachments/:id/delete', async (req, res) => {
@@ -249,7 +250,7 @@ router.post('/attachments/:id/delete', async (req, res) => {
     `Removed attachment ${file.original_name}`, ['attachments']);
   await removeStoredFiles([file.file_name]);
   flash(req, 'success', 'Attachment removed.');
-  res.redirect(`/kb/${file.article_id}/edit#attachments`);
+  res.redirect(`/articles/${file.article_id}/edit#attachments`);
 });
 
 module.exports = router;

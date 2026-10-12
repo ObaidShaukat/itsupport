@@ -2,7 +2,7 @@
 // UTC start/end and automatic entries are matched on created_at (when the action
 // happened). Manual "Log work" entries are matched on the date the user picked.
 // Each user gets a "<User>'s Work:" list with one bullet per entry, see userLines()
-// below. Only Log work entries and General IT Support (KB) articles are reported;
+// below. Only Log work entries and Articles (formerly General IT Support / KB) are reported;
 // ticket activity (comments, status, priority, reminders) and client service activity
 // (commenced, steps, notes, completed) stay in the activity log and History panels.
 const { pool } = require('../db');
@@ -84,11 +84,11 @@ function withClient(text, client) {
 
 // ---- Bullets ----
 
-// One user's day: one bullet per entry, in this order: log work, then General IT
-// Support (knowledge base), then always "Other IT related tasks.".
+// One user's day: one bullet per entry, in this order: log work, then Articles, then
+// always "Other IT related tasks.".
 //   Log work:         the typed text with the client put in (see withClient); no client: as typed.
-//   Knowledge base:   "Documented a solution for '{title}' in the knowledge base." /
-//                     "Updated the knowledge base article '{title}'."
+//   Articles:         "Documented a solution for '{title}' in Articles." /
+//                     "Updated the article '{title}'."
 // Typed text never gets a prefix of ours; withClient() only inserts the client. Exact
 // duplicate lines are removed. Everything else (tickets, client services, deletes, sent
 // reports, client/user/catalogue changes) is left out; it is listed on /activity.
@@ -111,8 +111,8 @@ function userLines(rows) {
   }
 
   const kb = [...articles.values()].map((a) => (a.created
-    ? sentence(`Documented a solution for '${a.title}' in the knowledge base`)
-    : sentence(`Updated the knowledge base article '${a.title}'`)));
+    ? sentence(`Documented a solution for '${a.title}' in Articles`)
+    : sentence(`Updated the article '${a.title}'`)));
 
   const seen = new Set();
   const lines = [];

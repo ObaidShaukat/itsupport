@@ -1,0 +1,46 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/inventory/stock/brands">Brands &amp; models</a></p>
+    <h1>Preview: <%= describe %></h1>
+    <p class="muted">In <%= where %>. Nothing has changed yet.</p>
+  </div>
+</header>
+<%- include('_nav', { active: 'brands' }) %>
+
+<section class="card card-narrow-wide">
+  <% if (!plan.items.length) { %>
+    <p class="empty">No items match, or they already have that brand and model.</p>
+    <a href="/inventory/stock/brands" class="btn">Back</a>
+  <% } else { %>
+    <p><strong><%= plan.items.length %> item<%= plan.items.length === 1 ? '' : 's' %></strong> will be updated:</p>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th class="w-15">Category</th><th>Now</th><th>Becomes</th><th class="num w-num">Items</th></tr></thead>
+        <tbody>
+          <% for (const g of plan.groups) { %>
+            <tr>
+              <td><%= g.category %></td>
+              <td title="<%= g.from %>"><%= g.from %></td>
+              <td title="<%= g.to %>"><%= g.to %><% if (g.merge) { %> <span class="chip chip-merge">merges with existing</span><% } %></td>
+              <td class="num"><%= g.count %></td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <form method="post" action="/inventory/stock/brands/apply" class="form-actions" data-confirm="Update <%= plan.items.length %> stock item<%= plan.items.length === 1 ? '' : 's' %>: <%= describe %>?" data-confirm-ok="Update items">
+      <%- csrfField %>
+      <input type="hidden" name="kind" value="<%= input.kind %>">
+      <input type="hidden" name="category_id" value="<%= input.categoryId || '' %>">
+      <input type="hidden" name="from_brand" value="<%= input.fromBrand %>">
+      <input type="hidden" name="from_model" value="<%= input.fromModel %>">
+      <input type="hidden" name="to_brand" value="<%= input.toBrand %>">
+      <input type="hidden" name="to_model" value="<%= input.toModel %>">
+      <% if (input.prefix) { %><input type="hidden" name="prefix" value="1"><% } %>
+      <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Update <%= plan.items.length %> item<%= plan.items.length === 1 ? '' : 's' %></span></button>
+      <a href="/inventory/stock/brands" class="btn btn-ghost">Cancel</a>
+    </form>
+  <% } %>
+</section>
+<%- include('../../partials/foot') %>

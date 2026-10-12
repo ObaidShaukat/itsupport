@@ -37,7 +37,7 @@
     </div>
   <% } else if (mode === 'attachment') { %>
     <div class="row-actions">
-      <%- include('delete', { action: `/kb/attachments/${item.id}/delete`, confirm: `Remove "${item.original_name}"?` }) %>
+      <%- include('delete', { action: `/articles/attachments/${item.id}/delete`, confirm: `Remove "${item.original_name}"?` }) %>
     </div>
   <% } %>
 </div>

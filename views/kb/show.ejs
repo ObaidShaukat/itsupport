@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/kb">General IT Support</a> / <a href="/kb?category=<%= encodeURIComponent(article.category) %>"><%= article.category %></a></p>
+    <p class="crumbs"><a href="/articles">Articles</a> / <a href="/articles?category=<%= encodeURIComponent(article.category) %>"><%= article.category %></a></p>
     <h1><%= article.title %></h1>
     <div class="kb-meta">
       <span class="chip chip-category"><%= article.category %></span>
@@ -10,9 +10,9 @@
     <%- include('../partials/record-meta', { meta }) %>
   </div>
   <div class="actions">
-    <a href="/kb/<%= article.id %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
+    <a href="/articles/<%= article.id %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
     <%- include('../partials/delete', {
-      action: `/kb/${article.id}/delete`,
+      action: `/articles/${article.id}/delete`,
       confirm: `Delete "${article.title}" and its attachments?`,
       text: 'Delete',
     }) %>

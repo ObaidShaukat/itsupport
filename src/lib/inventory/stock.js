@@ -130,9 +130,11 @@ async function summary(db = pool) {
 
 const platformOf = (category, item) => (/apple|mac/i.test(`${item.brand || ''} ${category.name}`) ? 'Apple' : 'Windows');
 
-// Breakdown like the old Excel sheet: Category > (group) > Brand > Model with quantity and
-// the employees using it, plus brand and category totals. Sold and disposed items are
-// left out. Groups: 'platform' (Windows / Apple), 'field' (e.g. Mouse connection type).
+// Breakdown like the old Excel sheet: Category > (group) > Brand > Model with quantity,
+// how many are available (in stock) and the employees using it ({ id, name, count }: count
+// = how many of that model they hold), plus brand, group and category totals (each with
+// its available count). Sold and disposed items are left out. Groups: 'platform'
+// (Windows / Apple), 'field' (e.g. Mouse connection type).
 async function breakdown(db = pool) {
   const categories = await listCategories(db);
   const items = (await listItems(db)).filter((i) => !['sold', 'disposed'].includes(i.status));
@@ -156,21 +158,27 @@ async function breakdown(db = pool) {
       const row = models.get(model);
       row.quantity += 1;
       if (item.status === 'available') row.available += 1;
-      if (item.employee_name && !row.employees.includes(item.employee_name)) row.employees.push(item.employee_name);
+      if (item.employee_id) {
+        const who = row.employees.find((e) => e.id === item.employee_id);
+        if (who) who.count += 1;
+        else row.employees.push({ id: item.employee_id, name: item.employee_name || 'Unknown', count: 1 });
+      }
     }
     const sortKeys = (m) => [...m.keys()].sort((a, b) => String(a).localeCompare(String(b)));
+    const sum = (list, key) => list.reduce((n, x) => n + x[key], 0);
     return {
       id: cat.id,
       name: cat.name,
       total: catItems.length,
+      available: catItems.filter((i) => i.status === 'available').length,
       groups: sortKeys(groups).map((g) => {
         const brands = groups.get(g);
         const brandRows = sortKeys(brands).map((b) => {
           const models = [...brands.get(b).values()].sort((x, y) => x.model.localeCompare(y.model));
-          models.forEach((m) => m.employees.sort((x, y) => x.localeCompare(y)));
-          return { brand: b, models, total: models.reduce((n, m) => n + m.quantity, 0) };
+          models.forEach((m) => m.employees.sort((x, y) => x.name.localeCompare(y.name)));
+          return { brand: b, models, total: sum(models, 'quantity'), available: sum(models, 'available') };
         });
-        return { name: g, brands: brandRows, total: brandRows.reduce((n, b) => n + b.total, 0) };
+        return { name: g, brands: brandRows, total: sum(brandRows, 'total'), available: sum(brandRows, 'available') };
       }),
     };
   });

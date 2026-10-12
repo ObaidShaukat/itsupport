@@ -11,6 +11,9 @@ const { fieldColumns, fixedColumn, fieldCells } = require('../../lib/inventory/g
 const {
   listCategories, getCategory, itemLabel, listItems, getItem, assignItem, returnItem, summary, breakdown,
 } = require('../../lib/inventory/stock');
+const {
+  brandTree, suggestions: brandSuggestions, readRename, planRename, applyRename, describe: describeRename,
+} = require('../../lib/inventory/brands');
 
 const router = express.Router();
 
@@ -89,7 +92,11 @@ router.get('/summary', async (req, res) => {
 });
 
 router.get('/report', async (req, res) => {
-  res.render('inventory/stock/report', { title: 'Stock breakdown', report: await breakdown() });
+  // Summary cards (sold and disposed left out, like the breakdown itself).
+  const totals = (await summary()).reduce((n, c) => ({
+    total: n.total + c.total - c.gone, assigned: n.assigned + c.assigned, available: n.available + c.available, repair: n.repair + c.repair,
+  }), { total: 0, assigned: 0, available: 0, repair: 0 });
+  res.render('inventory/stock/report', { title: 'Stock breakdown', report: await breakdown(), totals });
 });
 
 // Flat rows of the breakdown for CSV / Excel, with brand and category totals.
@@ -99,7 +106,7 @@ function reportRows(report) {
     if (!cat.total) continue;
     for (const g of cat.groups) {
       for (const b of g.brands) {
-        for (const m of b.models) rows.push([cat.name, g.name || '', b.brand, m.model, m.quantity, m.available, m.employees.join(', ')]);
+        for (const m of b.models) rows.push([cat.name, g.name || '', b.brand, m.model, m.quantity, m.available, m.employees.map((e) => (e.count > 1 ? `${e.name} (${e.count})` : e.name)).join(', ')]);
         rows.push([cat.name, g.name || '', `${b.brand} total`, '', b.total, '', '']);
       }
       if (g.name) rows.push([cat.name, `${g.name} total`, '', '', g.total, '', '']);
@@ -229,8 +236,55 @@ router.post('/categories/:id/delete', async (req, res) => {
 async function formContext(categoryId) {
   const categories = await listCategories(pool, { withFields: true });
   const category = categories.find((c) => c.id === categoryId) || categories[0] || null;
-  return { categories, category, employees: await activeEmployees() };
+  // Existing brands / models suggested while typing, to avoid new near-duplicates.
+  return { categories, category, employees: await activeEmployees(), suggest: await brandSuggestions(pool) };
 }
+
+// ---- Brands & models clean-up ----
+
+router.get('/brands', async (req, res) => {
+  const q = req.query || {};
+  res.render('inventory/stock/brands', {
+    title: 'Brands & models', tree: await brandTree(pool), categories: await listCategories(pool), suggest: await brandSuggestions(pool),
+    input: {
+      kind: q.kind === 'model' ? 'model' : 'brand', categoryId: Number(q.category) || null,
+      fromBrand: typeof q.brand === 'string' ? q.brand : '', fromModel: typeof q.model === 'string' ? q.model : '', toBrand: '', toModel: '', prefix: false,
+    },
+    error: null,
+  });
+});
+
+// Preview: which items change, and into what (merges marked). Nothing is saved yet.
+router.post('/brands/preview', async (req, res) => {
+  const { input, error } = readRename(req.body);
+  const categories = await listCategories(pool);
+  if (error) {
+    return res.status(400).render('inventory/stock/brands', {
+      title: 'Brands & models', tree: await brandTree(pool), categories, suggest: await brandSuggestions(pool), input, error,
+    });
+  }
+  const plan = await planRename(pool, input);
+  const where = input.categoryId ? (categories.find((c) => c.id === input.categoryId) || {}).name || 'that category' : 'all categories';
+  res.render('inventory/stock/brands-preview', { title: 'Brands & models: preview', input, plan, where, describe: describeRename(input) });
+});
+
+router.post('/brands/apply', async (req, res) => {
+  const { input, error } = readRename(req.body);
+  if (error) {
+    flash(req, 'error', error);
+    return res.redirect('/inventory/stock/brands');
+  }
+  const categories = await listCategories(pool);
+  const where = input.categoryId ? (categories.find((c) => c.id === input.categoryId) || {}).name || 'that category' : 'all categories';
+  try {
+    const n = await transaction((conn) => applyRename(conn, req.user, input, where));
+    flash(req, 'saved', n ? `Saved. ${n} item${n === 1 ? '' : 's'} updated: ${describeRename(input)}.` : 'Nothing to change any more.');
+  } catch (err) {
+    console.error('Brand / model clean-up failed:', err);
+    flash(req, 'error', 'The clean-up could not be saved because of a database error. Nothing was changed.');
+  }
+  res.redirect('/inventory/stock/brands');
+});
 
 router.get('/new', async (req, res) => {
   const ctx = await formContext(toId(req.query.category));

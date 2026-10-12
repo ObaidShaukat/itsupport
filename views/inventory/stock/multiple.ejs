@@ -26,8 +26,8 @@
     <%- csrfField %>
     <input type="hidden" name="category_id" value="<%= category.id %>">
     <div class="form-row">
-      <label class="field"><span>Brand</span><input type="text" name="brand" value="<%= input.brand || '' %>" maxlength="100"></label>
-      <label class="field"><span>Model</span><input type="text" name="model" value="<%= input.model || '' %>" maxlength="150"></label>
+      <label class="field"><span>Brand</span><input type="text" name="brand" value="<%= input.brand || '' %>" maxlength="100" list="brand-suggest" autocomplete="off" data-brand-input></label>
+      <label class="field"><span>Model</span><input type="text" name="model" value="<%= input.model || '' %>" maxlength="150" list="model-suggest" autocomplete="off" data-model-input></label>
     </div>
     <div class="form-row">
       <label class="field">
@@ -65,4 +65,5 @@
   </form>
 </section>
 <% } %>
+<%- include('_suggest', { suggest: locals.suggest }) %>
 <%- include('../../partials/foot') %>

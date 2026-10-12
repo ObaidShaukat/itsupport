@@ -2,21 +2,21 @@
 <% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users).split(',').map(Number); %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/gdap">GDAP</a></p>
-    <h1>GDAP settings</h1>
+    <p class="crumbs"><a href="/microsoft-partner">Microsoft Partner</a></p>
+    <h1>Microsoft Partner settings</h1>
     <p class="muted">Who is alerted about expiring relationships, the Partner Center link and the client secret reminder.</p>
   </div>
 </header>
 <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
 <% if (!config.configured) { %><div class="flash flash-info" role="status"><%= config.message %></div><% } %>
 
-<form method="post" action="/gdap/settings" class="grid-2">
+<form method="post" action="/microsoft-partner/settings" class="grid-2">
   <%- csrfField %>
   <section class="card">
     <h2>Alerts</h2>
     <div class="form">
       <fieldset class="field choice-group" data-alert-users>
-        <legend>Who gets GDAP alerts</legend>
+        <legend>Who gets Microsoft Partner alerts</legend>
         <label class="choice"><input type="checkbox" name="alert_all" value="1" <%= everyone ? 'checked' : '' %> data-alert-all><span><strong>Everyone</strong> (all portal users, including people added later)</span></label>
         <div class="gdap-user-list" data-alert-list>
           <% for (const u of users) { %>
@@ -52,14 +52,14 @@
       <label class="field">
         <span>Partner Center customer link</span>
         <input type="text" name="partner_center_url" value="<%= settings.partner_center_url %>" maxlength="500" required>
-        <small class="muted">Used by "Open" on the GDAP page. <code>{tenantId}</code> is replaced by the customer's tenant id. Default: <code><%= defaultUrl %></code></small>
+        <small class="muted">Used by "Open" on the Microsoft Partner page. <code>{tenantId}</code> is replaced by the customer's tenant id. Default: <code><%= defaultUrl %></code></small>
       </label>
     </div>
   </section>
 
   <div class="form-actions grid-span">
     <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
-    <a href="/gdap" class="btn btn-ghost">Cancel</a>
+    <a href="/microsoft-partner" class="btn btn-ghost">Cancel</a>
   </div>
 </form>
 <%- include('../partials/foot') %>

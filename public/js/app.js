@@ -524,7 +524,7 @@ if (bell) {
     bellToggle.setAttribute('aria-label', count ? `Notifications (${count})` : 'Notifications');
     bellList.replaceChildren();
     // Unread GDAP alerts and @mentions first; opening one marks it read.
-    for (const [key, label, list] of [['alerts', 'GDAP alerts', data.alerts || []], ['mentions', 'Mentions', data.mentions || []]]) {
+    for (const [key, label, list] of [['alerts', 'Microsoft Partner alerts', data.alerts || []], ['mentions', 'Mentions', data.mentions || []]]) {
       if (!list.length) continue;
       const mentions = list;
       const group = el('section', `bell-group bell-group-${key}`);
@@ -2900,5 +2900,69 @@ document.querySelectorAll('form[data-add-field]').forEach((form) => {
   type.addEventListener('change', sync);
   radios.forEach((r) => r.addEventListener('change', sync));
   form.addEventListener('reset', () => setTimeout(sync));
+  sync();
+});
+
+// ---- Stock breakdown: collapse categories (details) and brands, Expand / Collapse all ----
+document.querySelectorAll('[data-breakdown]').forEach((root) => {
+  const setBrand = (tbody, open) => {
+    tbody.classList.toggle('is-collapsed', !open);
+    tbody.querySelector('[data-bd-toggle]')?.setAttribute('aria-expanded', String(open));
+  };
+  root.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-bd-toggle]');
+    if (!btn) return;
+    const tbody = btn.closest('[data-bd-brand]');
+    setBrand(tbody, tbody.classList.contains('is-collapsed'));
+  });
+  document.querySelectorAll('[data-bd-all]').forEach((btn) => btn.addEventListener('click', () => {
+    const open = btn.dataset.bdAll === 'open';
+    root.querySelectorAll('details.breakdown-cat').forEach((d) => { d.open = open; });
+    root.querySelectorAll('[data-bd-brand]').forEach((t) => setBrand(t, open));
+  }));
+  // While searching, show every match: open its category and brand, and hide brands
+  // with no matching model.
+  const search = document.querySelector('input[data-filter="#breakdown"]');
+  if (search) {
+    search.addEventListener('input', () => setTimeout(() => {
+      const q = search.value.trim();
+      root.classList.toggle('is-searching', Boolean(q));
+      root.querySelectorAll('[data-bd-brand]').forEach((t) => {
+        const any = [...t.querySelectorAll('tr.model-row')].some((tr) => !tr.hidden);
+        t.hidden = Boolean(q) && !any;
+      });
+      if (q) root.querySelectorAll('details.breakdown-cat:not([hidden])').forEach((d) => { d.open = true; });
+    }));
+  }
+});
+
+// ---- Stock: brand / model suggestions and the Brands & models form ----
+// The model list follows the brand typed (existing models of that brand), so new items
+// reuse existing names instead of creating near-duplicates.
+(() => {
+  const mapEl = document.querySelector('[data-model-map]');
+  const list = document.getElementById('model-suggest');
+  if (!mapEl || !list) return;
+  let map = {};
+  try { map = JSON.parse(mapEl.dataset.modelMap || '{}'); } catch (err) { map = {}; }
+  document.querySelectorAll('[data-brand-input]').forEach((brand) => {
+    const sync = () => {
+      const models = map[brand.value.trim().toLowerCase()] || [];
+      list.replaceChildren(...models.map((m) => { const o = document.createElement('option'); o.value = m; return o; }));
+    };
+    brand.addEventListener('input', sync);
+    sync();
+  });
+})();
+document.querySelectorAll('form[data-rename-form]').forEach((form) => {
+  const sync = () => {
+    const model = form.querySelector('input[name="kind"][value="model"]').checked;
+    form.querySelectorAll('[data-kind-model]').forEach((el) => { el.hidden = !model; });
+    form.querySelectorAll('[data-kind-brand]').forEach((el) => { el.hidden = model; });
+    form.querySelector('input[name="from_model"]').required = model;
+    form.querySelector('input[name="to_model"]').required = model;
+    form.querySelector('input[name="to_brand"]').required = !model;
+  };
+  form.querySelectorAll('input[name="kind"]').forEach((r) => r.addEventListener('change', sync));
   sync();
 });

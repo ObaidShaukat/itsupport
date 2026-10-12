@@ -1757,6 +1757,10 @@ html { scroll-behavior: smooth; }
 
 .inv-tabs { margin-top: calc(-1 * var(--sp-2)); overflow-y: hidden; align-items: center; }
 .inv-tabs-settings { margin-left: auto; }
+/* "Import / Export" button on the right of the Inventory tab bar (not a tab). */
+.inv-tabs .inv-io-btn { margin-left: auto; align-self: center; height: 30px; border-bottom-width: 1px; }
+.inv-tabs .inv-io-btn.is-active { border-color: var(--blue); color: var(--blue); background: var(--blue-soft); }
+.inv-tabs .inv-io-btn + .inv-tabs-extra { margin-left: 4px; }
 .inv-tabs-settings .icon { width: 14px; height: 14px; }
 .stock-nav { margin: calc(-1 * var(--sp-2)) 0 var(--sp-4); }
 .inv-filters { display: flex; flex-wrap: wrap; gap: var(--sp-3); align-items: flex-end; padding: var(--sp-3) var(--sp-4); }
@@ -2517,3 +2521,84 @@ dialog.lightbox::backdrop { background: rgba(10, 6, 30, 0.88); }
 .applies-to .choice { display: flex; align-items: flex-start; gap: 6px; font-size: var(--fs-table); line-height: 1.35; }
 .applies-to .choice input { margin-top: 2px; }
 .add-field .edit-panel.field-menu-panel { width: min(360px, calc(100vw - 2rem)); }
+
+/* ==== Stock breakdown: cards, collapsible categories / brands, employee chips ==== */
+.bd-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.bd-card { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--border); border-left: 4px solid var(--c, var(--indigo)); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); }
+.bd-card-value { font-family: var(--font-head); font-size: 1.6rem; font-weight: 700; line-height: 1.1; color: var(--c, var(--indigo)); font-variant-numeric: tabular-nums; }
+.bd-card-label { font-size: var(--fs-table); color: var(--muted); }
+.bd-card-assigned { --c: var(--blue); }
+.bd-card-stock { --c: var(--green); }
+.bd-card-repair { --c: #B26B00; }
+.bd-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.bd-toolbar .list-search { flex: 1 1 320px; margin: 0; }
+.bd-toggle-all { display: flex; gap: 4px; }
+
+details.breakdown-cat { padding: 0; overflow: hidden; margin-bottom: var(--sp-3); }
+.bd-cat-head { display: flex; align-items: center; gap: var(--sp-2); padding: 12px 16px; cursor: pointer; list-style: none; }
+.bd-cat-head::-webkit-details-marker { display: none; }
+.bd-cat-head h2 { margin: 0; font-size: 1.05rem; }
+.bd-cat-head .chip { margin-left: auto; }
+details.breakdown-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border); }
+.bd-chevron { display: inline-flex; color: var(--muted); transition: transform 0.15s; }
+.bd-chevron .icon { width: 14px; height: 14px; }
+details.breakdown-cat:not([open]) > .bd-cat-head .bd-chevron { transform: rotate(-90deg); }
+.bd-instock { font-size: var(--fs-table); color: var(--muted); font-weight: 600; white-space: nowrap; }
+.bd-instock.has-stock { color: var(--green); }
+details.breakdown-cat .table-wrap { margin: 0; border: 0; border-radius: 0; }
+
+.breakdown-table { table-layout: fixed; width: 100%; }
+.breakdown-table .bd-brand-col { width: 110px; }
+.breakdown-table .bd-model-col { width: 26%; }
+.breakdown-table .bd-num-col { width: 64px; }
+.breakdown-table .bd-avail-col { width: 96px; }
+.breakdown-table td, .breakdown-table th { padding-top: 6px; padding-bottom: 6px; }
+.breakdown-table tbody tr.model-row td { height: auto; }
+.breakdown-table td.num, .breakdown-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.breakdown-table .brand-row td { padding: 0; background: var(--surface-soft); border-top: 1px solid var(--border); }
+.bd-brand-toggle { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 12px; border: 0; background: transparent; font: inherit; font-size: var(--fs-table); color: var(--text); text-align: left; cursor: pointer; }
+.bd-brand-toggle strong { color: var(--indigo); }
+.bd-brand-toggle:hover { background: var(--blue-soft); }
+.bd-brand-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+.bd-brand.is-collapsed .bd-brand-toggle .bd-chevron { transform: rotate(-90deg); }
+.bd-brand.is-collapsed tr.model-row { display: none; }
+.breakdown.is-searching .bd-brand.is-collapsed tr.model-row:not([hidden]) { display: table-row; }
+.breakdown-table .group-row td { padding: 8px 12px; }
+.bd-avail { display: inline-block; min-width: 28px; padding: 0 6px; border-radius: 999px; background: var(--grey-soft); color: var(--muted); font-weight: 700; text-align: center; }
+.bd-avail.has-stock { background: var(--green-soft); color: var(--green); }
+/* Employees: chips that wrap, so every name shows. */
+.breakdown-table td.bd-people { white-space: normal; overflow: visible; text-overflow: clip; }
+.bd-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.bd-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 1px 8px 1px 2px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 0.8214rem; line-height: 1.6; }
+.bd-chip:hover { border-color: var(--blue); color: var(--blue); text-decoration: none; }
+.bd-chip .avatar { width: 18px; height: 18px; font-size: 0.5rem; }
+.bd-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bd-count { color: var(--muted); font-weight: 700; }
+.bd-instock-badge { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 0.7857rem; font-weight: 700; }
+@media (max-width: 900px) {
+  .bd-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .breakdown-table { width: max(720px, 100%); }
+}
+
+/* ==== Stock: Brands & models ==== */
+.brands-layout { align-items: start; }
+details.brands-cat { padding: 0; overflow: hidden; margin-bottom: var(--sp-3); }
+details.brands-cat:not([open]) > .bd-cat-head .bd-chevron { transform: rotate(-90deg); }
+details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border); }
+.brands-list { list-style: none; margin: 0; padding: 4px 0; }
+.brands-brand { padding: 6px 16px; }
+.brands-brand + .brands-brand { border-top: 1px solid var(--border); }
+.brands-row { display: flex; align-items: center; gap: 8px; }
+.brands-row strong { color: var(--indigo); }
+.brands-action { margin-left: auto; opacity: 0.7; }
+.brands-brand:hover .brands-action { opacity: 1; }
+.brands-models { list-style: none; margin: 4px 0 2px; padding: 0 0 0 14px; display: grid; gap: 2px; font-size: var(--fs-table); }
+.brands-models li { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.brands-model-action { margin-left: auto; font-size: 0.7857rem; opacity: 0; }
+.brands-models li:hover .brands-model-action, .brands-model-action:focus-visible { opacity: 1; }
+@media (hover: none) { .brands-model-action { opacity: 1; } }
+.brands-form { position: sticky; top: var(--sp-4); }
+.brands-arrow { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--fs-table); }
+.brands-arrow .icon { width: 14px; height: 14px; }
+.chip-merge { background: var(--purple-soft); color: var(--purple); }
+.card-narrow-wide { max-width: 900px; }

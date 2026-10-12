@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/kb">General IT Support</a><% if (article.id) { %> / <a href="/kb/<%= article.id %>"><%= article.title %></a><% } %></p>
+    <p class="crumbs"><a href="/articles">Articles</a><% if (article.id) { %> / <a href="/articles/<%= article.id %>"><%= article.title %></a><% } %></p>
     <h1><%= article.id ? 'Edit article' : 'New article' %></h1>
   </div>
 </header>
@@ -46,7 +46,7 @@
       </label>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary"><%= article.id ? 'Save changes' : 'Create article' %></button>
-        <a href="<%= article.id ? `/kb/${article.id}` : '/kb' %>" class="btn btn-ghost">Cancel</a>
+        <a href="<%= article.id ? `/articles/${article.id}` : '/articles' %>" class="btn btn-ghost">Cancel</a>
       </div>
     </form>
   </section>

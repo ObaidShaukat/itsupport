@@ -87,7 +87,7 @@ async function syncGdap(user = null, { trigger = 'schedule' } = {}) {
       const added = items.filter((r) => !known.has(r.relationship_id)).length;
       await conn.query("UPDATE gdap_sync_log SET status = 'ok', finished_at = NOW(), relationship_count = ? WHERE id = ?", [items.length, logId]);
       await logActivity(conn, user, {
-        type: 'gdap', action: 'synced', subject: 'GDAP',
+        type: 'gdap', action: 'synced', subject: 'Microsoft Partner',
         summary: `GDAP ${how}: ${items.length} relationship${items.length === 1 ? '' : 's'} (${added} new, ${gone.affectedRows} removed, ${linked} newly linked to clients)`,
       });
       return { ok: true, count: items.length, added, removed: gone.affectedRows, linked };
@@ -103,7 +103,7 @@ async function syncGdap(user = null, { trigger = 'schedule' } = {}) {
     running = false;
     const error = String(err.message || err).slice(0, 2000);
     await pool.query("UPDATE gdap_sync_log SET status = 'failed', finished_at = NOW(), error = ? WHERE id = ?", [error, logId]).catch(() => {});
-    await logActivity(null, user, { type: 'gdap', action: 'synced', subject: 'GDAP', summary: `GDAP ${how} failed: ${error.slice(0, 400)}` }).catch(() => {});
+    await logActivity(null, user, { type: 'gdap', action: 'synced', subject: 'Microsoft Partner', summary: `GDAP ${how} failed: ${error.slice(0, 400)}` }).catch(() => {});
     await alertSyncFailure(error).catch((e) => console.error('GDAP failure alert failed:', e.message));
     return { ok: false, error };
   }
@@ -130,7 +130,7 @@ async function setLink(user, relId, { clientId, auto }) {
     }
     const customer = rel.customer_name || rel.display_name || 'customer';
     await logActivity(conn, user, {
-      type: 'gdap', id: relId, action: 'updated', subject: 'GDAP', clientId: client ? client.id : null, clientName: client ? client.name : null,
+      type: 'gdap', id: relId, action: 'updated', subject: 'Microsoft Partner', clientId: client ? client.id : null, clientName: client ? client.name : null,
       summary: auto ? `Set the GDAP customer ${customer} back to automatic client matching (${client ? `linked to ${client.name}` : 'no match'})`
         : client ? `Linked the GDAP customer ${customer} to the client ${client.name}` : `Unlinked the GDAP customer ${customer} from its client`,
     });

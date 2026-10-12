@@ -72,10 +72,10 @@ app.locals.navItems = [
   { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
   { key: 'tickets', href: '/tickets', label: 'Tickets', icon: 'message' },
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
-  { key: 'kb', href: '/kb', label: 'General IT Support', icon: 'book' },
+  { key: 'kb', href: '/articles', label: 'Articles', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
   { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard' },
-  { key: 'gdap', href: '/gdap', label: 'GDAP', icon: 'shield' },
+  { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield' },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -158,7 +158,7 @@ const NAV_PREFIXES = [
   ['/services', 'services'], ['/categories', 'services'], ['/steps', 'services'],
   ['/users', 'users'],
   ['/profile', 'profile'],
-  ['/kb', 'kb'],
+  ['/articles', 'kb'],
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
   ['/inventory', 'inventory'],
 ];
@@ -202,7 +202,11 @@ app.use('/profile', require('./src/routes/profile'));
 app.use('/tickets', require('./src/routes/tickets'));
 app.use(require('./src/routes/services'));
 app.use(require('./src/routes/clients'));
-app.use('/kb', require('./src/routes/kb'));
+app.use('/articles', require('./src/routes/kb'));
+// Old addresses: /kb/... -> /articles/... (and /gdap/... -> /microsoft-partner/...), keeping
+// the method for forms posted from a page loaded before the rename.
+const moved = (to) => (req, res) => res.redirect(req.method === 'GET' || req.method === 'HEAD' ? 301 : 308, to + (req.url === '/' ? '' : req.url.startsWith('/?') ? req.url.slice(1) : req.url));
+app.use('/kb', moved('/articles'));
 app.use('/files', require('./src/routes/files'));
 app.use('/avatars', require('./src/routes/avatars'));
 app.use('/log-work', require('./src/routes/activity'));
@@ -211,7 +215,8 @@ app.use('/activity', require('./src/routes/activity-log'));
 app.use('/reminders', require('./src/routes/reminders'));
 app.use('/notifications', require('./src/routes/notifications'));
 app.use('/push', require('./src/routes/push'));
-app.use('/gdap', require('./src/routes/gdap'));
+app.use('/microsoft-partner', require('./src/routes/gdap'));
+app.use('/gdap', moved('/microsoft-partner'));
 app.use('/inventory', require('./src/routes/inventory'));
 
 // ---- Errors ----

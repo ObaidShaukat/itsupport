@@ -1,0 +1,94 @@
+<%- include('../../partials/head') %>
+<header class="page-head">
+  <div>
+    <h1>Brands &amp; models</h1>
+    <p class="muted">Every brand and model in stock, per category, with counts. Rename one, or merge it into another, to tidy up duplicates (for example brand "MacBook" into "Apple"). You see a preview before anything changes.</p>
+  </div>
+</header>
+<%- include('_nav', { active: 'brands' }) %>
+<% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+
+<div class="grid-2 grid-wide-left brands-layout">
+  <div>
+    <% if (!tree.length) { %><p class="empty card">No stock items yet.</p><% } %>
+    <% for (const cat of tree) { %>
+      <details class="card brands-cat" open>
+        <summary class="bd-cat-head">
+          <span class="bd-chevron" aria-hidden="true"><%- icon('down') %></span>
+          <h2><%= cat.name %></h2>
+          <span class="chip chip-category"><%= cat.brands.length %> brand<%= cat.brands.length === 1 ? '' : 's' %> · <%= cat.total %> item<%= cat.total === 1 ? '' : 's' %></span>
+        </summary>
+        <ul class="brands-list">
+          <% for (const b of cat.brands) { %>
+            <li class="brands-brand">
+              <div class="brands-row">
+                <strong><%= b.brand || '(no brand)' %></strong>
+                <span class="muted small"><%= b.count %></span>
+                <% if (b.brand) { %>
+                  <a class="btn btn-small btn-ghost brands-action" href="/inventory/stock/brands?kind=brand&category=<%= cat.id %>&brand=<%= encodeURIComponent(b.brand) %>#rename"><%- icon('edit') %><span>Rename / merge</span></a>
+                <% } %>
+              </div>
+              <ul class="brands-models">
+                <% for (const m of b.models) { %>
+                  <li>
+                    <span><%= m.model || '(no model)' %></span>
+                    <span class="muted small"><%= m.count %></span>
+                    <% if (b.brand && m.model) { %>
+                      <a class="brands-model-action" href="/inventory/stock/brands?kind=model&category=<%= cat.id %>&brand=<%= encodeURIComponent(b.brand) %>&model=<%= encodeURIComponent(m.model) %>#rename" title="Rename or merge this model">Rename / merge</a>
+                    <% } %>
+                  </li>
+                <% } %>
+              </ul>
+            </li>
+          <% } %>
+        </ul>
+      </details>
+    <% } %>
+  </div>
+
+  <section class="card brands-form" id="rename">
+    <h2>Rename or merge</h2>
+    <form method="post" action="/inventory/stock/brands/preview" class="form" data-rename-form>
+      <%- csrfField %>
+      <fieldset class="field choice-group">
+        <legend>What to change</legend>
+        <label class="choice"><input type="radio" name="kind" value="brand" <%= input.kind !== 'model' ? 'checked' : '' %>> <span>A brand</span></label>
+        <label class="choice"><input type="radio" name="kind" value="model" <%= input.kind === 'model' ? 'checked' : '' %>> <span>A model</span></label>
+      </fieldset>
+      <label class="field">
+        <span>Category</span>
+        <select name="category_id">
+          <option value="">All categories</option>
+          <% for (const c of categories) { %><option value="<%= c.id %>" <%= input.categoryId === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+        </select>
+      </label>
+      <label class="field">
+        <span>Brand</span>
+        <input type="text" name="from_brand" value="<%= input.fromBrand %>" required maxlength="100" list="brand-suggest" autocomplete="off" data-brand-input>
+      </label>
+      <label class="field" data-kind-model>
+        <span>Model</span>
+        <input type="text" name="from_model" value="<%= input.fromModel %>" maxlength="150" list="model-suggest" autocomplete="off" data-model-input>
+      </label>
+      <div class="brands-arrow" aria-hidden="true"><%- icon('down') %> becomes</div>
+      <label class="field">
+        <span data-kind-brand>New brand <span class="muted">(an existing one merges them)</span></span>
+        <span data-kind-model>Brand <span class="muted">(optional: move it to another brand)</span></span>
+        <input type="text" name="to_brand" value="<%= input.toBrand %>" maxlength="100" list="brand-suggest" autocomplete="off">
+      </label>
+      <label class="field" data-kind-model>
+        <span>New model <span class="muted">(an existing one merges them)</span></span>
+        <input type="text" name="to_model" value="<%= input.toModel %>" maxlength="150" autocomplete="off">
+      </label>
+      <label class="choice" data-kind-brand>
+        <input type="checkbox" name="prefix" value="1" <%= input.prefix ? 'checked' : '' %>>
+        <span>Put the old brand in front of each model <span class="muted small">(e.g. "MacBook" + "Air M1 2020" → "MacBook Air M1 2020")</span></span>
+      </label>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary"><%- icon('eye') %><span>Preview changes</span></button>
+      </div>
+    </form>
+  </section>
+</div>
+<%- include('_suggest', { suggest }) %>
+<%- include('../../partials/foot') %>
