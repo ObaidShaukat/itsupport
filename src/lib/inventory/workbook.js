@@ -10,6 +10,7 @@ const { buildBook, recordsColumns, stockColumns } = require('./template');
 const { normHeader } = require('./import-files');
 const planner = require('./import-plan');
 const { lockEmployees } = require('./userids');
+const { listExtras, extraSecrets, extrasText, isSecretType } = require('./extras');
 
 const dateCell = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? new Date(`${v}T00:00:00Z`) : v || '');
 
@@ -77,7 +78,17 @@ async function exportWorkbook(db, { includeSecrets = false } = {}) {
     const columns = await recordsColumns(db, tab, { all: true });
     const records = (await listRecords(db, tab.id)).filter((r) => !status || r.status === status);
     const plain = includeSecrets ? await tabSecrets(db, tab.id) : new Map();
+    // Extra fields (this record only): one "Extra fields" cell, "Name: value | ...".
+    // Passwords / PINs follow "Include passwords" (blank otherwise, like shared ones).
+    const ids = records.map((r) => r.id);
+    const extras = await listExtras(db, ids);
+    const extraPlain = includeSecrets ? await extraSecrets(db, ids) : new Map();
     const rows = records.map((r) => columns.map((c) => {
+      if (c.role === 'extras') {
+        const list = extras.get(r.id) || [];
+        secrets += list.filter((x) => isSecretType(x.field_type) && extraPlain.get(x.id)).length;
+        return extrasText(list, { secrets: extraPlain });
+      }
       if (c.role === 'status') return r.status === 'active' ? 'Active' : 'Inactive';
       if (c.role === 'leaving') return dateCell(r.leaving_date);
       const f = c.field;

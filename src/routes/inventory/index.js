@@ -33,9 +33,31 @@ router.get('/', async (req, res) => {
 router.post('/secret', async (req, res) => {
   const recordId = toId(req.body.record_id);
   const fieldId = toId(req.body.field_id);
+  const extraId = toId(req.body.extra_id);
   const action = req.body.action === 'copy' ? 'copy' : 'reveal';
-  if (!recordId || !fieldId) return res.status(400).json({ ok: false, error: 'Unknown field.' });
+  if (!recordId || (!fieldId && !extraId)) return res.status(400).json({ ok: false, error: 'Unknown field.' });
   const { record, tab, fields, title } = await getRecord(pool, recordId);
+  // An extra field (this record only): same rules, logged the same way.
+  if (extraId) {
+    const [[x]] = await pool.query('SELECT id, name, field_type, value_enc FROM record_extra_fields WHERE id = ? AND record_id = ?', [extraId, record.id]);
+    if (!x || !['password', 'pin'].includes(x.field_type)) return res.status(400).json({ ok: false, error: 'Unknown field.' });
+    const st = keyStatus();
+    if (!st.ok) return res.status(400).json({ ok: false, error: st.message });
+    if (!x.value_enc) return res.status(404).json({ ok: false, error: 'Nothing is saved in this field.' });
+    let plain;
+    try {
+      plain = decrypt(x.value_enc);
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    await logInv(null, req.user, {
+      type: 'inv_secret', id: record.id, action: action === 'copy' ? 'copied' : 'viewed', subject: title,
+      summary: `${action === 'copy' ? 'Copied' : 'Revealed'} ${x.name} (this record only) for ${title} (${tab.name})`,
+      personId: tab.kind === 'employees' ? record.id : null,
+    });
+    res.set('Cache-Control', 'no-store');
+    return res.json({ ok: true, value: plain });
+  }
   const field = fields.find((f) => f.id === fieldId);
   if (!field || !isSecret(field)) return res.status(400).json({ ok: false, error: 'Unknown field.' });
   const status = keyStatus();

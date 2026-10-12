@@ -17,6 +17,12 @@ const { listCategories, listItems, getItem, itemLabel, assignItem, returnItem, r
 const { getPrefix, normalizeId, lowestFree } = require('./userids');
 const { normHeader, parseAccess, parseDate } = require('./import-files');
 const { decrypt } = require('./secrets');
+const {
+  listExtras, extraSecrets, parseExtrasCell, readExtraValue, isSecretType, getExtra, createExtra, updateExtra, deleteExtra,
+} = require('./extras');
+
+// Type of a new extra field from the workbook: names with password / PIN are encrypted.
+const guessExtraType = (name) => (/pass(word|code)?|pwd/i.test(name) ? 'password' : /\bpin\b/i.test(name) ? 'pin' : 'text');
 
 const isClear = (text) => /^clear$/i.test(String(text || '').trim());
 
@@ -49,6 +55,7 @@ async function targetsFor(db, scope) {
     list.push({ value: 'status', label: 'Status (Active / Inactive)', norms: ['status', 'employeestatus'] });
     list.push({ value: 'leaving', label: 'Leaving date', norms: ['leavingdate', 'leftdate', 'leavedate', 'enddate', 'left'] });
   }
+  list.push({ value: 'extras', label: 'Extra fields (this record only)', norms: ['extrafields', 'extrafield', 'extras', 'extra'] });
   return list;
 }
 
@@ -115,9 +122,15 @@ async function planRecords(db, { tab, mapping, headers, rows, defaultStatus = 'a
   const keyCol = keyField ? colField.findIndex((f) => f && f.id === keyField.id) : -1;
   const statusCol = colOf('status');
   const leavingCol = colOf('leaving');
+  const extrasCol = colOf('extras');
   const prefix = isEmp ? await getPrefix(db) : null;
 
   const existing = await listRecords(db, tab.id);
+  // Extra fields of the records already there (and their passwords, decrypted in memory
+  // only to spot "same as saved"), when the sheet has an Extra fields column.
+  const extrasByRecord = extrasCol >= 0 ? await listExtras(db, existing.map((r) => r.id)) : new Map();
+  const extraPlain = extrasCol >= 0 ? await extraSecrets(db, existing.map((r) => r.id)) : new Map();
+  const sharedNames = new Set(fields.map((f) => lower(f.label)));
   const index = (field) => {
     const map = new Map();
     if (!field) return map;
@@ -256,6 +269,53 @@ async function planRecords(db, { tab, mapping, headers, rows, defaultStatus = 'a
     row.errors.push(...errors.filter((e) => !e.startsWith('ENCRYPTION_KEY')));
     if (errors.some((e) => e.startsWith('ENCRYPTION_KEY'))) row.errors.push(errors.find((e) => e.startsWith('ENCRYPTION_KEY')));
 
+    // Extra fields (this record only): "Name: value | ...". Empty = no change, CLEAR =
+    // remove them all, "Name: CLEAR" = remove that one; others update by name or are added.
+    let extraPlan = null;
+    if (extrasCol >= 0) {
+      const parsed = parseExtrasCell(cells[extrasCol]);
+      const have = record ? extrasByRecord.get(record.id) || [] : [];
+      if (parsed && parsed.clearAll) {
+        if (have.length) {
+          extraPlan = { clearAll: true, ops: [] };
+          row.display.push({ label: 'Extra fields', text: `(all ${have.length} removed)` });
+        }
+      } else if (parsed) {
+        row.errors.push(...parsed.errors.map((e) => `Extra fields: ${e}`));
+        const ops = [];
+        const shown = [];
+        const names = new Set();
+        for (const it of parsed.items) {
+          const key = lower(it.name);
+          if (names.has(key)) { row.errors.push(`Extra fields: "${it.name}" is listed twice.`); continue; }
+          names.add(key);
+          const ex = have.find((x) => lower(x.name) === key);
+          if (isClear(it.value)) {
+            if (ex) { ops.push({ op: 'delete', extraId: ex.id, name: ex.name }); shown.push(`${ex.name} (removed)`); }
+            continue;
+          }
+          if (!it.value) continue;
+          if (!ex && sharedNames.has(key)) { row.errors.push(`Extra fields: "${it.name}" is already a column for all records; put the value in that column.`); continue; }
+          const type = ex ? ex.field_type : guessExtraType(it.name);
+          let raw = it.value;
+          if (type === 'date') {
+            const d = parseDate(raw);
+            if (d === null) { row.errors.push(`Extra fields: ${it.name}: "${raw}" is not a valid date.`); continue; }
+            raw = d;
+          }
+          if (isSecretType(type) && ex && extraPlain.get(ex.id) === raw) { shown.push(`${it.name}: ${MASK} (same)`); continue; }
+          const read = readExtraValue({ name: it.name, type }, raw, { hasSecret: ex ? ex.hasSecret : false });
+          if (read.error) { row.errors.push(`Extra fields: ${read.error}`); continue; }
+          if (!read.change) continue;
+          if (ex && !isSecretType(type) && (ex.value || '') === (read.change.value || '')) continue;
+          ops.push(ex ? { op: 'update', extraId: ex.id, name: ex.name, type, change: read.change } : { op: 'create', name: it.name.slice(0, 100), type, change: read.change });
+          shown.push(`${it.name}: ${isSecretType(type) ? MASK : read.change.value}${ex ? '' : ' (new)'}`);
+        }
+        if (ops.length) extraPlan = { ops };
+        if (shown.length) row.display.push({ label: 'Extra fields', text: shown.join(' | ') });
+      }
+    }
+
     // Name.
     const after = new Map(before);
     for (const [k, c] of values) if ('value' in c) after.set(k, { value: c.value });
@@ -312,9 +372,9 @@ async function planRecords(db, { tab, mapping, headers, rows, defaultStatus = 'a
     else if (record) {
       const plainChanged = [...values].some(([k, c]) => c.secret || (c.clear ? Boolean(before.get(k)?.hasSecret) : (before.get(k)?.value || null) !== (c.value || null)));
       const uidChanged = newUid !== null && uidField && (record.values.get(uidField.id)?.value || '') !== newUid;
-      if (!plainChanged && !uidChanged && record.status === status && (record.leaving_date || null) === (leaving || null)) row.action = 'unchanged';
+      if (!plainChanged && !uidChanged && !extraPlan && record.status === status && (record.leaving_date || null) === (leaving || null)) row.action = 'unchanged';
     }
-    row.apply = { recordId: record ? record.id : null, values, status, leaving, uid: newUid, wasStatus: record ? record.status : null, before };
+    row.apply = { recordId: record ? record.id : null, values, status, leaving, uid: newUid, wasStatus: record ? record.status : null, before, extras: extraPlan };
     return row;
   });
   return summarise(out, { notes, newFields: specs.map((s) => `${s.label} (${FIELD_TYPES[s.type]})`) });
@@ -341,9 +401,14 @@ async function applyRecords(conn, user, { tab, plan, fileName }) {
       );
       await saveValues(conn, r.insertId, fields, a.values);
       await logInv(conn, user, { type: 'inv_record', id: r.insertId, action: 'created', subject: row.title, summary: `Added ${row.title} to ${tab.name} (import from ${fileName})` });
+      if (a.extras) await applyExtras(conn, user, { record: { id: r.insertId }, tab, title: row.title }, a.extras);
       continue;
     }
     const labels = await saveValues(conn, a.recordId, fields, a.values, a.before);
+    if (a.extras) {
+      await applyExtras(conn, user, { record: { id: a.recordId }, tab, title: row.title }, a.extras);
+      labels.push('extra fields');
+    }
     if (a.wasStatus === 'active' && a.status === 'inactive') {
       await returnAll(conn, user, { id: a.recordId, title: row.title }, a.leaving || londonDate());
     }
@@ -354,6 +419,30 @@ async function applyRecords(conn, user, { tab, plan, fileName }) {
       type: 'inv_record', id: a.recordId, action: 'updated', subject: row.title, changes: labels,
       summary: `Updated ${row.title} (import from ${fileName})${labels.length ? `: ${labels.join(', ')}` : ''}`,
     });
+  }
+}
+
+// Extra field changes of one record (inside the confirm transaction); each is logged.
+async function applyExtras(conn, user, ctx, plan) {
+  if (plan.clearAll) {
+    const [r] = await conn.query('DELETE FROM record_extra_fields WHERE record_id = ?', [ctx.record.id]);
+    if (r.affectedRows) {
+      await logInv(conn, user, {
+        type: 'inv_record', id: ctx.record.id, action: 'deleted', subject: ctx.title,
+        summary: `Removed all ${r.affectedRows} field${r.affectedRows === 1 ? '' : 's'} for this record only from ${ctx.title} (import: CLEAR)`,
+      });
+    }
+    return;
+  }
+  for (const op of plan.ops) {
+    if (op.op === 'create') {
+      await createExtra(conn, user, ctx, { name: op.name, type: op.type, change: op.change });
+      continue;
+    }
+    const extra = await getExtra(conn, op.extraId, true);
+    if (!extra || extra.record_id !== ctx.record.id) continue;
+    if (op.op === 'delete') await deleteExtra(conn, user, ctx, extra);
+    else await updateExtra(conn, user, ctx, extra, { name: extra.name, type: extra.field_type, change: op.change });
   }
 }
 

@@ -7,7 +7,8 @@
 const express = require('express');
 const { pool, transaction } = require('../../db');
 const { requireId, flash, notFound, backPath } = require('../../lib/http');
-const { getTab, dataTab, logInv } = require('../../lib/inventory/records');
+const { getTab, dataTab, getRecord, logInv } = require('../../lib/inventory/records');
+const { readExtraDef, readExtraValue, createExtra } = require('../../lib/inventory/extras');
 const { getCategory } = require('../../lib/inventory/stock');
 const {
   FIELD_TYPES, CATEGORY_TYPES, SECRET_TYPES, listFields, readFieldForm, optionsOf, readValues, saveValues,
@@ -76,6 +77,7 @@ router.get('/stock/categories/:id/fields', async (req, res) => showManager(res, 
 // a value typed into the wrong box.
 async function addField(req, res, scope) {
   const back = backTo(req, scope);
+  if (scope.owner.tabId && req.body.applies_to === 'record') return addExtraField(req, res, scope, back);
   const { field, error } = readFieldForm(req.body, scope.types);
   if (error) {
     flash(req, 'error', error);
@@ -134,6 +136,32 @@ async function addField(req, res, scope) {
   flash(req, 'saved', `Saved. "${field.label}" added to every record${change ? ' with a value for this one' : ''}.`);
   res.redirect(back);
 }
+// "Applies to: This record only": an extra field for one record (record_extra_fields),
+// with its optional value, checked before anything is saved.
+async function addExtraField(req, res, scope, back) {
+  const fail = (message) => { flash(req, 'error', message); return res.redirect(back); };
+  const recordId = Number(req.body.record_id) || 0;
+  if (!recordId) return fail('Open a record to add a field for that record only.');
+  const ctx = await getRecord(pool, recordId);
+  if (ctx.tab.id !== scope.id) return fail('That record is not in this tab.');
+  if (ctx.tab.kind === 'employees' && ctx.record.status === 'inactive') return fail('Reactivate this employee before editing.');
+  const def = readExtraDef(req.body);
+  if (def.error) return fail(def.error);
+  if (looksLikeValue(def.name) && req.body.name_ok !== '1') {
+    return fail(`"${def.name}" looks like a value, not a field name. Did you mean to edit a value? Put it in Value, or tick "Use it as the field name anyway".`);
+  }
+  const read = readExtraValue(def, req.body.value);
+  if (read.error) return fail(`Nothing was added: ${read.error}`);
+  try {
+    await transaction((conn) => createExtra(conn, req.user, ctx, { name: def.name, type: def.type, change: read.change }));
+  } catch (err) {
+    if (!err.status) console.error('Adding an extra field failed:', err);
+    return fail(`"${def.name}" could not be added: ${err.status ? err.message : 'a database error occurred. Nothing was changed.'}`);
+  }
+  flash(req, 'saved', `Saved. "${def.name}" added to this record only${read.change ? ' with a value' : ''}.`);
+  return res.redirect(back);
+}
+
 router.post('/t/:id/columns', async (req, res) => addField(req, res, await tabScope(requireId(req.params.id))));
 router.post('/stock/categories/:id/fields', async (req, res) => addField(req, res, await categoryScope(requireId(req.params.id))));
 

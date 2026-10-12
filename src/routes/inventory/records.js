@@ -9,7 +9,13 @@ const { isDate } = require('../../lib/report');
 const {
   getTab, dataTab, listRecords, getRecord, recordTitle, fieldByRole, logInv,
 } = require('../../lib/inventory/records');
-const { listFields, readValues, saveValues } = require('../../lib/inventory/fields');
+const {
+  FIELD_TYPES, SECRET_TYPES, listFields, readValues, saveValues, readFieldForm, optionsOf,
+} = require('../../lib/inventory/fields');
+const {
+  listExtras, getExtra, readExtraDef, readExtraValue, updateExtra, deleteExtra, moveExtra, makeShared, extrasText, asField,
+} = require('../../lib/inventory/extras');
+const { looksLikeValue } = require('../../lib/inventory/field-admin');
 const {
   getPrefix, suggestId, checkId, resolveId, lockEmployees, activeIds, isTaken, lowestFree,
 } = require('../../lib/inventory/userids');
@@ -86,9 +92,18 @@ router.get('/t/:id', async (req, res) => {
   const widths = res.locals.invWidths;
   const columns = fieldColumns(fields, widths);
   if (tab.kind === 'ex_employees') columns.push(fixedColumn('ex:left', 'Left', 110, widths, { sort: 'date' }));
+  // Extra fields (this record only) are not columns: one "Extra" column shows "+N"
+  // with their names; its text ("Name: value | ...", passwords masked) feeds search / CSV.
+  const extras = await listExtras(pool, records.map((r) => r.id));
+  const anyExtras = [...extras.values()].some((list) => list.length);
+  if (anyExtras) columns.push(fixedColumn('extras', 'Extra', 80, widths, { sort: 'number', filter: { type: 'text' } }));
   const rows = records.map((r) => {
     const cells = fieldCells(fields, r.values, r.id);
     if (tab.kind === 'ex_employees') cells.push({ kind: 'date', value: r.leaving_date, sort: r.leaving_date || '', text: r.leaving_date || '' });
+    if (anyExtras) {
+      const list = extras.get(r.id) || [];
+      cells.push({ kind: 'extras', count: list.length, names: list.map((x) => x.name), sort: String(list.length), text: extrasText(list, { mask: '(hidden)' }) });
+    }
     return { href: `/inventory/r/${r.id}`, title: recordTitle(r, fields, r.values), cells };
   });
   res.render('inventory/records/index', {
@@ -222,6 +237,7 @@ const uidOf = (ctx) => {
 router.get('/r/:id', async (req, res) => {
   const ctx = await getRecord(pool, requireId(req.params.id));
   const history = await recordHistory(ctx.record.id);
+  ctx.extras = (await listExtras(pool, [ctx.record.id])).get(ctx.record.id) || [];
   if (!isEmployees(ctx.tab)) {
     return res.render('inventory/records/show', { title: ctx.title, ...ctx, history });
   }
@@ -297,6 +313,170 @@ router.post('/r/:id/value', async (req, res) => {
     if (err) return res.status(500).json({ ok: false, error: 'Saved, but the page could not be refreshed. Reload to see it.' });
     return res.json({ ok: true, changed: labels.length > 0, value: v && !v.hasSecret ? v.value || '' : '', html });
   });
+});
+
+// ---- Field popups ("⋯" menu): one Save for name, value and type ----
+
+const recordBack = (req, ctx) => backPath(req, `/inventory/r/${ctx.record.id}#details`);
+const editable = (ctx) => !(isEmployees(ctx.tab) && ctx.record.status === 'inactive');
+const httpError = (status, message) => Object.assign(new Error(message), { status });
+
+// Shared field (all records): name and type change for every record in the tab (same
+// checks as the Columns page); the value only for this record (same checks as the edit
+// form, User-IDs included). Everything is saved together, or nothing.
+router.post('/r/:id/fields/:fid', async (req, res) => {
+  const ctx = await getRecord(pool, requireId(req.params.id));
+  const back = recordBack(req, ctx);
+  const before = ctx.fields.find((f) => f.id === toId(req.params.fid));
+  if (!before) throw notFound();
+  const isAccess = before.field_type === 'access';
+  const { field: def, error } = readFieldForm({
+    label: req.body.label, field_type: isAccess ? 'access' : req.body.field_type,
+    options: typeof req.body.options === 'string' ? req.body.options : before.options || '',
+    width: String(before.width), required: before.required ? '1' : '', visible: before.visible ? '1' : '0',
+  }, isAccess ? ['access'] : Object.keys(FIELD_TYPES).filter((t) => t !== 'access'));
+  if (error) {
+    flash(req, 'error', error);
+    return res.redirect(back);
+  }
+  const defChanges = [];
+  if (def.label !== before.label) defChanges.push(`renamed "${before.label}" to "${def.label}"`);
+  if (def.field_type !== before.field_type) defChanges.push(`type ${FIELD_TYPES[before.field_type]} → ${FIELD_TYPES[def.field_type]}`);
+  if ((before.options || null) !== def.options) defChanges.push('options');
+  const wasSecret = SECRET_TYPES.includes(before.field_type);
+  if (wasSecret !== SECRET_TYPES.includes(def.field_type)) {
+    const [[{ n }]] = await pool.query('SELECT COUNT(*) AS n FROM inventory_values WHERE field_id = ? AND (value IS NOT NULL OR value_enc IS NOT NULL)', [before.id]);
+    if (Number(n)) {
+      flash(req, 'error', `"${before.label}" has data in ${n} record${Number(n) === 1 ? '' : 's'}, so it cannot change between a password / PIN and a plain type. Add a new field instead.`);
+      return res.redirect(back);
+    }
+  }
+  // The value for this record, checked against the (possibly new) type.
+  const after = { ...before, ...def, id: before.id, optionList: optionsOf(def), visible: true };
+  let values = new Map();
+  const valueSent = !isAccess && editable(ctx) && (`f_${before.id}` in req.body || `clear_${before.id}` in req.body);
+  if (valueSent) {
+    const uidError = before.role === 'user_id' ? await prepareUserId(req, ctx.tab, ctx.fields, ctx.record.id) : null;
+    const read = readValues(req.body, [after], ctx.values);
+    const errors = [uidError, ...read.errors].filter(Boolean);
+    if (errors.length) {
+      flash(req, 'error', `Nothing was saved: ${errors.join(' ')}`);
+      return res.redirect(back);
+    }
+    values = read.values;
+  }
+  let labels = [];
+  try {
+    labels = await transaction(async (conn) => {
+      if (defChanges.length) {
+        await conn.query('UPDATE inventory_fields SET label = ?, field_type = ?, options = ? WHERE id = ?', [def.label, def.field_type, def.options, before.id]);
+        await logInv(conn, req.user, {
+          type: 'inv_config', action: 'updated', subject: ctx.tab.name,
+          summary: `Changed the column "${before.label}" in ${ctx.tab.name}: ${defChanges.join(', ')}`,
+        });
+      }
+      const fields = ctx.fields.map((f) => (f.id === before.id ? after : f));
+      if (before.role === 'user_id' && values.has(before.id)) await settleUserId(conn, ctx.tab, fields, values, ctx.record.id);
+      const changed = values.size ? await saveValues(conn, ctx.record.id, fields, values, ctx.values) : [];
+      if (changed.length) {
+        await conn.query('UPDATE inventory_records SET updated_by = ? WHERE id = ?', [req.user.id, ctx.record.id]);
+        await logInv(conn, req.user, {
+          type: 'inv_record', id: ctx.record.id, action: 'updated', subject: ctx.title, changes: changed,
+          summary: `Edited ${ctx.title} (${ctx.tab.name}): ${changed.join(', ')}`,
+        });
+      }
+      return [...defChanges, ...changed.map((l) => `${l} value`)];
+    });
+  } catch (err) {
+    if (!err.status) console.error(`Saving field ${before.id} on record ${ctx.record.id} failed:`, err);
+    flash(req, 'error', `Nothing was saved: ${err.status ? err.message : 'a database error occurred.'}`);
+    return res.redirect(back);
+  }
+  flash(req, 'saved', labels.length ? `Saved. ${def.label}: ${labels.join(', ')}.` : 'Saved. Nothing changed.');
+  res.redirect(back);
+});
+
+// Extra field (this record only): the record, its extra field, or 404 / not editable.
+async function extraContext(req) {
+  const ctx = await getRecord(pool, requireId(req.params.id));
+  const extra = await getExtra(pool, requireId(req.params.xid));
+  if (!extra || extra.record_id !== ctx.record.id) throw notFound();
+  return { ctx, extra };
+}
+
+// Name, type and value of an extra field together.
+router.post('/r/:id/extras/:xid', async (req, res) => {
+  const { ctx, extra } = await extraContext(req);
+  const back = recordBack(req, ctx);
+  const fail = (message) => { flash(req, 'error', message); return res.redirect(back); };
+  if (!editable(ctx)) return fail('Reactivate this employee before editing.');
+  const def = readExtraDef(req.body);
+  if (def.error) return fail(def.error);
+  if (looksLikeValue(def.name) && def.name !== extra.name && req.body.name_ok !== '1') {
+    return fail(`"${def.name}" looks like a value, not a field name. Put it in Value instead (or tick "Use it as the field name anyway").`);
+  }
+  const sentValue = 'value' in req.body || req.body.clear === '1';
+  const read = sentValue ? readExtraValue(def, req.body.value, { clear: req.body.clear === '1', hasSecret: extra.hasSecret }) : { change: null };
+  if (read.error) return fail(`Nothing was saved: ${read.error}`);
+  try {
+    const changes = await transaction((conn) => updateExtra(conn, req.user, ctx, extra, { name: def.name, type: def.type, change: read.change }));
+    flash(req, 'saved', changes.length ? `Saved. ${def.name}: ${changes.join(', ')}.` : 'Saved. Nothing changed.');
+  } catch (err) {
+    if (!err.status) console.error(`Saving extra field ${extra.id} failed:`, err);
+    return fail(`Nothing was saved: ${err.status ? err.message : 'a database error occurred.'}`);
+  }
+  res.redirect(back);
+});
+
+// Inline value of an extra field (fetch JSON, like /r/:id/value).
+router.post('/r/:id/extras/:xid/value', async (req, res) => {
+  const { ctx, extra } = await extraContext(req);
+  if (!editable(ctx)) return res.status(400).json({ ok: false, error: 'Reactivate this employee before editing.' });
+  const read = readExtraValue({ name: extra.name, type: extra.field_type }, req.body.value, { clear: req.body.clear === '1', hasSecret: extra.hasSecret });
+  if (read.error) return res.status(400).json({ ok: false, error: read.error });
+  let changes = [];
+  try {
+    changes = await transaction((conn) => updateExtra(conn, req.user, ctx, extra, { name: extra.name, type: extra.field_type, change: read.change }));
+  } catch (err) {
+    if (!err.status) console.error(`Saving extra field ${extra.id} failed:`, err);
+    return res.status(err.status || 500).json({ ok: false, error: err.status ? err.message : 'The value could not be saved because of a database error.' });
+  }
+  const now = await getExtra(pool, extra.id);
+  const v = { value: now.value, hasSecret: now.hasSecret };
+  res.render('inventory/_value-display', { field: asField(now), v, recordId: ctx.record.id, extraId: now.id }, (err, html) => {
+    if (err) return res.status(500).json({ ok: false, error: 'Saved, but the page could not be refreshed. Reload to see it.' });
+    return res.json({ ok: true, changed: changes.length > 0, value: now.value || '', html });
+  });
+});
+
+router.post('/r/:id/extras/:xid/delete', async (req, res) => {
+  const { ctx, extra } = await extraContext(req);
+  const back = recordBack(req, ctx);
+  if (!editable(ctx)) { flash(req, 'error', 'Reactivate this employee before editing.'); return res.redirect(back); }
+  await transaction((conn) => deleteExtra(conn, req.user, ctx, extra));
+  flash(req, 'saved', `"${extra.name}" deleted from this record only.`);
+  res.redirect(back);
+});
+
+router.post('/r/:id/extras/:xid/move', async (req, res) => {
+  const { ctx, extra } = await extraContext(req);
+  if (editable(ctx)) await transaction((conn) => moveExtra(conn, req.user, ctx, extra, req.body.dir === 'up' ? 'up' : 'down'));
+  res.redirect(recordBack(req, ctx));
+});
+
+// "Make shared (add to all records)": becomes a field of every record in the tab.
+router.post('/r/:id/extras/:xid/share', async (req, res) => {
+  const { ctx, extra } = await extraContext(req);
+  const back = recordBack(req, ctx);
+  if (!editable(ctx)) { flash(req, 'error', 'Reactivate this employee before editing.'); return res.redirect(back); }
+  try {
+    await transaction((conn) => makeShared(conn, req.user, ctx, extra));
+    flash(req, 'saved', `"${extra.name}" is now a field for every record in ${ctx.tab.name} (empty for the others).`);
+  } catch (err) {
+    if (!err.status) console.error(`Making extra field ${extra.id} shared failed:`, err);
+    flash(req, 'error', err.status ? err.message : 'It could not be made shared because of a database error. Nothing was changed.');
+  }
+  res.redirect(back);
 });
 
 // Access switch on the profile: Granted / Not granted.

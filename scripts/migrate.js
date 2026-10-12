@@ -25,6 +25,7 @@ const ADDED_COLUMNS = [
   ['reminder_recipients', 'pushed_at', 'DATETIME NULL AFTER sent_at'],
   ['ticket_comments', 'updated_at', 'DATETIME NULL AFTER body'],
   ['gdap_relationships', 'hidden_at', 'DATETIME NULL AFTER removed_at'],
+  ['inventory_tabs', 'add_field_default', "ENUM('all', 'record') NOT NULL DEFAULT 'all' AFTER name"],
   ['gdap_relationships', 'hidden_by', 'INT UNSIGNED NULL AFTER hidden_at'],
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
   // Inventory entries also point at the person they concern (person timeline).
@@ -99,6 +100,10 @@ const ONE_TIME_STEPS = [
       await conn.rollback();
       throw err;
     }
+  }],
+  // "+ Add field" on Old Accounts adds a field for that record only by default.
+  ['add_field_default_v1', async (conn) => {
+    await conn.query("UPDATE inventory_tabs SET add_field_default = 'record' WHERE kind = 'records' AND LOWER(name) LIKE 'old account%'");
   }],
 ];
 

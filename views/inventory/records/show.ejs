@@ -20,13 +20,20 @@
     <% const shown = fields.filter((x) => x.visible); const back = `/inventory/r/${record.id}#details`; %>
     <div class="card-head">
       <h2>Details</h2>
-      <%- include('../_add-field', { tabId: tab.id, tabName: tab.name, recordId: record.id, back, types: invFieldTypes }) %>
+      <%- include('../_add-field', { tabId: tab.id, tabName: tab.name, recordId: record.id, back, types: invFieldTypes, appliesDefault: tab.add_field_default }) %>
     </div>
     <ul class="inv-details" data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=details">
       <% for (const [i, f] of shown.filter((x) => x.field_type !== 'access').entries()) { const list = shown.filter((x) => x.field_type !== 'access'); %>
         <%- include('../_field-value', { field: f, v: values.get(f.id), recordId: record.id, manage: { back, types: invFieldTypes, first: i === 0, last: i === list.length - 1 } }) %>
       <% } %>
     </ul>
+    <% if (locals.extras && extras.length) { %>
+      <ul class="inv-details inv-extras" aria-label="Fields for this record only">
+        <% for (const [i, x] of extras.entries()) { %>
+          <%- include('../_field-value', { extra: x, recordId: record.id, manage: { back, types: invFieldTypes, first: i === 0, last: i === extras.length - 1 } }) %>
+        <% } %>
+      </ul>
+    <% } %>
     <p class="small" data-reorder-status role="status" hidden></p>
     <% const access = shown.filter((x) => x.field_type === 'access'); %>
     <% if (access.length) { %>

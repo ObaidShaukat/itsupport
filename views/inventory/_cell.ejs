@@ -5,6 +5,8 @@
 <% const v = cell.value; %>
 <% if (cell.kind === 'secret') { %>
   <%- include('_secret', { recordId: cell.recordId, field: cell.field, hasSecret: cell.hasSecret }) %>
+<% } else if (cell.kind === 'extras') { %>
+  <% if (cell.count) { %><span class="extra-badge" title="Fields for this record only: <%= cell.names.join(', ') %>">+<%= cell.count %></span><% } else { %><span class="muted">—</span><% } %>
 <% } else if (cell.kind === 'access') { %>
   <span class="access-badge <%= cell.granted ? 'is-granted' : '' %>"><%= cell.granted ? 'Granted' : 'Not granted' %></span>
 <% } else if (cell.kind === 'stock_status') { %>

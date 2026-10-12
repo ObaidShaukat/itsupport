@@ -99,13 +99,20 @@ router.post('/settings/tabs/order', async (req, res) => {
 router.post('/settings/tabs/:id', async (req, res) => {
   const tab = await getTab(pool, requireId(req.params.id));
   const name = str(req.body.name, 60);
+  // "+ Add field" default on this tab's records: all records (shared) or this record only.
+  const applies = ['all', 'record'].includes(req.body.add_field_default) ? req.body.add_field_default : tab.add_field_default;
   if (!name) {
     flash(req, 'error', 'Give the tab a name.');
-  } else if (name !== tab.name) {
-    await pool.query('UPDATE inventory_tabs SET name = ? WHERE id = ?', [name, tab.id]);
-    await logInv(null, req.user, { type: 'inv_config', action: 'updated', subject: name, summary: `Renamed the inventory tab "${tab.name}" to "${name}"` });
-    flash(req, 'success', 'Tab renamed.');
+    return res.redirect('/inventory/settings/tabs');
   }
+  const changes = [];
+  if (name !== tab.name) changes.push(`renamed "${tab.name}" to "${name}"`);
+  if (applies !== tab.add_field_default) changes.push(`"+ Add field" now defaults to ${applies === 'record' ? 'This record only' : 'All records'}`);
+  if (changes.length) {
+    await pool.query('UPDATE inventory_tabs SET name = ?, add_field_default = ? WHERE id = ?', [name, applies, tab.id]);
+    await logInv(null, req.user, { type: 'inv_config', action: 'updated', subject: name, summary: `Changed the inventory tab "${tab.name}": ${changes.join(', ')}` });
+  }
+  flash(req, 'saved', changes.length ? 'Saved. Tab updated.' : 'Saved. Nothing changed.');
   res.redirect('/inventory/settings/tabs');
 });
 

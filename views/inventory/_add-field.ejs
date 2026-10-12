@@ -1,60 +1,80 @@
 <%#
-  "+ Add field (all records)" / "+ Add access (all records)" on a record page. Adds the
-  field to the whole tab (empty for everyone else; also a column in the tab's table),
-  optionally with the value for this record. tabId, tabName, recordId, back, access
-  (true for an access toggle), types ({ key: label }, for fields). A name that looks like
-  an email or web address shows a warning ([data-name-check] in app.js; the server also
+  "+ Add field" / "+ Add access" on a record page, laid out like the edit popup:
+  1) Field name, 2) Value (this record, optional; the input follows the type),
+  3) Type, 4) Applies to: This record only (an extra field, record_extra_fields) or
+  All records (a shared field: a column for every record, empty for the others).
+  The default comes from the tab (inventory_tabs.add_field_default, set in Settings).
+  tabId, tabName, recordId, back, access (an access toggle: always all records),
+  types ({ key: label }), appliesDefault ('record' | 'all'). A name that looks like an
+  email or web address shows a warning ([data-name-check] in app.js; the server also
   refuses it unless "Use it as the field name anyway" is ticked).
 %>
+<% const applies = locals.appliesDefault === 'record' && locals.recordId ? 'record' : 'all'; const uid = `af-${locals.access ? 'a' : 'f'}-${tabId}`; %>
 <details class="edit edit-right add-field">
-  <summary class="btn btn-small btn-ghost"><%- icon('plus') %><span><%= locals.access ? 'Add access (all records)' : 'Add field (all records)' %></span></summary>
-  <div class="edit-panel">
-    <form method="post" action="/inventory/t/<%= tabId %>/columns" class="form" data-field-form data-name-check>
+  <summary class="btn btn-small btn-ghost"><%- icon('plus') %><span><%= locals.access ? 'Add access' : 'Add field' %></span></summary>
+  <div class="edit-panel field-menu-panel">
+    <div class="field-menu-head">
+      <strong><%= locals.access ? 'New access toggle' : 'New field' %></strong>
+      <span class="muted small"><%= locals.tabName || '' %></span>
+      <button type="button" class="icon-btn" data-cancel title="Close (Esc)" aria-label="Close"><%- icon('x') %></button>
+    </div>
+    <form method="post" action="/inventory/t/<%= tabId %>/columns" class="field-menu-form" data-field-form data-name-check data-add-field>
       <%- csrfField %>
       <input type="hidden" name="back" value="<%= back %>">
       <% if (locals.recordId) { %><input type="hidden" name="record_id" value="<%= recordId %>"><% } %>
-      <h3 class="edit-section"><%= locals.access ? 'New access toggle' : 'New field' %></h3>
-      <p class="muted small add-field-help">
-        <% if (locals.access) { %>Adds a new access toggle to every record in <%= locals.tabName || 'this tab' %>, as Not granted.<% } else { %>Adds a new field to every record in <%= locals.tabName || 'this tab' %>. You can fill in the value for this record now.<% } %>
-      </p>
-      <label class="field">
-        <span><%= locals.access ? 'Name (e.g. CRM, Portal)' : 'Field name' %></span>
-        <input type="text" name="label" required maxlength="100" autocomplete="off" data-name-input placeholder="<%= locals.access ? 'e.g. CRM' : 'e.g. Personal email, Start date' %>">
+      <label class="field-menu-section">
+        <span class="field-menu-label"><%= locals.access ? 'Name (e.g. CRM, Portal)' : 'Field name' %></span>
+        <input type="text" name="label" required maxlength="100" autocomplete="off" data-name-input placeholder="<%= locals.access ? 'e.g. CRM' : 'e.g. Recovery email' %>">
       </label>
       <div class="name-warning" data-name-warning hidden role="alert">
         <%- icon('flag') %>
         <div>
-          <strong>This looks like a value, not a field name.</strong> Did you mean to edit a value? Close this and click the value on the page instead.
+          <strong>This looks like a value, not a field name.</strong> Did you mean to edit a value? Put it in Value below, or close this and click the value on the page.
           <label class="checkbox-field small"><input type="checkbox" name="name_ok" value="1"> <span>Use it as the field name anyway</span></label>
         </div>
       </div>
       <% if (locals.access) { %>
         <input type="hidden" name="field_type" value="access">
+        <input type="hidden" name="applies_to" value="all">
+        <p class="muted small field-menu-section">Added to every record in <%= locals.tabName || 'this tab' %>, as Not granted.</p>
       <% } else { %>
-        <label class="field">
-          <span>Type</span>
-          <select name="field_type" data-field-type>
+        <% if (locals.recordId) { %>
+          <div class="field-menu-section">
+            <label class="field-menu-label" for="<%= uid %>-value">Value <span class="muted">(this record, optional)</span></label>
+            <span class="value-input">
+              <span class="value-secret">
+                <input type="text" id="<%= uid %>-value" name="value" maxlength="1000" autocomplete="off" data-new-value>
+                <button type="button" class="icon-btn" data-show-typed="<%= uid %>-value" title="Show what you type" aria-label="Show what you type" hidden data-new-value-eye><%- icon('eye') %></button>
+              </span>
+            </span>
+          </div>
+        <% } %>
+        <div class="field-menu-section">
+          <label class="field-menu-label" for="<%= uid %>-type">Type</label>
+          <select id="<%= uid %>-type" name="field_type" data-field-type>
             <% for (const [key, label] of Object.entries(types)) { if (key === 'access') continue; %>
               <option value="<%= key %>"><%= label %></option>
             <% } %>
           </select>
-        </label>
-        <label class="field" data-options-field>
-          <span>Options <span class="muted">(one per line)</span></span>
-          <textarea name="options" rows="3"></textarea>
-        </label>
-        <% if (locals.recordId) { %>
-          <label class="field">
-            <span>Value for this record <span class="muted">(optional)</span></span>
-            <input type="text" name="value" maxlength="1000" autocomplete="off" data-new-value>
-            <small class="muted">Checked against the type (e.g. a valid email). Passwords and PINs are encrypted. Other records stay empty.</small>
+          <label class="field" data-options-field>
+            <span class="small">Options <span class="muted">(one per line, all records only)</span></span>
+            <textarea name="options" rows="3"></textarea>
           </label>
+        </div>
+        <% if (locals.recordId) { %>
+          <fieldset class="field-menu-section applies-to">
+            <legend class="field-menu-label">Applies to</legend>
+            <label class="choice"><input type="radio" name="applies_to" value="record" <%= applies === 'record' ? 'checked' : '' %>> <span><strong>This record only</strong> <span class="muted small">(other records do not get it)</span></span></label>
+            <label class="choice"><input type="radio" name="applies_to" value="all" <%= applies === 'all' ? 'checked' : '' %>> <span><strong>All records</strong> <span class="muted small">(a column for every record in <%= locals.tabName || 'this tab' %>; only this record gets the value)</span></span></label>
+          </fieldset>
+        <% } else { %>
+          <input type="hidden" name="applies_to" value="all">
         <% } %>
       <% } %>
       <input type="hidden" name="visible" value="1">
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add to all records</span></button>
-        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+      <div class="field-menu-save">
+        <button type="submit" class="btn btn-small btn-primary"><%- icon('plus') %><span>Add</span></button>
+        <button type="button" class="btn btn-small btn-ghost" data-cancel>Cancel</button>
       </div>
     </form>
   </div>

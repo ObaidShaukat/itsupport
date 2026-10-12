@@ -18,17 +18,26 @@
             <strong><%= t.name %></strong>
             <div class="muted small">
               <%= { employees: 'Active employees', ex_employees: 'Inactive employees', stock: 'Stock items and reports', records: 'Simple tab' }[t.kind] %>
+              <% if (t.kind === 'records' || t.kind === 'employees') { %> · Add field: <%= t.add_field_default === 'record' ? 'this record only' : 'all records' %><% } %>
               <% if (t.kind === 'records' || t.kind === 'employees') { %> · <%= counts[t.id] || 0 %> record<%= (counts[t.id] || 0) === 1 ? '' : 's' %><% } %>
             </div>
           </div>
           <div class="row-actions">
             <% if (t.kind !== 'stock') { %><a href="/inventory/t/<%= t.id %>/columns" class="btn btn-small btn-ghost">Columns</a><% } %>
             <details class="edit">
-              <summary class="icon-btn" title="Rename" aria-label="Rename <%= t.name %>"><%- icon('edit') %></summary>
+              <summary class="icon-btn" title="Edit tab" aria-label="Edit <%= t.name %>"><%- icon('edit') %></summary>
               <div class="edit-panel">
                 <form method="post" action="/inventory/settings/tabs/<%= t.id %>" class="form">
                   <%- csrfField %>
                   <label class="field"><span>Name</span><input type="text" name="name" value="<%= t.name %>" required maxlength="60"></label>
+                  <% if (t.kind === 'records' || t.kind === 'employees') { %>
+                    <fieldset class="field choice-group">
+                      <legend>"+ Add field" on a record adds it to</legend>
+                      <label class="choice"><input type="radio" name="add_field_default" value="all" <%= t.add_field_default !== 'record' ? 'checked' : '' %>> <span>All records (a shared column)</span></label>
+                      <label class="choice"><input type="radio" name="add_field_default" value="record" <%= t.add_field_default === 'record' ? 'checked' : '' %>> <span>This record only (an extra field)</span></label>
+                      <small class="muted">Only the default: the popup always lets you choose.</small>
+                    </fieldset>
+                  <% } %>
                   <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save</button>
                     <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>

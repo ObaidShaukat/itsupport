@@ -58,13 +58,20 @@
   <section class="card" id="details">
     <div class="card-head">
       <h2>Details</h2>
-      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, tabName: tab.name, recordId: record.id, back: back + '#details', types: invFieldTypes }) %><% } %>
+      <% if (!readOnly) { %><%- include('_add-field', { tabId: tab.id, tabName: tab.name, recordId: record.id, back: back + '#details', types: invFieldTypes, appliesDefault: tab.add_field_default }) %><% } %>
     </div>
     <ul class="inv-details" <% if (!readOnly) { %>data-sortable-list data-order-url="/inventory/t/<%= tab.id %>/columns/group-order" data-order-extra="group=details"<% } %>>
       <% for (const [i, f] of detailFields.entries()) { %>
         <%- include('_field-value', { field: f, v: values.get(f.id), recordId: record.id, manage: readOnly ? null : { back: back + '#details', types: invFieldTypes, first: i === 0, last: i === detailFields.length - 1 } }) %>
       <% } %>
     </ul>
+    <% if (locals.extras && extras.length) { %>
+      <ul class="inv-details inv-extras" aria-label="Fields for this record only">
+        <% for (const [i, x] of extras.entries()) { %>
+          <%- include('_field-value', { extra: x, recordId: record.id, manage: readOnly ? null : { back: back + '#details', types: invFieldTypes, first: i === 0, last: i === extras.length - 1 } }) %>
+        <% } %>
+      </ul>
+    <% } %>
     <p class="small" data-reorder-status role="status" hidden></p>
     <% const hiddenCount = fields.filter((f) => !f.visible).length; %>
     <% if (hiddenCount) { %><p class="muted small inv-hidden-note"><%= hiddenCount %> hidden field<%= hiddenCount === 1 ? '' : 's' %> · <a href="/inventory/t/<%= tab.id %>/columns">Columns</a></p><% } %>

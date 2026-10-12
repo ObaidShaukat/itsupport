@@ -10,13 +10,13 @@ const TAB_KINDS = ['employees', 'ex_employees', 'stock', 'records'];
 const tabUrl = (tab) => (tab.kind === 'stock' ? '/inventory/stock' : `/inventory/t/${tab.id}`);
 
 async function listTabs(db = pool) {
-  const [tabs] = await db.query('SELECT id, kind, name, sort_order FROM inventory_tabs ORDER BY sort_order, id');
+  const [tabs] = await db.query('SELECT id, kind, name, sort_order, add_field_default FROM inventory_tabs ORDER BY sort_order, id');
   return tabs;
 }
 
 // The tab, or 404.
 async function getTab(db, id) {
-  const [[tab]] = await db.query('SELECT id, kind, name, sort_order FROM inventory_tabs WHERE id = ?', [id]);
+  const [[tab]] = await db.query('SELECT id, kind, name, sort_order, add_field_default FROM inventory_tabs WHERE id = ?', [id]);
   if (!tab) throw notFound();
   return tab;
 }

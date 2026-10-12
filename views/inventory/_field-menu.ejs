@@ -1,75 +1,97 @@
 <%#
-  "⋯" menu for one field on a record page, in compact sections each with its own Save:
-  Value for this record (not for access toggles), Rename, Change type (not for access
-  toggles), then Move up / down, Hide and Delete (confirmation page with a data count).
-  Esc or a click outside closes it without saving. field, v, recordId, back, types,
-  first / last (disable moves).
+  "⋯" edit popup for one field on a record page. Shared field: field (name and type apply
+  to all records, the value to this record). Extra field: extra (everything applies to
+  this record only). One form: 1) Field name, 2) Value for this record, 3) Type, with one
+  Save for all changed parts and Cancel. Footer: Up, Down, Hide (shared) / Make shared
+  (extra), Delete. Esc or a click outside closes it without saving. v, recordId, back,
+  types, first / last (disable moves).
+%>
+<%
+  const x = locals.extra || null;
+  const shared = !x;
+  const id = shared ? field.id : `x${x.id}`;
+  const name = shared ? field.label : x.name;
+  const type = shared ? field.field_type : x.field_type;
+  const isAccess = type === 'access';
+  const asField = shared ? field : { id, label: name, field_type: type, optionList: [], required: false };
+  const action = shared ? `/inventory/r/${recordId}/fields/${field.id}` : `/inventory/r/${recordId}/extras/${x.id}`;
+  const scopeText = shared ? 'all records' : 'this record only';
 %>
 <details class="edit edit-right field-menu">
-  <summary class="icon-btn field-menu-btn" title="Field options" aria-label="Options for <%= field.label %>">⋯</summary>
+  <summary class="icon-btn field-menu-btn" title="Edit field" aria-label="Edit <%= name %>">⋯</summary>
   <div class="edit-panel field-menu-panel">
     <div class="field-menu-head">
-      <strong title="<%= field.label %>"><%= field.label %></strong>
-      <span class="muted small"><%= types[field.field_type] || field.field_type %></span>
+      <strong title="<%= name %>"><%= name %></strong>
+      <span class="field-scope <%= shared ? 'is-shared' : 'is-extra' %>"><%= shared ? 'All records' : 'This record only' %></span>
       <button type="button" class="icon-btn" data-cancel title="Close (Esc)" aria-label="Close"><%- icon('x') %></button>
     </div>
 
-    <% if (field.field_type !== 'access' && locals.recordId) { %>
-      <form method="post" action="/inventory/r/<%= recordId %>/value" class="field-menu-section">
-        <%- csrfField %>
-        <input type="hidden" name="field_id" value="<%= field.id %>">
-        <input type="hidden" name="back" value="<%= back %>">
-        <label class="field-menu-label" for="vi_<%= field.id %>_menu">Value for this record</label>
-        <div class="field-menu-row">
-          <%- include('_value-input', { field, v: locals.v, idSuffix: 'menu' }) %>
-          <button type="submit" class="btn btn-small btn-primary">Save</button>
-        </div>
-      </form>
-    <% } %>
-
-    <form method="post" action="/inventory/fields/<%= field.id %>/rename" class="field-menu-section">
+    <form method="post" action="<%= action %>" class="field-menu-form" data-field-form data-name-check>
       <%- csrfField %>
       <input type="hidden" name="back" value="<%= back %>">
-      <label class="field-menu-label" for="rn_<%= field.id %>">Rename <span class="muted">(all records)</span></label>
-      <div class="field-menu-row">
-        <input id="rn_<%= field.id %>" type="text" name="label" value="<%= field.label %>" required maxlength="100">
-        <button type="submit" class="btn btn-small btn-primary">Save</button>
+      <label class="field-menu-section">
+        <span class="field-menu-label">Field name <span class="muted">(<%= scopeText %>)</span></span>
+        <input type="text" name="label" value="<%= name %>" required maxlength="100" autocomplete="off" data-name-input>
+      </label>
+      <div class="name-warning" data-name-warning hidden role="alert">
+        <%- icon('flag') %>
+        <div><strong>This looks like a value, not a field name.</strong> Put it in Value instead.
+          <label class="checkbox-field small"><input type="checkbox" name="name_ok" value="1"> <span>Use it as the field name anyway</span></label></div>
+      </div>
+      <% if (!isAccess) { %>
+        <div class="field-menu-section">
+          <label class="field-menu-label" for="vi_<%= id %>_menu">Value <span class="muted">(this record)</span></label>
+          <%- include('_value-input', shared ? { field: asField, v: locals.v, idSuffix: 'menu' } : { field: asField, v: locals.v, idSuffix: 'menu', inputName: 'value', clearName: 'clear' }) %>
+        </div>
+        <div class="field-menu-section">
+          <label class="field-menu-label" for="ty_<%= id %>">Type <span class="muted">(<%= scopeText %>)</span></label>
+          <select id="ty_<%= id %>" name="field_type" data-field-type>
+            <% for (const [key, label] of Object.entries(types)) { if (key === 'access' || (!shared && key === 'dropdown')) continue; %>
+              <option value="<%= key %>" <%= key === type ? 'selected' : '' %>><%= label %></option>
+            <% } %>
+          </select>
+          <% if (shared) { %>
+            <label class="field" data-options-field>
+              <span class="small">Options <span class="muted">(one per line)</span></span>
+              <textarea name="options" rows="3"><%= field.options || '' %></textarea>
+            </label>
+          <% } %>
+        </div>
+      <% } else { %>
+        <p class="muted small field-menu-section">Granted / Not granted is switched on the record itself.</p>
+      <% } %>
+      <div class="field-menu-save">
+        <button type="submit" class="btn btn-small btn-primary"><%- icon('check') %><span>Save</span></button>
+        <button type="button" class="btn btn-small btn-ghost" data-cancel>Cancel</button>
       </div>
     </form>
 
-    <% if (field.field_type !== 'access') { %>
-      <form method="post" action="/inventory/fields/<%= field.id %>/type" class="field-menu-section" data-field-form>
-        <%- csrfField %>
-        <input type="hidden" name="back" value="<%= back %>">
-        <label class="field-menu-label" for="ty_<%= field.id %>">Type <span class="muted">(all records)</span></label>
-        <div class="field-menu-row">
-          <select id="ty_<%= field.id %>" name="field_type" data-field-type>
-            <% for (const [key, label] of Object.entries(types)) { if (key === 'access') continue; %>
-              <option value="<%= key %>" <%= key === field.field_type ? 'selected' : '' %>><%= label %></option>
-            <% } %>
-          </select>
-          <button type="submit" class="btn btn-small btn-primary">Save</button>
-        </div>
-        <label class="field" data-options-field>
-          <span class="small">Options <span class="muted">(one per line)</span></span>
-          <textarea name="options" rows="3"><%= field.options || '' %></textarea>
-        </label>
-      </form>
-    <% } %>
-
     <div class="field-menu-section field-menu-actions">
-      <form method="post" action="/inventory/fields/<%= field.id %>/move" class="inline">
+      <form method="post" action="<%= shared ? `/inventory/fields/${field.id}/move` : `/inventory/r/${recordId}/extras/${x.id}/move` %>" class="inline">
         <%- csrfField %>
         <input type="hidden" name="back" value="<%= back %>">
         <button type="submit" name="dir" value="up" class="btn btn-small btn-ghost" <%= locals.first ? 'disabled' : '' %> title="Move up"><%- icon('up') %><span>Up</span></button>
         <button type="submit" name="dir" value="down" class="btn btn-small btn-ghost" <%= locals.last ? 'disabled' : '' %> title="Move down"><%- icon('down') %><span>Down</span></button>
       </form>
-      <form method="post" action="/inventory/fields/<%= field.id %>/hide" class="inline">
-        <%- csrfField %>
-        <input type="hidden" name="back" value="<%= back %>">
-        <button type="submit" class="btn btn-small btn-ghost" title="Hide from every record (show it again from Columns)"><%- icon('eye-off') %><span>Hide</span></button>
-      </form>
-      <a href="/inventory/fields/<%= field.id %>/delete?back=<%= encodeURIComponent(back) %>" class="btn btn-small btn-danger field-menu-delete" title="Delete from every record"><%- icon('trash') %><span>Delete</span></a>
+      <% if (shared) { %>
+        <form method="post" action="/inventory/fields/<%= field.id %>/hide" class="inline">
+          <%- csrfField %>
+          <input type="hidden" name="back" value="<%= back %>">
+          <button type="submit" class="btn btn-small btn-ghost" title="Hide from every record (show it again from Columns)"><%- icon('eye-off') %><span>Hide</span></button>
+        </form>
+        <a href="/inventory/fields/<%= field.id %>/delete?back=<%= encodeURIComponent(back) %>" class="btn btn-small btn-danger field-menu-delete" title="Delete from every record"><%- icon('trash') %><span>Delete</span></a>
+      <% } else { %>
+        <form method="post" action="/inventory/r/<%= recordId %>/extras/<%= x.id %>/share" class="inline" data-confirm="Make &quot;<%= name %>&quot; a field for every record in this tab? This record keeps its value; the others start empty." data-confirm-ok="Make shared">
+          <%- csrfField %>
+          <input type="hidden" name="back" value="<%= back %>">
+          <button type="submit" class="btn btn-small btn-ghost" title="Add this field to all records"><%- icon('users') %><span>Make shared</span></button>
+        </form>
+        <form method="post" action="/inventory/r/<%= recordId %>/extras/<%= x.id %>/delete" class="inline field-menu-delete" data-confirm="Delete &quot;<%= name %>&quot;<%= locals.v && (locals.v.value || locals.v.hasSecret) ? ' and its value' : '' %> from this record only? Other records are not affected. This cannot be undone." data-confirm-ok="Delete">
+          <%- csrfField %>
+          <input type="hidden" name="back" value="<%= back %>">
+          <button type="submit" class="btn btn-small btn-danger" title="Delete from this record only"><%- icon('trash') %><span>Delete</span></button>
+        </form>
+      <% } %>
     </div>
   </div>
 </details>

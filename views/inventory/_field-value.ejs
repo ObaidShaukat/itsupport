@@ -1,30 +1,38 @@
 <%#
-  One field on a record page (an <li> inside ul.inv-details). field, v ({ value, hasSecret }
-  or undefined), recordId; manage: { back, types, first, last } makes it editable: the
-  drag handle, the "⋯" menu (Value, Rename, Type, Move, Hide, Delete) and inline editing
-  (click the value: Enter or the tick saves, Esc cancels; [data-inline-value] in app.js).
-  Without manage (e.g. an ex employee) the value is read-only.
+  One field on a record page (an <li> inside ul.inv-details). Shared field: field, v
+  ({ value, hasSecret } or undefined). Extra field (this record only): extra (from
+  listExtras), shown with an "only this record" tag on hover. recordId; manage: { back,
+  types, first, last } makes it editable: drag handle (shared fields), the "⋯" menu and
+  inline editing (click the value: Enter or the tick saves, Esc cancels; [data-inline-value]
+  in app.js). Without manage (e.g. an ex employee) the value is read-only.
 %>
-<% const editable = locals.manage && field.field_type !== 'access'; %>
-<li class="inv-detail" data-id="<%= field.id %>">
+<%
+  const x = locals.extra || null;
+  const f = x ? { id: `x${x.id}`, label: x.name, field_type: x.field_type, optionList: [], required: false } : field;
+  const val = x ? { value: x.value, hasSecret: x.hasSecret } : locals.v;
+  const editable = locals.manage && f.field_type !== 'access';
+  const valueAction = x ? `/inventory/r/${recordId}/extras/${x.id}/value` : `/inventory/r/${recordId}/value`;
+%>
+<li class="inv-detail <%= x ? 'is-extra' : '' %>" <% if (!x) { %>data-id="<%= f.id %>"<% } %>>
   <div class="inv-detail-label">
-    <% if (locals.manage) { %><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span><% } %>
-    <span class="inv-detail-name"><%= field.label %></span>
-    <% if (locals.manage) { %><%- include('_field-menu', { field, v, recordId, back: manage.back, types: manage.types, first: manage.first, last: manage.last }) %><% } %>
+    <% if (locals.manage && !x) { %><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span><% } %>
+    <span class="inv-detail-name"><%= f.label %></span>
+    <% if (x) { %><span class="extra-tag" title="This field belongs to this record only">only this record</span><% } %>
+    <% if (locals.manage) { %><%- include('_field-menu', { field: x ? null : field, extra: x, v: val, recordId, back: manage.back, types: manage.types, first: manage.first, last: manage.last }) %><% } %>
   </div>
   <div class="inv-detail-value <%= editable ? 'inv-value' : '' %>" <%= editable ? 'data-inline-value' : '' %>>
-    <div class="inv-value-display" data-inline-display <% if (editable) { %>title="Click to edit <%= field.label %>"<% } %>>
-      <%- include('_value-display', { field, v, recordId }) %>
+    <div class="inv-value-display" data-inline-display <% if (editable) { %>title="Click to edit <%= f.label %>"<% } %>>
+      <%- include('_value-display', { field: f, v: val, recordId, extraId: x ? x.id : null }) %>
     </div>
     <% if (editable) { %>
-      <button type="button" class="inv-value-edit" data-inline-open aria-label="Edit <%= field.label %>" title="Edit <%= field.label %>"><%- icon('edit') %></button>
-      <form method="post" action="/inventory/r/<%= recordId %>/value" class="inv-inline-form" data-inline-form hidden>
+      <button type="button" class="inv-value-edit" data-inline-open aria-label="Edit <%= f.label %>" title="Edit <%= f.label %>"><%- icon('edit') %></button>
+      <form method="post" action="<%= valueAction %>" class="inv-inline-form" data-inline-form hidden>
         <%- csrfField %>
-        <input type="hidden" name="field_id" value="<%= field.id %>">
+        <% if (!x) { %><input type="hidden" name="field_id" value="<%= f.id %>"><% } %>
         <input type="hidden" name="back" value="<%= manage.back %>">
         <div class="inv-inline-row">
-          <%- include('_value-input', { field, v, idSuffix: 'inline' }) %>
-          <button type="submit" class="icon-btn inv-inline-save" title="Save (Enter)" aria-label="Save <%= field.label %>"><%- icon('check') %></button>
+          <%- include('_value-input', x ? { field: f, v: val, idSuffix: 'inline', inputName: 'value', clearName: 'clear' } : { field: f, v: val, idSuffix: 'inline' }) %>
+          <button type="submit" class="icon-btn inv-inline-save" title="Save (Enter)" aria-label="Save <%= f.label %>"><%- icon('check') %></button>
           <button type="button" class="icon-btn" data-inline-cancel title="Cancel (Esc)" aria-label="Cancel"><%- icon('x') %></button>
         </div>
         <p class="field-error small" data-inline-error role="alert" hidden></p>

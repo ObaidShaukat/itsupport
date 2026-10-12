@@ -1995,7 +1995,9 @@ document.addEventListener('click', async (e) => {
     return;
   }
   button.disabled = true;
-  const res = await invPost('/inventory/secret', { record_id: box.dataset.record, field_id: box.dataset.field, action: isCopy ? 'copy' : 'reveal' });
+  const res = await invPost('/inventory/secret', {
+    record_id: box.dataset.record, ...(box.dataset.extra ? { extra_id: box.dataset.extra } : { field_id: box.dataset.field }), action: isCopy ? 'copy' : 'reveal',
+  });
   button.disabled = false;
   clearTimeout(box.hideTimer);
   if (!res.ok) {
@@ -2847,7 +2849,8 @@ document.querySelectorAll('form[data-name-check]').forEach((form) => {
   if (!input || !warning) return;
   const looksLikeValue = (t) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t) || /^(https?:\/\/|www\.)\S+$/i.test(t) || /^[a-z0-9-]+(\.[a-z0-9-]+)+\/\S*$/i.test(t);
   const sync = () => {
-    const bad = looksLikeValue(input.value.trim());
+    // Only a new or changed name (an existing odd name can still be saved unchanged).
+    const bad = input.value.trim() !== input.defaultValue.trim() && looksLikeValue(input.value.trim());
     warning.hidden = !bad;
     if (!bad) warning.querySelector('input[name="name_ok"]').checked = false;
   };
@@ -2861,5 +2864,41 @@ document.querySelectorAll('form[data-name-check]').forEach((form) => {
       ok.focus();
     }
   });
+  sync();
+});
+
+// "+ Add field": the Value input follows the chosen Type (email, phone, date, link,
+// password / PIN with an eye), and "This record only" cannot be a dropdown.
+document.querySelectorAll('form[data-add-field]').forEach((form) => {
+  const type = form.querySelector('[data-field-type]');
+  const value = form.querySelector('[data-new-value]');
+  const eye = form.querySelector('[data-new-value-eye]');
+  const radios = [...form.querySelectorAll('input[name="applies_to"]')];
+  if (!type) return;
+  const INPUT = { email: 'email', phone: 'tel', date: 'date', link: 'url', password: 'password', pin: 'password' };
+  const sync = () => {
+    const recordOnly = radios.some((r) => r.checked && r.value === 'record');
+    const dropdown = type.querySelector('option[value="dropdown"]');
+    if (dropdown) {
+      dropdown.disabled = recordOnly;
+      if (recordOnly && type.value === 'dropdown') type.value = 'text';
+    }
+    if (value) {
+      const t = INPUT[type.value] || 'text';
+      if (value.type !== t) {
+        value.type = t;
+        if (t === 'date' && value.value && !/^\d{4}-\d{2}-\d{2}$/.test(value.value)) value.value = '';
+      }
+      value.inputMode = ['number'].includes(type.value) ? 'decimal' : type.value === 'pin' ? 'numeric' : '';
+      value.autocomplete = t === 'password' ? 'new-password' : 'off';
+      value.placeholder = type.value === 'link' ? 'https://' : t === 'password' ? 'Encrypted when saved' : '';
+      if (eye) eye.hidden = t !== 'password';
+    }
+    const options = form.querySelector('[data-options-field]');
+    if (options) options.hidden = type.value !== 'dropdown';
+  };
+  type.addEventListener('change', sync);
+  radios.forEach((r) => r.addEventListener('change', sync));
+  form.addEventListener('reset', () => setTimeout(sync));
   sync();
 });

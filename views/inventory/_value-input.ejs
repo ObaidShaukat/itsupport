@@ -1,10 +1,12 @@
 <%#
   Compact input for one field's value (inline editing and the "⋯" menu), name f_<id>.
-  field, v ({ value, hasSecret }), idSuffix (unique per page). Passwords / PINs: empty
+  field, v ({ value, hasSecret }), idSuffix (unique per page); inputName / clearName
+  override the posted names (extra fields post "value" / "clear"). Passwords / PINs: empty
   keeps the saved one, with an eye to show what is typed and "Remove" when one is saved.
 %>
 <%
-  const name = `f_${field.id}`;
+  const name = locals.inputName || `f_${field.id}`;
+  const clearName = locals.clearName || `clear_${field.id}`;
   const val = (v && v.value) || '';
   const id = `vi_${field.id}_${locals.idSuffix || 'x'}`;
   const secret = field.field_type === 'password' || field.field_type === 'pin';
@@ -25,7 +27,7 @@
     <button type="button" class="icon-btn" data-show-typed="<%= id %>" title="Show what you type" aria-label="Show what you type"><%- icon('eye') %></button>
   </span>
   <% if (v && v.hasSecret) { %>
-    <label class="checkbox-field small"><input type="checkbox" name="clear_<%= field.id %>" value="1"> <span>Remove the saved <%= field.label %></span></label>
+    <label class="checkbox-field small"><input type="checkbox" name="<%= clearName %>" value="1"> <span>Remove the saved <%= field.label %></span></label>
   <% } %>
 <% } else { %>
   <input id="<%= id %>" name="<%= name %>" value="<%= val %>" maxlength="1000" aria-label="<%= field.label %>"

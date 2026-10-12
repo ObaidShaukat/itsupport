@@ -318,6 +318,9 @@ CREATE TABLE IF NOT EXISTS inventory_tabs (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   kind ENUM('employees', 'ex_employees', 'stock', 'records') NOT NULL DEFAULT 'records',
   name VARCHAR(60) NOT NULL,
+  -- "+ Add field" on a record page: 'all' = a shared field for every record (default),
+  -- 'record' = an extra field for that record only (Old Accounts). Editable in Settings.
+  add_field_default ENUM('all', 'record') NOT NULL DEFAULT 'all',
   sort_order INT NOT NULL DEFAULT 0,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id)
@@ -390,6 +393,30 @@ CREATE TABLE IF NOT EXISTS inventory_values (
   KEY idx_inventory_values_field (field_id),
   CONSTRAINT fk_inventory_values_record FOREIGN KEY (record_id) REFERENCES inventory_records (id) ON DELETE CASCADE,
   CONSTRAINT fk_inventory_values_field FOREIGN KEY (field_id) REFERENCES inventory_fields (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Extra fields: belong to ONE record only (not columns in the tab's table). Values are
+-- plain (value) or, for password / PIN, encrypted only (value_enc, like inventory_values).
+CREATE TABLE IF NOT EXISTS record_extra_fields (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  tab_id INT UNSIGNED NOT NULL,
+  record_id INT UNSIGNED NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  field_type VARCHAR(20) NOT NULL DEFAULT 'text',
+  value TEXT NULL,
+  value_enc TEXT NULL,
+  sort_order INT NOT NULL DEFAULT 0,
+  created_by INT UNSIGNED NULL,
+  updated_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_record_extra_name (record_id, name),
+  KEY idx_record_extra_tab (tab_id),
+  CONSTRAINT fk_record_extra_record FOREIGN KEY (record_id) REFERENCES inventory_records (id) ON DELETE CASCADE,
+  CONSTRAINT fk_record_extra_tab FOREIGN KEY (tab_id) REFERENCES inventory_tabs (id) ON DELETE CASCADE,
+  CONSTRAINT fk_record_extra_creator FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_record_extra_editor FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Every physical item (laptops included). employee_id is set while it is assigned.
