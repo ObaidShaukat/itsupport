@@ -23,8 +23,17 @@
             <label class="choice"><input type="checkbox" name="alert_user_ids" value="<%= u.id %>" <%= everyone || chosen.includes(u.id) ? 'checked' : '' %>><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %> <span class="muted small">(<%= String(u.notify_channels || '').split(',').filter(Boolean).join(', ') || 'no channels' %>)</span></span></label>
           <% } %>
         </div>
-        <small class="muted">Alerts go out 30, 14, 7 and 1 days before a relationship ends and when it has expired, once each. Each person gets them the way they chose under My profile → Notifications (popup, email, desktop).</small>
+        <small class="muted">Each person gets alerts the way they chose under My profile → Notifications (popup, email, desktop). Hidden relationships never alert.</small>
       </fieldset>
+      <label class="field">
+        <span>Alert days before the end date</span>
+        <input type="text" name="alert_days" value="<%= String(settings.alert_days ?? '30,14,7,1').split(',').filter(Boolean).join(', ') %>" maxlength="100" inputmode="numeric" placeholder="30, 14, 7, 1">
+        <small class="muted">Whole days from 1 to 365, separated by commas (default 30, 14, 7, 1). Each alert goes once per relationship; leave empty for none.</small>
+      </label>
+      <label class="choice">
+        <input type="checkbox" name="alert_expired" value="1" <%= settings.alert_expired !== '0' ? 'checked' : '' %>>
+        <span><strong>Alert on expiry</strong>: once, when a relationship has expired.</span>
+      </label>
       <label class="choice">
         <input type="checkbox" name="digest" value="1" <%= settings.digest === '1' ? 'checked' : '' %>>
         <span><strong>Daily digest email</strong>: one email each morning (after the 07:00 sync) listing everything ending in the next 30 days, to the people above who get email.</span>

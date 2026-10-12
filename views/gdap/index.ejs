@@ -56,11 +56,22 @@
     </nav>
     <%- include('../partials/search', { target: '#gdap-rows', placeholder: 'Search customer, client, relationship or role' }) %>
   </div>
+  <% if (supersededCount) { %>
+    <div class="gdap-bulk">
+      <span class="muted small"><%= supersededCount %> expired relationship<%= supersededCount === 1 ? '' : 's' %> where the customer already has an active one.</span>
+      <form method="post" action="/gdap/hide-superseded" class="inline" data-confirm="Hide <%= supersededCount %> superseded relationship<%= supersededCount === 1 ? '' : 's' %>? They stop showing and never alert. You can unhide them under Hidden." data-confirm-ok="Hide all superseded">
+        <%- csrfField %>
+        <input type="hidden" name="back" value="<%= back %>">
+        <button type="submit" class="btn btn-small btn-ghost"><%- icon('eye-off') %><span>Hide all superseded</span></button>
+      </form>
+    </div>
+  <% } %>
 
   <div class="table-wrap">
     <table class="table gdap-table">
       <thead>
         <tr>
+          <th class="gd-hide"><span class="visually-hidden">Hide or show</span></th>
           <th class="gd-customer">Customer</th>
           <th class="gd-client">Linked client</th>
           <th>Relationship name</th>
@@ -73,9 +84,18 @@
         </tr>
       </thead>
       <tbody id="gdap-rows">
-        <% for (const r of rows) { %>
-          <tr id="gdap-<%= r.id %>" class="gdap-row gdap-row-<%= r.band %>" data-filter-item data-search="<%= [r.customer_name, r.client_name, r.display_name, r.customer_tenant_id, ...r.roleList.map((x) => x.name)].filter(Boolean).join(' ') %>">
-            <td title="<%= r.customer_name || '' %><%= r.customer_tenant_id ? ` (${r.customer_tenant_id})` : '' %>"><strong><%= r.customer_name || 'Unknown customer' %></strong></td>
+        <% let prevKey = null; %>
+        <% for (const r of rows) { const groupStart = grouped && prevKey !== null && prevKey !== r.customerKey; prevKey = r.customerKey; %>
+          <tr id="gdap-<%= r.id %>" class="gdap-row gdap-row-<%= r.band %> <%= groupStart ? 'gdap-group-start' : '' %> <%= r.hidden ? 'is-hidden' : '' %>" data-filter-item data-search="<%= [r.customer_name, r.client_name, r.display_name, r.customer_tenant_id, ...r.roleList.map((x) => x.name)].filter(Boolean).join(' ') %>">
+            <td class="gdap-hide-cell">
+              <form method="post" action="/gdap/<%= r.id %>/hide" class="inline">
+                <%- csrfField %>
+                <input type="hidden" name="hide" value="<%= r.hidden ? '0' : '1' %>">
+                <input type="hidden" name="back" value="<%= back %>">
+                <button type="submit" class="icon-btn gdap-eye <%= r.hidden ? 'is-hidden' : '' %>" title="<%= r.hidden ? 'Unhide' : 'Hide' %> this relationship" aria-label="<%= r.hidden ? 'Unhide' : 'Hide' %> <%= r.display_name || 'relationship' %>"><%- icon(r.hidden ? 'eye-off' : 'eye') %></button>
+              </form>
+            </td>
+            <td title="<%= r.customer_name || '' %><%= r.customer_tenant_id ? ` (${r.customer_tenant_id})` : '' %>"><% if (r.superseded) { %><span class="gdap-tag" title="Expired, and this customer has an active relationship">Superseded</span> <% } %><strong><%= r.customer_name || 'Unknown customer' %></strong></td>
             <td class="gdap-link-cell">
               <% if (r.client_id) { %><a href="/clients/<%= r.client_id %>" title="<%= r.client_name %>"><%= r.client_name %></a><% } else { %><span class="muted">Not linked</span><% } %>
               <details class="edit">
@@ -114,9 +134,9 @@
             </td>
           </tr>
         <% } %>
-        <tr data-filter-empty hidden><td colspan="9" class="empty">No relationships match your search.</td></tr>
+        <tr data-filter-empty hidden><td colspan="10" class="empty">No relationships match your search.</td></tr>
         <% if (!rows.length) { %>
-          <tr><td colspan="9" class="empty"><%= sync.lastOk ? 'No relationships in this view.' : 'No GDAP relationships yet. They appear after the first sync.' %></td></tr>
+          <tr><td colspan="10" class="empty"><%= sync.lastOk ? 'No relationships in this view.' : 'No GDAP relationships yet. They appear after the first sync.' %></td></tr>
         <% } %>
       </tbody>
     </table>

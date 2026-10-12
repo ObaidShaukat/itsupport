@@ -1,5 +1,6 @@
-// GDAP alerts. Each goes once (gdap_alerts): per relationship at 30, 14, 7 and 1 days
-// before the end date and when it has expired; the client secret 30 and 7 days before it
+// GDAP alerts. Each goes once (gdap_alerts): per relationship at the alert days in
+// settings (default 30, 14, 7 and 1) before the end date and when it has expired (can be
+// turned off); hidden relationships never alert; the client secret 30 and 7 days before it
 // expires; a failed sync once a day. Recipients follow their own notification
 // preference: popup (bell, notifications type 'gdap'), email and desktop (Web Push).
 // Expiry alerts go to the users chosen in GDAP settings (default: everyone); the secret
@@ -100,12 +101,13 @@ const ukDay = (d) => fmtFor('d_mon_yyyy').fmtDay(d);
 
 // Expiry alerts for every live relationship that reached a threshold it has not had.
 async function runExpiryAlerts() {
-  const { rows } = await listRelationships(pool);
-  const users = await alertUsers(pool);
+  const { rows, settings } = await listRelationships(pool);
+  const users = await alertUsers(pool, settings);
   let sent = 0;
   for (const r of rows) {
-    if (r.removed || !r.end_at || !LIVE.has(r.status)) continue;
-    const t = thresholdFor(r);
+    // Hidden relationships never alert.
+    if (r.removed || r.hidden || !r.end_at || !LIVE.has(r.status)) continue;
+    const t = thresholdFor(r, settings);
     if (t === null) continue;
     const endDate = londonDate(new Date(r.end_at));
     if (!(await claim(pool, r.relationship_id, t, endDate))) continue;
@@ -136,7 +138,7 @@ async function runDigest() {
   const settings = await getSettings(pool);
   if (settings.digest !== '1') return false;
   const { rows } = await listRelationships(pool);
-  const soon = rows.filter((r) => !r.removed && LIVE.has(r.status) && r.end_at && !r.expired && r.days !== null && r.days <= 30);
+  const soon = rows.filter((r) => !r.removed && !r.hidden && LIVE.has(r.status) && r.end_at && !r.expired && r.days !== null && r.days <= 30);
   if (!soon.length) return false;
   const users = (await alertUsers(pool, settings)).filter((u) => channelsOf(u).has('email'));
   const { mailStatus, sendMail, userEmail } = mailer();

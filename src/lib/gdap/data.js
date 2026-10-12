@@ -5,8 +5,17 @@ const { londonDate } = require('../activity');
 const { rolesOf, GLOBAL_ADMIN } = require('./roles');
 
 const DEFAULT_PARTNER_URL = 'https://partner.microsoft.com/dashboard/commerce2/customers/{tenantId}';
-const SETTING_DEFAULTS = { partner_center_url: DEFAULT_PARTNER_URL, alert_users: 'all', digest: '0', secret_expires_on: '' };
 const THRESHOLDS = [30, 14, 7, 1];
+const SETTING_DEFAULTS = {
+  partner_center_url: DEFAULT_PARTNER_URL, alert_users: 'all', digest: '0', secret_expires_on: '', alert_days: THRESHOLDS.join(','), alert_expired: '1',
+};
+
+// Alert days from settings ("30,14,7,1"): unique whole days 1-365, largest first.
+function alertDays(settings) {
+  const days = String((settings && settings.alert_days) ?? THRESHOLDS.join(',')).split(/[\s,;]+/).map(Number)
+    .filter((n) => Number.isInteger(n) && n >= 1 && n <= 365);
+  return [...new Set(days)].sort((a, b) => b - a).slice(0, 10);
+}
 const STATUS_LABELS = {
   active: 'Active', expired: 'Expired', terminated: 'Terminated', terminating: 'Terminating', terminationRequested: 'Termination requested',
   approvalPending: 'Approval pending', approved: 'Approved', activating: 'Activating', created: 'Created', unknownFutureValue: 'Unknown', removed: 'Removed',
@@ -54,11 +63,12 @@ function band({ days, expired }) {
   return 'ok';
 }
 
-// The alert threshold reached (0 = expired, else 1 / 7 / 14 / 30), or null.
-function thresholdFor({ days, expired }) {
-  if (expired) return 0;
+// The alert threshold reached (0 = expired, else the smallest alert day not below the
+// days left, e.g. 7 with 5 days left and days 30 / 14 / 7 / 1), or null.
+function thresholdFor({ days, expired }, settings = null) {
+  if (expired) return !settings || settings.alert_expired !== '0' ? 0 : null;
   if (days === null) return null;
-  const hit = [...THRESHOLDS].reverse().find((t) => days <= t);
+  const hit = [...alertDays(settings)].reverse().find((t) => days <= t);
   return hit === undefined ? null : hit;
 }
 
@@ -99,6 +109,7 @@ function shape(row, settings, now = new Date()) {
   if (typeof roles === 'string') { try { roles = JSON.parse(roles); } catch (err) { roles = []; } }
   const info = daysInfo(row.end_at, now);
   const removed = Boolean(row.removed_at);
+  const hidden = Boolean(row.hidden_at);
   const status = removed ? 'removed' : (row.status || 'unknownFutureValue');
   return {
     ...row,
@@ -114,7 +125,32 @@ function shape(row, settings, now = new Date()) {
     durationText: durationText(row.duration),
     partnerUrl: partnerLink(settings.partner_center_url, row.customer_tenant_id),
     removed,
+    hidden,
+    // Grouping key for "Multiple relationships": the customer's tenant (or name).
+    customerKey: row.customer_tenant_id || `name:${matchKey(row.customer_name)}`,
+    superseded: false,
+    groupSize: 1,
   };
+}
+
+// Marks rows of customers with several relationships: groupSize (visible, not removed
+// rows of the same customer) and superseded (expired while the customer has an active one).
+function markGroups(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    if (r.removed) continue;
+    if (!groups.has(r.customerKey)) groups.set(r.customerKey, []);
+    groups.get(r.customerKey).push(r);
+  }
+  for (const list of groups.values()) {
+    const visible = list.filter((r) => !r.hidden);
+    const hasActive = list.some((r) => r.status === 'active' && !r.expired);
+    for (const r of list) {
+      r.groupSize = visible.length;
+      r.superseded = hasActive && (r.expired || r.status === 'expired');
+    }
+  }
+  return rows;
 }
 
 const ROW_SQL = `
@@ -123,9 +159,9 @@ const ROW_SQL = `
 
 async function listRelationships(db = pool, { clientId } = {}) {
   const settings = await getSettings(db);
-  const [rows] = await db.query(`${ROW_SQL} ${clientId ? 'WHERE g.client_id = ? AND g.removed_at IS NULL' : ''}
+  const [rows] = await db.query(`${ROW_SQL} ${clientId ? 'WHERE g.client_id = ? AND g.removed_at IS NULL AND g.hidden_at IS NULL' : ''}
     ORDER BY g.removed_at IS NOT NULL, g.end_at IS NULL, g.end_at, g.customer_name`, clientId ? [clientId] : []);
-  return { settings, rows: rows.map((r) => shape(r, settings)) };
+  return { settings, rows: markGroups(rows.map((r) => shape(r, settings))) };
 }
 
 async function lastSync(db = pool) {
@@ -138,7 +174,7 @@ async function lastSync(db = pool) {
 const LIVE = new Set(['active', 'expired']);
 
 module.exports = {
-  DEFAULT_PARTNER_URL, THRESHOLDS, STATUS_LABELS, LIVE,
+  DEFAULT_PARTNER_URL, THRESHOLDS, STATUS_LABELS, LIVE, alertDays, markGroups,
   getSettings, saveSetting, daysInfo, band, thresholdFor, daysText, matchKey, clientIndex, partnerLink, shape, listRelationships, lastSync,
   durationText, autoExtendOn,
 };

@@ -609,6 +609,10 @@ CREATE TABLE IF NOT EXISTS gdap_relationships (
   client_id INT UNSIGNED NULL,
   link_manual TINYINT(1) NOT NULL DEFAULT 0,
   removed_at DATETIME NULL,
+  -- Hidden by a user (e.g. an old expired relationship replaced by a new one): left out
+  -- of every view, count and alert except the Hidden filter.
+  hidden_at DATETIME NULL,
+  hidden_by INT UNSIGNED NULL,
   last_synced_at DATETIME NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_gdap_relationship (relationship_id),
@@ -642,7 +646,8 @@ CREATE TABLE IF NOT EXISTS gdap_alerts (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- GDAP settings: partner_center_url (with {tenantId}), alert_users ("all" or user ids),
--- digest (1 = daily digest email), secret_expires_on (YYYY-MM-DD).
+-- digest (1 = daily digest email), secret_expires_on (YYYY-MM-DD), alert_days (days
+-- before the end date, e.g. "30,14,7,1") and alert_expired (1 = alert on expiry).
 CREATE TABLE IF NOT EXISTS gdap_settings (
   name VARCHAR(50) NOT NULL,
   value TEXT NULL,

@@ -24,6 +24,8 @@ const ADDED_COLUMNS = [
   ['reminders', 'email_sent_at', 'DATETIME NULL AFTER snoozed_until'],
   ['reminder_recipients', 'pushed_at', 'DATETIME NULL AFTER sent_at'],
   ['ticket_comments', 'updated_at', 'DATETIME NULL AFTER body'],
+  ['gdap_relationships', 'hidden_at', 'DATETIME NULL AFTER removed_at'],
+  ['gdap_relationships', 'hidden_by', 'INT UNSIGNED NULL AFTER hidden_at'],
   ['activity_log', 'changes', 'VARCHAR(255) NULL AFTER summary'],
   // Inventory entries also point at the person they concern (person timeline).
   ['activity_log', 'related_person_id', 'INT UNSIGNED NULL AFTER changes'],

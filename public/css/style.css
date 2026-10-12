@@ -2417,3 +2417,16 @@ dialog.lightbox::backdrop { background: rgba(10, 6, 30, 0.88); }
 .gdap-table .gd-days { width: 92px; }
 .gdap-table .gd-extend { width: 96px; }
 .gdap-table .gd-open { width: 44px; }
+
+/* GDAP: hide toggle, superseded tag, grouped customers, bulk hide */
+.gdap-table .gd-hide { width: 40px; }
+.gdap-table td.gdap-hide-cell { padding-left: 6px; padding-right: 0; }
+.gdap-eye { width: 26px; height: 26px; color: var(--muted); opacity: 0.45; transition: opacity 0.15s, color 0.15s; }
+.gdap-table tr:hover .gdap-eye, .gdap-eye:focus-visible, .gdap-eye.is-hidden { opacity: 1; }
+.gdap-eye:hover { color: var(--purple); }
+.gdap-eye.is-hidden { color: var(--purple); }
+.gdap-table tr.is-hidden td:not(.gdap-hide-cell) { opacity: 0.6; }
+.gdap-tag { display: inline-block; margin-right: 2px; padding: 0 6px; border-radius: 999px; background: var(--grey-soft); color: var(--muted); font-size: 0.7143rem; font-weight: 700; letter-spacing: 0.02em; vertical-align: 1px; }
+.gdap-table tr.gdap-group-start td { border-top: 2px solid #D1D1D6; }
+.gdap-bulk { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--sp-2); margin: calc(-1 * var(--sp-1)) 0 var(--sp-3); }
+@media (hover: none) { .gdap-eye { opacity: 1; } }
