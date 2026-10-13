@@ -92,7 +92,7 @@ router.post('/categories/:id', async (req, res) => {
     return res.redirect(`/categories/${id}`);
   }
   if (before.name !== name) await logCategory(req, 'updated', name, `Renamed category ${before.name} to ${name}`);
-  flash(req, 'success', 'Category renamed.');
+  flash(req, 'saved', before.name !== name ? `Saved. Category renamed to "${name}".` : 'Saved. Nothing changed.');
   res.redirect(`/categories/${id}`);
 });
 

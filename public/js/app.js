@@ -39,7 +39,115 @@ if (confirmDialog) {
 
 // Inline edit popovers (<details class="edit">). Only one is open at a time.
 // Cancel, Esc or a click outside closes it, and closing discards unsaved changes.
+// While open, the panel is moved into a top-level layer (#popover-layer on <body>) with
+// position: fixed, so no parent overflow: hidden, transform or stacking context can clip
+// or cover it. It opens below its button (right edges aligned), flips above when there is
+// more room there, is shifted to stay inside the window, and scrolls inside only when it
+// is taller than the space (max 80% of the window). On close it goes back into its
+// <details>, so forms, Save / Cancel and everything else work as before. On narrow
+// screens it is a bottom sheet.
+document.documentElement.classList.add('js');
 const openPopovers = () => document.querySelectorAll('details.edit[open]');
+
+// Name / label fields in popovers are not logins: keep 1Password, LastPass and the
+// browser's autofill icons out of them.
+document.querySelectorAll('.edit-panel input, .field-menu-panel input').forEach((input) => {
+  if (['password', 'hidden', 'checkbox', 'radio', 'file', 'submit', 'button'].includes(input.type)) return;
+  input.setAttribute('autocomplete', 'off');
+  input.setAttribute('data-1p-ignore', '');
+  input.setAttribute('data-lpignore', 'true');
+  input.setAttribute('data-form-type', 'other');
+});
+const GAP = 6;
+const EDGE = 8;
+
+function popoverLayer() {
+  let layer = document.getElementById('popover-layer');
+  if (!layer) {
+    layer = document.createElement('div');
+    layer.id = 'popover-layer';
+    document.body.appendChild(layer);
+  }
+  return layer;
+}
+
+// The <details> a panel (or anything inside it) belongs to, also while it is floating.
+function ownerOf(node) {
+  const panel = node && node.closest && node.closest('.edit-panel');
+  if (panel && panel.popoverOwner) return panel.popoverOwner;
+  return node && node.closest ? node.closest('details.edit') : null;
+}
+const panelOf = (details) => details.popoverPanel || details.querySelector(':scope > .edit-panel');
+
+function placePopover(details) {
+  const panel = details.popoverPanel;
+  const summary = details.querySelector(':scope > summary');
+  if (!panel || !summary) return;
+  const vw = document.documentElement.clientWidth;
+  const vh = window.innerHeight;
+  if (vw <= 860) {
+    // Bottom sheet, as before on phones.
+    Object.assign(panel.style, { left: `${EDGE}px`, right: `${EDGE}px`, top: 'auto', bottom: `${EDGE}px`, width: 'auto', maxHeight: `${Math.round(vh * 0.8)}px` });
+    return;
+  }
+  const r = summary.getBoundingClientRect();
+  const width = Math.min(panel.popoverWidth || panel.offsetWidth, vw - EDGE * 2);
+  panel.style.width = `${width}px`;
+  panel.style.maxHeight = 'none';
+  const natural = panel.scrollHeight;
+  const below = vh - r.bottom - GAP - EDGE;
+  const above = r.top - GAP - EDGE;
+  const up = natural > below && above > below;
+  const room = Math.max(120, up ? above : below);
+  const height = Math.min(natural, room, Math.round(vh * 0.8));
+  panel.style.maxHeight = `${height}px`;
+  // Scroll inside only when it really does not fit, so dropdowns inside (calendar, people,
+  // client picker) are not cut off.
+  panel.style.overflow = natural > height + 1 ? 'hidden auto' : 'visible';
+  let left = r.right - width; // right edges aligned, like the CSS default
+  if (left < EDGE) left = Math.min(r.left, vw - width - EDGE);
+  left = Math.max(EDGE, Math.min(left, vw - width - EDGE));
+  const top = up ? Math.max(EDGE, r.top - GAP - height) : Math.min(r.bottom + GAP, vh - EDGE - height);
+  Object.assign(panel.style, { left: `${Math.round(left)}px`, top: `${Math.round(Math.max(EDGE, top))}px`, right: 'auto', bottom: 'auto' });
+  panel.classList.toggle('is-above', up);
+}
+
+function floatPopover(details) {
+  const panel = details.querySelector(':scope > .edit-panel');
+  if (!panel || panel.classList.contains('is-floating')) return;
+  // Measure in place first (its CSS width depends on where it is), then move it.
+  panel.popoverWidth = panel.getBoundingClientRect().width;
+  const mark = document.createComment('popover');
+  panel.before(mark);
+  panel.popoverMark = mark;
+  panel.popoverOwner = details;
+  details.popoverPanel = panel;
+  // Rules written for the popover's own classes (e.g. .field-menu .edit-panel) keep
+  // working: the wrapper carries the <details> classes.
+  const wrap = document.createElement('div');
+  wrap.className = `popover-wrap ${details.className}`;
+  wrap.appendChild(panel);
+  popoverLayer().appendChild(wrap);
+  panel.classList.add('is-floating');
+  placePopover(details);
+  if (window.ResizeObserver) {
+    panel.popoverObserver = new ResizeObserver(() => placePopover(details));
+    panel.popoverObserver.observe(panel);
+  }
+}
+
+function dockPopover(details) {
+  const panel = details.popoverPanel;
+  if (!panel) return;
+  if (panel.popoverObserver) panel.popoverObserver.disconnect();
+  const wrap = panel.parentElement;
+  panel.classList.remove('is-floating', 'is-above');
+  ['left', 'right', 'top', 'bottom', 'width', 'maxHeight', 'overflow'].forEach((p) => { panel.style[p] = ''; });
+  if (panel.popoverMark && panel.popoverMark.parentNode) panel.popoverMark.replaceWith(panel);
+  else details.appendChild(panel);
+  if (wrap && wrap.classList.contains('popover-wrap')) wrap.remove();
+  delete details.popoverPanel;
+}
 
 function closePopover(details, { focusSummary = false } = {}) {
   details.open = false;
@@ -51,20 +159,28 @@ document.addEventListener('toggle', (event) => {
   if (!details.matches || !details.matches('details.edit')) return;
 
   if (!details.open) {
+    dockPopover(details);
     details.querySelectorAll('form').forEach((form) => form.reset());
     return;
   }
   openPopovers().forEach((other) => {
     if (other !== details) closePopover(other);
   });
-  const input = details.querySelector('input:not([type="hidden"]), textarea, select');
-  if (input) input.focus();
+  floatPopover(details);
+  const panel = panelOf(details);
+  const input = panel && panel.querySelector('input:not([type="hidden"]), textarea, select');
+  if (input) input.focus({ preventScroll: true });
 }, true);
+
+// Keep open popovers next to their button while the page scrolls or resizes.
+const replaceOpen = () => openPopovers().forEach((d) => { if (d.popoverPanel) placePopover(d); });
+window.addEventListener('scroll', replaceOpen, { passive: true, capture: true });
+window.addEventListener('resize', replaceOpen);
 
 document.addEventListener('click', (event) => {
   const cancel = event.target.closest('[data-cancel]');
   if (cancel) {
-    const details = cancel.closest('details.edit');
+    const details = ownerOf(cancel);
     if (details) {
       closePopover(details, { focusSummary: true });
     } else if (cancel.form) {
@@ -78,7 +194,8 @@ document.addEventListener('click', (event) => {
   // Clicks inside a popup opened from a popover (e.g. Crop picture) leave it open.
   if (event.target.closest && event.target.closest('dialog')) return;
   openPopovers().forEach((details) => {
-    if (!details.contains(event.target)) closePopover(details);
+    const panel = details.popoverPanel;
+    if (!details.contains(event.target) && !(panel && panel.contains(event.target))) closePopover(details);
   });
 });
 

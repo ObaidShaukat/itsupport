@@ -2602,3 +2602,12 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 .brands-arrow .icon { width: 14px; height: 14px; }
 .chip-merge { background: var(--purple-soft); color: var(--purple); }
 .card-narrow-wide { max-width: 900px; }
+
+/* ==== Popovers in a top-level layer (see "Inline edit popovers" in app.js) ==== */
+#popover-layer { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+#popover-layer .popover-wrap { position: static; display: block; width: 0; height: 0; margin: 0; padding: 0; }
+.edit-panel.is-floating { position: fixed; z-index: 1001; margin: 0; pointer-events: auto; visibility: visible; animation: pop-in 0.16s ease-out both; text-transform: none; letter-spacing: normal; font-weight: 400; white-space: normal; text-align: left; overscroll-behavior: contain; }
+.edit-panel.is-floating.is-above { animation-name: pop-in-up; }
+@keyframes pop-in-up { from { opacity: 0; transform: translateY(4px) scale(0.98); } to { opacity: 1; transform: none; } }
+/* One frame before it floats (measuring): never shown clipped in place. */
+.js .edit[open] > .edit-panel:not(.is-floating) { visibility: hidden; }
