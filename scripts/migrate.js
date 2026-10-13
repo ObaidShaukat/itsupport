@@ -64,6 +64,9 @@ const ADDED_COLUMNS = [
   ['cs1_customers', 'id_alerted_at', 'DATETIME NULL AFTER account_id'],
   ['cs1_sync_log', 'source', 'VARCHAR(20) NULL AFTER removed'],
   ['cs1_sync_log', 'probe', 'VARCHAR(500) NULL AFTER source'],
+  ['cs1_customers', 'phone', 'VARCHAR(40) NULL AFTER email'],
+  ['cs1_customers', 'ceased_on', 'DATE NULL AFTER status'],
+  ['cs1_customers', 'is_demo', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER id_alerted_at'],
 ];
 
 // The old inventory (people, assets, stock, access, shared accounts, offboarding, custom

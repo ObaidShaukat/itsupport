@@ -2749,3 +2749,11 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 .cs1-sync-details dt { font-weight: 600; color: var(--text); }
 .cs1-sync-details dd { margin: 0; min-width: 0; }
 .cs1-sync-details code { display: inline; margin: 0; }
+.cs1-refresh { margin-bottom: var(--sp-3); }
+.cs1-refresh > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; list-style: none; }
+.cs1-refresh > summary::-webkit-details-marker { display: none; }
+.cs1-refresh > summary .icon { width: 15px; height: 15px; color: var(--blue); }
+.cs1-refresh[open] > summary { margin-bottom: var(--sp-3); }
+.cs1-paste { font-family: Consolas, Menlo, monospace; font-size: 0.8571rem; min-height: 110px; }
+.cs1-export-import { margin-top: var(--sp-3); }
+.cs1-export-import > summary { cursor: pointer; }

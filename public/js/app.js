@@ -3138,3 +3138,19 @@ document.querySelectorAll('form[data-cs1-upload]').forEach((form) => {
   });
   sync();
 });
+
+// Call Switch One customers: "Refresh from CallSwitch" opens the CallSwitch list in a new tab
+// (the link itself) and the paste panel here; #refresh (after an error) opens it too.
+(() => {
+  const panel = document.querySelector('[data-cs1-refresh]');
+  if (!panel) return;
+  const show = () => {
+    panel.open = true;
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const box = panel.querySelector('textarea');
+    if (box) setTimeout(() => box.focus({ preventScroll: true }), 300);
+  };
+  document.querySelectorAll('[data-cs1-refresh-open]').forEach((link) => link.addEventListener('click', show));
+  document.querySelectorAll('[data-cs1-refresh-panel]').forEach((link) => link.addEventListener('click', (e) => { e.preventDefault(); show(); }));
+  if (window.location.hash === '#refresh') show();
+})();

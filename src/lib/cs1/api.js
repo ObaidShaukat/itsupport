@@ -1,19 +1,19 @@
-// CallSwitch One API, READ ONLY: our customer accounts (CS1 dashboard Customers page).
+// CallSwitch One, READ ONLY: our customer accounts (CS1 dashboard Customers page).
 //
-// Two sources, both GET only, both with the same API headers (never cookies or browser tokens):
-//   service  GET https://www.callswitchone.com/service/account/reseller: what the CS1 dashboard
-//            loads; per record customer_id ("CS1-512319"), contact_name (company), first_name
-//            (account holder), email_address, store_name, created_on, account_id,
-//            products.voip_user_count, products.voip_number_count, is_ceased, is_locked, uuid.
-//            Used first when it answers with customer_id.
-//   official GET https://CS1_API_HOST/account/reseller (+ /account/reseller/{uuid} when the
-//            list only has ids): the documented API (Sub Resellers). It has no CS1 ID, so its
-//            records are linked to their CS1 ID by uuid (saved from the service source or the
-//            "Import CS1 IDs" upload on the Customers page).
-// Only the endpoints in ALLOWED can be called (allowedUrl), and there is deliberately no
-// helper for POST / PUT / PATCH / DELETE.
+// Two ways in, neither stores anyone's CallSwitch dashboard login:
+//   official API  GET https://CS1_API_HOST/account/reseller (+ /account/reseller/{uuid} when the
+//                 list only has ids), with the API headers from .env. The daily sync (06:30) and
+//                 "Sync now". It has no CS1 ID: records are matched to saved customers by uuid.
+//   dashboard     https://www.callswitchone.com/service/account/reseller (DASHBOARD_URL): the
+//                 list the CS1 dashboard loads, with customer_id (the CS1 ID). The SERVER NEVER
+//                 CALLS IT (it needs a dashboard login, HTTP 401 with the API headers): a person
+//                 opens it in their own logged-in browser and pastes / uploads the JSON on
+//                 Customers -> "Refresh from CallSwitch" (parseDashboard).
+// Only the endpoints in ALLOWED can be called (allowedUrl): both are documented as not
+// chargeable. There is deliberately no helper for POST / PUT / PATCH / DELETE, and no cookies
+// or browser tokens are ever sent.
 //
-// .env (all four required):
+// .env (all four required for the API sync):
 //   CS1_API_HOST   the API host, e.g. api.callswitchone.com
 //   CS1_RESELLER   sent as X-Auth-Reseller
 //   CS1_USER       sent as X-Auth-User
@@ -21,14 +21,12 @@
 //
 // Replies: the records are the array in the body (or under result / data / items / ..., or an
 // object keyed by ID: each record then gets that key as _key); paging follows a next link
-// (body or Link header) or page / last_page numbers. Fields are mapped by fixed names
-// (mapCustomer below).
+// (body or Link header) or page / last_page numbers.
 const TIMEOUT_MS = 30 * 1000;
 const MAX_PAGES = 200;
 const MAX_DETAILS = 3000;
 const CUSTOMERS_PATH = '/account/reseller';
-const SERVICE_ORIGIN = 'https://www.callswitchone.com';
-const SERVICE_PATH = '/service/account/reseller';
+const DASHBOARD_URL = 'https://www.callswitchone.com/service/account/reseller';
 const ENV_KEYS = ['CS1_API_HOST', 'CS1_RESELLER', 'CS1_USER', 'CS1_PASSWORD'];
 
 function cs1ApiConfig() {
@@ -40,7 +38,7 @@ function cs1ApiConfig() {
   if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host)) return { configured: false, message: 'CS1_API_HOST in .env must be a host name such as api.callswitchone.com.' };
   const origin = `https://${host}`;
   return {
-    configured: true, host, origin, url: `${origin}${CUSTOMERS_PATH}`, serviceUrl: `${SERVICE_ORIGIN}${SERVICE_PATH}`,
+    configured: true, host, origin, url: `${origin}${CUSTOMERS_PATH}`,
     headers: { 'X-Auth-Reseller': env.CS1_RESELLER, 'X-Auth-User': env.CS1_USER, 'X-Auth-Password': env.CS1_PASSWORD },
   };
 }
@@ -49,7 +47,6 @@ function cs1ApiConfig() {
 const ALLOWED = (cfg) => [
   [cfg.origin, /^\/account\/reseller$/],
   [cfg.origin, /^\/account\/reseller\/[A-Za-z0-9-]{1,64}$/],
-  [SERVICE_ORIGIN, /^\/service\/account\/reseller$/],
 ];
 function allowedUrl(url, cfg) {
   let u;
@@ -201,11 +198,7 @@ async function listFrom(startUrl, cfg, { details = false } = {}) {
   }
 }
 
-// The dashboard's list (with customer_id) and the documented API.
-async function listService(cfg = cs1ApiConfig()) {
-  if (!cfg.configured) throw new Error(cfg.message);
-  return listFrom(cfg.serviceUrl, cfg);
-}
+// The documented API (all pages).
 async function listOfficial(cfg = cs1ApiConfig()) {
   if (!cfg.configured) throw new Error(cfg.message);
   return listFrom(cfg.url, cfg, { details: true });
@@ -229,18 +222,19 @@ const ID_RE = /^CS1[\s_-]*\d+$/i;
 
 // ---- Record -> customer (fixed mapping) ----
 //
-//   customer_id                  -> ID (CS1-xxxxxx; service source only)
-//   contact_name                 -> Company (the customer name everywhere; "name" is a code)
-//   first_name (+ last_name)     -> Account Holder
-//   store_name / store_front     -> Store
-//   email_address / email        -> Email
-//   created_on                   -> Registered
-//   is_ceased / is_locked        -> Status Ceased / Locked, otherwise Active
-//                                   (official records without them: status_id -> STATUS_LABELS)
-//   products.voip_user_count     -> Users (official records: users, a list or a count)
-//   products.voip_number_count   -> Numbers
-//   uuid                         -> links the official API record to its CS1 ID
-const STATUS_LABELS = {};
+// Dashboard records (mapDashboard; result[] of the pasted JSON):
+//   customer_id                 -> CS1 ID (the key)            uuid -> link to the API record
+//   contact_name                -> Company ("name" is a code). A " : CEASED - d/m/yyyy" suffix is
+//                                  stripped and gives Status Ceased with that date (ceased_on)
+//   is_ceased / is_locked       -> Status Ceased / Locked, otherwise Active
+//   first_name + last_name      -> Account Holder              email_address -> Email
+//   phone                       -> Phone                       store_name -> Store
+//   created_on                  -> Registered                  is_demo -> demo account (hidden)
+//   products.voip_user_count    -> Users                       products.voip_number_count -> Numbers
+// Official API records (mapOfficial): contact_name -> Company (same suffix rule), phone,
+// store_front -> Store only when it is a name (the API gives the storefront's uuid), users -> Users, created_on; status only when the record says it
+// (is_ceased / is_locked / the CEASED suffix), otherwise null = keep the saved status.
+const STATUS_LABELS = {}; // status_id names, if ever needed (the dashboard has is_ceased / is_locked)
 
 // Value at "a.b.c", or undefined.
 function getPath(obj, path) {
@@ -320,45 +314,102 @@ function dateOf(v) {
   return null;
 }
 
-// Ceased / Locked / Active (from is_ceased / is_locked); else a text status; else status_id.
-function statusOf(rec) {
-  if ('is_ceased' in rec || 'is_locked' in rec) return isTrue(rec.is_ceased) ? 'Ceased' : isTrue(rec.is_locked) ? 'Locked' : 'Active';
-  const named = first(rec, ['status_name', 'status.name', 'status'], (v) => typeof v === 'string');
-  if (named) {
-    const words = String(named).trim().replace(/[_-]+/g, ' ').toLowerCase();
-    return (words.charAt(0).toUpperCase() + words.slice(1)).slice(0, 40);
-  }
-  const id = first(rec, ['status_id', 'status.id'], scalar);
-  if (id === null) return '';
-  return STATUS_LABELS[String(id)] || `Status ${id}`;
+// "Felix Legal : CEASED - 3/2/2025" -> { company: 'Felix Legal', ceasedOn: '2025-02-03' }.
+function companyOf(value) {
+  const raw = text(value, 300);
+  const m = /\s*:\s*CEASED\s*-\s*(\d{1,2})\/(\d{1,2})\/(\d{4})\s*$/i.exec(raw);
+  if (!m) return { company: raw.slice(0, 200), ceasedOn: null };
+  return { company: raw.slice(0, m.index).trim().slice(0, 200), ceasedOn: `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` };
 }
 
-// One record -> { identifier, rawId, uuid, accountId, company, holder, store, email, status,
-// registered, users, numbers }. identifier is '' without customer_id (official records).
-function mapCustomer(rec) {
+// Ceased / Locked / Active from is_ceased / is_locked (and the CEASED suffix); null when the
+// record does not say.
+function statusOf(rec, ceasedOn) {
+  if (isTrue(rec.is_ceased) || ceasedOn) return 'Ceased';
+  if (isTrue(rec.is_locked)) return 'Locked';
+  if ('is_ceased' in rec || 'is_locked' in rec) return 'Active';
+  return null;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const holderOf = (rec) => [first(rec, ['first_name'], scalar), first(rec, ['last_name'], scalar)].filter(Boolean).join(' ');
+
+// A dashboard record (result[] of the pasted JSON) -> customer; identifier '' without customer_id.
+function mapDashboard(rec) {
   const rawId = first(rec, ['customer_id'], (v) => typeof v === 'string' || typeof v === 'number');
-  const storefront = getPath(rec, 'storefront');
-  // Official records: store_front (the storefront's name) when there is no store_name.
-  const store = first(rec, ['store_name', 'store_front'], (v) => typeof v === 'string' || typeof v === 'number')
-    ?? (typeof storefront === 'string' ? storefront : first(rec, ['storefront.name', 'storefront_name', 'store.name', 'store_front.name'], scalar));
-  const holder = [first(rec, ['first_name'], scalar), first(rec, ['last_name'], scalar)].filter(Boolean).join(' ');
+  const { company, ceasedOn } = companyOf(first(rec, ['contact_name'], scalar));
   return {
     identifier: rawId === null ? '' : normaliseId(rawId),
     rawId: text(rawId, 191),
     uuid: text(first(rec, ['uuid'], scalar), 64),
     accountId: text(first(rec, ['account_id'], scalar), 64),
-    company: text(first(rec, ['contact_name'], scalar), 200),
-    holder: text(holder, 200),
-    store: text(store, 200),
-    email: text(first(rec, ['email_address', 'email', 'contact_email'], scalar), 255),
-    status: statusOf(rec),
+    company,
+    ceasedOn,
+    holder: text(holderOf(rec), 200),
+    email: text(first(rec, ['email_address', 'email'], scalar), 255),
+    phone: text(first(rec, ['phone', 'phone_number'], scalar), 40),
+    store: text(first(rec, ['store_name'], scalar), 200),
+    status: statusOf(rec, ceasedOn) || 'Active',
     registered: dateOf(first(rec, ['created_on'], scalar)),
-    users: count(first(rec, ['products.voip_user_count', 'voip_user_count', 'users_count', 'users'])),
-    numbers: count(first(rec, ['products.voip_number_count', 'voip_number_count', 'numbers_count'])),
+    users: count(first(rec, ['products.voip_user_count'])),
+    numbers: count(first(rec, ['products.voip_number_count'])),
+    demo: isTrue(rec.is_demo),
   };
 }
 
+// An official API record -> what it can tell (null / '' = unknown, keep the saved value).
+function mapOfficial(rec) {
+  const { company, ceasedOn } = companyOf(first(rec, ['contact_name'], scalar));
+  const storefront = getPath(rec, 'store_front');
+  return {
+    identifier: '',
+    rawId: '',
+    uuid: text(first(rec, ['uuid'], scalar), 64),
+    company,
+    ceasedOn,
+    holder: text(holderOf(rec), 200),
+    email: text(first(rec, ['email_address', 'email'], scalar), 255),
+    phone: text(first(rec, ['phone'], scalar), 40),
+    // store_front is the storefront's uuid in the API, not its name: only a real name is used.
+    store: text([typeof storefront === 'string' ? storefront : null, first(rec, ['store_front.name', 'store_name'], scalar)]
+      .find((v) => v && !UUID_RE.test(String(v).trim())) || '', 200),
+    status: statusOf(rec, ceasedOn),
+    registered: dateOf(first(rec, ['created_on'], scalar)),
+    users: count(first(rec, ['users', 'products.voip_user_count'])),
+    numbers: count(first(rec, ['products.voip_number_count'])),
+    demo: 'is_demo' in rec ? isTrue(rec.is_demo) : null,
+  };
+}
+
+// Either shape (check scripts): dashboard when the record has customer_id.
+const mapCustomer = (rec) => (rec && rec.customer_id !== undefined ? mapDashboard(rec) : mapOfficial(rec));
+
+// The text copied from (or saved off) the dashboard list in the browser -> { records } or
+// { error }. Ctrl+A in a browser JSON viewer can add text around the JSON, so the first "{"
+// to the last "}" is read. Only status_code + result[] is accepted.
+const NOT_LOGGED_IN = "That isn't the CallSwitch customer list. Looks like you weren't logged in to CallSwitch: log in at callswitchone.com, open the link again and copy the whole page.";
+function parseDashboard(input) {
+  const s = String(input || '').replace(/^﻿/, '').trim();
+  if (!s) return { error: 'Paste the page from the new tab, or choose the saved file.' };
+  const start = s.indexOf('{');
+  const end = s.lastIndexOf('}');
+  if (start < 0 || end <= start) return { error: /<html|<!doctype|log ?in|sign ?in/i.test(s) ? NOT_LOGGED_IN : "That isn't valid JSON. Copy the whole page in the new tab (Ctrl+A, then Ctrl+C) and paste it again." };
+  let body;
+  try { body = JSON.parse(s.slice(start, end + 1)); } catch {
+    return { error: "That isn't valid JSON. Copy the whole page in the new tab (Ctrl+A, then Ctrl+C) and paste it again, or save it with Ctrl+S and upload the file." };
+  }
+  if (!body || typeof body !== 'object' || !Array.isArray(body.result)) {
+    const code = body && body.status_code;
+    return { error: code && Number(code) !== 200 ? `CallSwitch answered ${code}${body.status_message ? ` (${body.status_message})` : ''}. ${NOT_LOGGED_IN}` : NOT_LOGGED_IN };
+  }
+  if (body.status_code !== undefined && Number(body.status_code) !== 200) return { error: `CallSwitch answered ${body.status_code}${body.status_message ? ` (${body.status_message})` : ''}. ${NOT_LOGGED_IN}` };
+  const records = body.result.filter((r) => r && typeof r === 'object');
+  if (!records.length) return { error: 'The customer list is empty.' };
+  if (!records.some((r) => r.customer_id)) return { error: 'This list has no customer_id. Open the link from the Refresh panel (the dashboard list), not the API.' };
+  return { records };
+}
+
 module.exports = {
-  cs1ApiConfig, cs1Get, allowedUrl, listService, listOfficial, listCustomers, fieldNames, mapCustomer, recordsOf, dateOf,
-  normaliseId, deepFind, getPath, ID_RE, STATUS_LABELS, CUSTOMERS_PATH, SERVICE_PATH, ENV_KEYS,
+  cs1ApiConfig, cs1Get, allowedUrl, listOfficial, listCustomers, fieldNames, mapCustomer, mapDashboard, mapOfficial, companyOf,
+  parseDashboard, recordsOf, dateOf, normaliseId, deepFind, getPath, ID_RE, STATUS_LABELS, CUSTOMERS_PATH, DASHBOARD_URL, ENV_KEYS,
 };

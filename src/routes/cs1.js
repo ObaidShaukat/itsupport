@@ -18,10 +18,10 @@ const {
   excelBuffer, emailBody, defaultSubject, defaultIntro, realName, rematchLines,
 } = require('../lib/cs1/billing');
 const {
-  syncCustomers, lastSync, importIds, linkId,
+  syncCustomers, lastSync, importIds, linkId, planRefresh, applyRefresh, cleanMapped,
 } = require('../lib/cs1/sync');
 const { readSheet } = require('../lib/inventory/import-files');
-const { cs1ApiConfig, normaliseId } = require('../lib/cs1/api');
+const { cs1ApiConfig, normaliseId, parseDashboard, mapDashboard, DASHBOARD_URL } = require('../lib/cs1/api');
 
 const router = express.Router();
 const BASE = '/call-switch-one/billing';
@@ -257,7 +257,7 @@ const regDate = (d) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
   return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1].slice(2)}` : '';
 };
-const statusOfRow = (c) => (c.removed_at ? 'Removed' : (c.status || (c.source === 'api' ? 'Unknown' : 'Added by hand')));
+const statusOfRow = (c) => (c.removed_at ? 'Removed' : (c.status || (c.source === 'api' ? (c.identifier ? 'Unknown' : 'New') : 'Added by hand')));
 const statusTone = (s) => (/^active$/i.test(s) ? 'ok' : /removed|ceased|locked|suspend|cancel|closed|terminat|disabled|blocked|deleted/i.test(s) ? 'bad' : 'muted');
 
 // Sortable columns (sorting happens in JavaScript on the fetched rows; never SQL from input).
@@ -275,11 +275,11 @@ const SORTS = {
 };
 
 router.get('/customers', async (req, res) => {
-  const [all] = await pool.query(`
+  let [all] = await pool.query(`
     SELECT c.*, cl.name AS client_name, COALESCE(NULLIF(u.display_name, ''), u.username) AS updated_name
     FROM cs1_customers c LEFT JOIN clients cl ON cl.id = c.client_id LEFT JOIN users u ON u.id = c.updated_by
   `);
-  // CS1 IDs seen in uploads that are not customers yet.
+  // CS1 IDs in uploads that match no customer at all (after Refresh from CallSwitch most match).
   const [unknown] = await pool.query(`
     SELECT COALESCE(l.customer_key, l.identifier) AS identifier, MAX(r.billing_month) AS last_month, COUNT(DISTINCT r.id) AS months
     FROM cs1_lines l JOIN cs1_runs r ON r.id = l.run_id
@@ -290,13 +290,17 @@ router.get('/customers', async (req, res) => {
   for (const c of all) {
     c.company = realName(c.name, c.identifier);
     c.statusText = statusOfRow(c);
-    c.tone = statusTone(c.statusText);
+    c.tone = c.statusText === 'New' ? 'muted' : statusTone(c.statusText);
+    c.ceasedText = c.statusText === 'Ceased' && c.ceased_on ? regDate(c.ceased_on) : '';
   }
   const q = str(req.query.q, 100).toLowerCase();
   const status = str(req.query.status, 40);
   const store = str(req.query.store, 200);
   const sort = SORTS[req.query.sort] ? req.query.sort : 'company';
   const dir = req.query.dir === 'desc' ? 'desc' : 'asc';
+  const showDemo = req.query.demo === '1';
+  const demoCount = all.filter((c) => c.is_demo).length;
+  if (!showDemo) all = all.filter((c) => !c.is_demo);
   const needsId = all.filter((c) => !c.identifier && !c.removed_at).length;
   const statuses = [...new Set(all.map((c) => c.statusText))].sort((a, b) => (a === 'Active' ? -1 : b === 'Active' ? 1 : a.localeCompare(b)));
   if (needsId) statuses.push('Needs CS1 ID');
@@ -304,7 +308,7 @@ router.get('/customers', async (req, res) => {
   const statusOk = (c) => !status || (status === 'Needs CS1 ID' ? !c.identifier && !c.removed_at : c.statusText === status);
   let customers = all.filter((c) => statusOk(c) && (!store || (store === '-' ? !c.store : c.store === store)));
   if (q) {
-    customers = customers.filter((c) => [c.company, c.identifier, c.account_holder, c.store, c.email, c.client_name, c.statusText]
+    customers = customers.filter((c) => [c.company, c.identifier, c.account_holder, c.store, c.email, c.phone, c.client_name, c.statusText]
       .some((v) => v && String(v).toLowerCase().includes(q)));
   }
   const key = SORTS[sort];
@@ -316,15 +320,60 @@ router.get('/customers', async (req, res) => {
   const sync = await lastSync();
   res.render('cs1/customers', {
     title: 'Call Switch One customers', nav: 'cs1', customers, total: all.length, unknown, clients, monthLabel, regDate,
-    filters: { q: str(req.query.q, 100), status, store, sort, dir }, statuses, stores, sync, api: cs1ApiConfig(),
-    unnamed: all.filter((c) => !c.company && !c.removed_at).length, needsId,
+    filters: { q: str(req.query.q, 100), status, store, sort, dir, demo: showDemo ? '1' : '' }, statuses, stores, sync, api: cs1ApiConfig(),
+    unnamed: all.filter((c) => !c.company && !c.removed_at).length, needsId, demoCount, dashboardUrl: DASHBOARD_URL,
   });
+});
+
+// ---- Refresh from CallSwitch ----
+// The dashboard list (DASHBOARD_URL) opened in the person's own logged-in browser; its JSON is
+// pasted or uploaded here. Nothing is stored until Confirm, and the pasted text never is: the
+// preview carries only the mapped customers, checked again (cleanMapped) and re-planned on save.
+const MAX_REFRESH_BYTES = 10 * 1024 * 1024;
+
+router.post('/customers/refresh', async (req, res) => {
+  const file = req.files && req.files.file && req.files.file[0];
+  const fail = (message) => { flash(req, 'error', message); return res.redirect(`${CUSTOMERS}#refresh`); };
+  try {
+    if (req.uploadError) return fail(req.uploadError);
+    let text = String(req.body.json || '');
+    if (file) {
+      if (!/\.(json|txt)$/i.test(originalName(file))) return fail('Upload the saved page as .json or .txt.');
+      if (file.size > MAX_REFRESH_BYTES) return fail('The file must be 10 MB or smaller.');
+      text = await fs.promises.readFile(file.path, 'utf8');
+    }
+    const parsed = parseDashboard(text);
+    text = null;
+    if (parsed.error) return fail(parsed.error);
+    const mapped = parsed.records.map(mapDashboard);
+    const withId = mapped.filter((c) => c.identifier);
+    const plan = await planRefresh(pool, withId);
+    return res.render('cs1/refresh-preview', {
+      title: 'Refresh from CallSwitch', nav: 'cs1', plan, records: parsed.records.length, skipped: mapped.length - withId.length,
+      payload: JSON.stringify(withId), demo: withId.filter((c) => c.demo).length,
+    });
+  } finally {
+    if (file) fs.promises.unlink(file.path).catch(() => {});
+  }
+});
+
+router.post('/customers/refresh/confirm', async (req, res) => {
+  let list;
+  try { list = JSON.parse(String(req.body.payload || '[]')); } catch { list = null; }
+  const mapped = cleanMapped(list);
+  if (!mapped.length) { flash(req, 'error', 'Nothing to save: paste the CallSwitch customer list again.'); return res.redirect(`${CUSTOMERS}#refresh`); }
+  const r = await applyRefresh(req.user, mapped);
+  const parts = [`${r.added} new`, `${r.updated} updated`, `${r.unchanged} unchanged`];
+  if (r.conflicts.length) parts.push(`${r.conflicts.length} skipped (${r.conflicts.slice(0, 5).join('; ')})`);
+  if (r.rematched) parts.push(`${r.rematched} billing line${r.rematched === 1 ? '' : 's'} in ${r.months} month${r.months === 1 ? '' : 's'} now named`);
+  flash(req, r.conflicts.length ? 'info' : 'saved', `Refreshed from CallSwitch: ${parts.join(', ')}.`);
+  return res.redirect(CUSTOMERS);
 });
 
 router.post('/customers/sync', async (req, res) => {
   const result = await syncCustomers(req.user, { trigger: 'manual' });
   if (result.ok) {
-    flash(req, 'saved', `Synced: ${result.total} customers from CallSwitch One, ${result.added} added, ${result.updated} updated, ${result.removed} marked removed${result.needsId ? `, ${result.needsId} need a CS1 ID` : ''}${result.source === 'official' ? ' (dashboard list unavailable: CS1 IDs linked by uuid)' : ''}${result.rematched ? `; ${result.rematched} billing line${result.rematched === 1 ? '' : 's'} in ${result.months} month${result.months === 1 ? '' : 's'} now matched` : ''}.`);
+    flash(req, 'saved', `Synced: ${result.total} customers from CallSwitch One, ${result.added} added, ${result.updated} updated, ${result.removed} marked removed${result.needsId ? ` (${result.needsId} need a CS1 ID: use Refresh from CallSwitch)` : ''}${result.rematched ? `; ${result.rematched} billing line${result.rematched === 1 ? '' : 's'} in ${result.months} month${result.months === 1 ? '' : 's'} now matched` : ''}.`);
   } else flash(req, 'error', result.error);
   res.redirect(CUSTOMERS);
 });

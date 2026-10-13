@@ -1,0 +1,64 @@
+<%- include('../partials/head') %>
+<%#
+  Refresh from CallSwitch, preview: what saving the pasted CallSwitch customer list would do.
+  Nothing is stored yet; payload carries only the mapped customers (re-checked and re-planned
+  on Confirm), never the pasted text.
+%>
+<header class="page-head">
+  <div>
+    <p class="crumbs"><a href="/call-switch-one/customers">Call Switch One · Customers</a></p>
+    <h1>Refresh from CallSwitch</h1>
+    <p class="muted"><%= records %> customer<%= records === 1 ? '' : 's' %> in the CallSwitch list<%= skipped ? ` (${skipped} without a CS1 ID are left out)` : '' %><%= demo ? `, ${demo} demo account${demo === 1 ? '' : 's'} (hidden on Customers unless shown)` : '' %>. Nothing is saved until you confirm.</p>
+  </div>
+</header>
+
+<div class="cs1-cards">
+  <div class="cs1-card cs1-card-included"><span class="cs1-card-value"><%= plan.added.length %></span><span class="cs1-card-label">New customers</span></div>
+  <div class="cs1-card"><span class="cs1-card-value"><%= plan.updated.length %></span><span class="cs1-card-label">Updated</span></div>
+  <div class="cs1-card cs1-card-excluded"><span class="cs1-card-value"><%= plan.unchanged %></span><span class="cs1-card-label">Unchanged</span></div>
+</div>
+
+<% if (plan.conflicts.length) { %>
+  <div class="flash flash-error" role="alert"><strong>Skipped:</strong> <%= plan.conflicts.join('; ') %></div>
+<% } %>
+
+<% if (plan.added.length) { %>
+  <section class="card">
+    <h2>New customers <span class="muted small">(<%= plan.added.length %>)</span></h2>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Company</th><th class="w-md">CS1 ID</th><th class="w-sm">Status</th></tr></thead>
+        <tbody>
+          <% for (const a of plan.added) { %><tr><td><%= a.company || 'Unknown' %></td><td><code><%= a.identifier %></code></td><td><%= a.status %></td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<% } %>
+
+<% if (plan.updated.length) { %>
+  <section class="card">
+    <h2>Updated customers <span class="muted small">(<%= plan.updated.length %>)</span></h2>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th class="w-25">Company</th><th class="w-md">CS1 ID</th><th>Changes</th></tr></thead>
+        <tbody>
+          <% for (const u of plan.updated) { %><tr><td><%= u.company %></td><td><code><%= u.identifier %></code></td><td title="<%= u.changes.join(', ') %>"><%= u.changes.join(', ') %></td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+<% } %>
+
+<section class="card">
+  <form method="post" action="/call-switch-one/customers/refresh/confirm" class="form">
+    <%- csrfField %>
+    <input type="hidden" name="payload" value="<%= payload %>">
+    <p class="muted small">Saving also re-matches the saved billing months, so their customers get these names.</p>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" <%= plan.added.length || plan.updated.length ? '' : 'disabled' %>><%- icon('check') %><span><%= plan.added.length || plan.updated.length ? 'Confirm and save' : 'Nothing to change' %></span></button>
+      <a href="/call-switch-one/customers" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</section>
+<%- include('../partials/foot') %>
