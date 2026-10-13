@@ -257,8 +257,21 @@ const regDate = (d) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
   return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1].slice(2)}` : '';
 };
-const statusOfRow = (c) => (c.removed_at ? 'Removed' : (c.status || (c.source === 'api' ? (c.identifier ? 'Unknown' : 'New') : 'Added by hand')));
-const statusTone = (s) => (/^active$/i.test(s) ? 'ok' : /removed|ceased|locked|suspend|cancel|closed|terminat|disabled|blocked|deleted/i.test(s) ? 'bad' : 'muted');
+// Status shown: Active / Locked / Ceased (from the refresh), Removed (no longer returned by the
+// API; a Ceased customer stays Ceased), New (from the API, CS1 ID missing), Manual (named by
+// hand); anything else (never a raw code such as "Status 2") is "—".
+const KNOWN_STATUS = new Set(['Active', 'Locked', 'Ceased']);
+function statusOfRow(c) {
+  if (c.status === 'Ceased') return 'Ceased';
+  if (c.removed_at) return 'Removed';
+  if (KNOWN_STATUS.has(c.status)) return c.status;
+  if (c.source !== 'api') return 'Manual';
+  return c.identifier ? '—' : 'New';
+}
+// Pills: Active green, Locked amber, Ceased grey, Removed red, New blue, others grey.
+const STATUS_TONES = { Active: 'ok', Locked: 'warn', Ceased: 'muted', Removed: 'bad', New: 'info' };
+const statusTone = (st) => STATUS_TONES[st] || 'muted';
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Sortable columns (sorting happens in JavaScript on the fetched rows; never SQL from input).
 const SORTS = {
@@ -269,6 +282,7 @@ const SORTS = {
   store: (c) => (c.store || '').toLowerCase() || '￿',
   id: (c) => (c.identifier || '').toLowerCase() || '￿',
   email: (c) => (c.email || '').toLowerCase() || '￿',
+  phone: (c) => (c.phone || '').replace(/\s+/g, '') || '\uffff',
   users: (c) => (c.users_count === null ? -1 : Number(c.users_count)),
   numbers: (c) => (c.numbers_count === null ? -1 : Number(c.numbers_count)),
   client: (c) => (c.client_name || '').toLowerCase() || '￿',
@@ -290,7 +304,8 @@ router.get('/customers', async (req, res) => {
   for (const c of all) {
     c.company = realName(c.name, c.identifier);
     c.statusText = statusOfRow(c);
-    c.tone = c.statusText === 'New' ? 'muted' : statusTone(c.statusText);
+    c.tone = statusTone(c.statusText);
+    if (c.store && UUID_RE.test(c.store)) c.store = null; // never show a raw code
     c.ceasedText = c.statusText === 'Ceased' && c.ceased_on ? regDate(c.ceased_on) : '';
   }
   const q = str(req.query.q, 100).toLowerCase();
@@ -302,10 +317,11 @@ router.get('/customers', async (req, res) => {
   const demoCount = all.filter((c) => c.is_demo).length;
   if (!showDemo) all = all.filter((c) => !c.is_demo);
   const needsId = all.filter((c) => !c.identifier && !c.removed_at).length;
+  const listed = all.filter((c) => !c.removed_at).length;
   const statuses = [...new Set(all.map((c) => c.statusText))].sort((a, b) => (a === 'Active' ? -1 : b === 'Active' ? 1 : a.localeCompare(b)));
-  if (needsId) statuses.push('Needs CS1 ID');
+  if (needsId) statuses.push('Missing CS1 ID');
   const stores = [...new Set(all.map((c) => c.store).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const statusOk = (c) => !status || (status === 'Needs CS1 ID' ? !c.identifier && !c.removed_at : c.statusText === status);
+  const statusOk = (c) => !status || (status === 'Missing CS1 ID' ? !c.identifier && !c.removed_at : c.statusText === status);
   let customers = all.filter((c) => statusOk(c) && (!store || (store === '-' ? !c.store : c.store === store)));
   if (q) {
     customers = customers.filter((c) => [c.company, c.identifier, c.account_holder, c.store, c.email, c.phone, c.client_name, c.statusText]
@@ -318,8 +334,10 @@ router.get('/customers', async (req, res) => {
     return dir === 'desc' ? -r : r;
   });
   const sync = await lastSync();
+  // Unknown CS1 IDs only make sense once the dashboard list has been loaded.
+  const unknownShown = sync.refresh ? unknown : [];
   res.render('cs1/customers', {
-    title: 'Call Switch One customers', nav: 'cs1', customers, total: all.length, unknown, clients, monthLabel, regDate,
+    title: 'Call Switch One customers', nav: 'cs1', customers, total: all.length, listed, unknown: unknownShown, clients, monthLabel, regDate,
     filters: { q: str(req.query.q, 100), status, store, sort, dir, demo: showDemo ? '1' : '' }, statuses, stores, sync, api: cs1ApiConfig(),
     unnamed: all.filter((c) => !c.company && !c.removed_at).length, needsId, demoCount, dashboardUrl: DASHBOARD_URL,
   });

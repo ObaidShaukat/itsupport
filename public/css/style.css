@@ -2728,15 +2728,22 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 .cs1-search input { width: 100%; padding-left: 32px; border-radius: 999px; }
 .cs1-count { margin-left: auto; }
 .cs1-customers .c-reg { width: 86px; }
-.cs1-customers .c-status { width: 96px; }
-.cs1-customers .c-holder { width: 11%; }
-.cs1-customers .c-store { width: 96px; }
-.cs1-customers .c-id { width: 112px; }
-.cs1-customers .c-email { width: 13%; }
-.cs1-customers .c-users { width: 64px; }
-.cs1-customers .c-numbers { width: 80px; }
-.cs1-customers .c-client { width: 11%; }
-.cs1-customers .cs1-cust-actions { width: 60px; }
+.cs1-customers .c-status { width: 120px; }
+.cs1-customers .c-holder { width: 8%; }
+.cs1-customers .c-store { width: 84px; }
+.cs1-customers .c-id { width: 104px; }
+.cs1-customers .c-email { width: 10%; }
+.cs1-customers .c-phone { width: 100px; }
+.cs1-customers .c-users { width: 62px; }
+.cs1-customers .c-numbers { width: 78px; }
+.cs1-customers .c-client { width: 8%; }
+.cs1-customers .cs1-cust-actions { width: 58px; }
+.cs1-customers th { font-size: 0.7857rem; }
+.cs1-customers th, .cs1-customers td { padding-left: 6px; padding-right: 6px; }
+.cs1-customers td code { padding: 1px 4px; }
+.cs1-customers .status-pill { padding: 2px 7px; }
+.cs1-customers .sort-arrow { margin-left: 2px; }
+.cs1-customers .cs1-row-actions { gap: 0; }
 .cs1-customers td.num, .cs1-customers th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cs1-customers tr.is-removed td { color: var(--muted); }
 .cs1-customers tr.is-removed td strong { font-weight: 500; text-decoration: line-through; }
@@ -2757,3 +2764,17 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 .cs1-paste { font-family: Consolas, Menlo, monospace; font-size: 0.8571rem; min-height: 110px; }
 .cs1-export-import { margin-top: var(--sp-3); }
 .cs1-export-import > summary { cursor: pointer; }
+/* Customers: status pills (Active green, Locked amber, Ceased grey, Removed red, New blue). */
+.status-pill.is-warn { background: #FFF4DE; color: #B26B00; }
+.status-pill.is-info { background: var(--blue-soft); color: var(--blue); }
+.cs1-topline { display: grid; gap: 4px; margin: 0 0 var(--sp-3); padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: var(--fs-table); }
+.cs1-topline p { margin: 0; }
+.cs1-topline-counts { font-size: 0.9286rem; }
+.cs1-topline-run { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 6px; }
+.cs1-topline-run > .icon { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--muted); }
+.cs1-topline-run > span { flex: 1; min-width: 0; }
+.cs1-topline-run.is-failed { color: var(--red); }
+.cs1-topline-run.is-failed > .icon { color: var(--red); }
+.cs1-unknown > summary { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; }
+.cs1-unknown[open] > summary { margin-bottom: var(--sp-2); }
+.cs1-unknown .count-badge { display: inline-block; min-width: 20px; padding: 0 7px; border-radius: 999px; background: #FFF4DE; color: #B26B00; font-size: 0.7857rem; font-weight: 700; text-align: center; }

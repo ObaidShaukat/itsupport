@@ -1,8 +1,9 @@
 <%- include('../partials/head') %>
 <%#
-  Call Switch One customers (sidebar Call Switch One -> Customers), like the CallSwitch One
-  dashboard Customers page: synced daily at 06:30 UK from the API (read only) and "Sync
-  now". Company is the customer name on the call charges.
+  Call Switch One customers (sidebar Call Switch One -> Customers). Two sources:
+  "Refresh from CallSwitch" (the dashboard list pasted from the person's own logged-in browser:
+  CS1 IDs and every detail) and the daily API sync (06:30 + Sync now: Company and new / removed
+  customers only). Company is the customer name on the call charges.
 %>
 <%
   const qs = (over) => {
@@ -17,8 +18,11 @@
     const dir = active && filters.dir === 'asc' ? 'desc' : 'asc';
     return `<th class="${cls}" aria-sort="${active ? (filters.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><a href="${qs({ sort: key, dir })}" class="sort-link ${active ? 'is-sorted' : ''}">${label}<span class="sort-arrow" aria-hidden="true">${active ? (filters.dir === 'asc' ? '▲' : '▼') : '↕'}</span></a></th>`;
   };
+  const dash = '—';
   const last = sync.last;
+  const refresh = sync.refresh;
   const filtered = filters.q || filters.status || filters.store;
+  const by = (run) => (run.trigger_type === 'schedule' ? ' (daily)' : run.user_name ? ` by ${run.user_name}` : '');
 %>
 <header class="page-head">
   <div>
@@ -40,7 +44,7 @@
               <% for (const cl of clients) { %><option value="<%= cl.id %>"><%= cl.name %></option><% } %>
             </select>
           </label>
-          <p class="muted small">The daily sync takes over this customer when CallSwitch One lists the same CS1 ID.</p>
+          <p class="muted small">Saved as a Manual customer. Refresh from CallSwitch takes it over when CallSwitch lists the same CS1 ID.</p>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
             <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -51,51 +55,55 @@
     </details>
     <form method="post" action="/call-switch-one/customers/sync" class="inline">
       <%- csrfField %>
-      <button type="submit" class="btn btn-small" <%= api.configured ? '' : 'disabled' %> title="<%= api.configured ? 'Read the customer list from the CallSwitch One API now (at most once every 5 minutes)' : api.message %>"><%- icon('refresh') %><span>Sync now</span></button>
+      <button type="submit" class="btn btn-small" <%= api.configured ? '' : 'disabled' %> title="<%= api.configured ? 'Check the CallSwitch One API for company names and new or removed customers (at most once every 5 minutes)' : api.message %>"><%- icon('refresh') %><span>Sync now</span></button>
     </form>
     <a href="<%= dashboardUrl %>" target="_blank" rel="noopener noreferrer" class="btn btn-small btn-primary" data-cs1-refresh-open title="Opens the CallSwitch customer list in a new tab (you must be logged in to CallSwitch)"><%- icon('external') %><span>Refresh from CallSwitch</span></a>
   </div>
 </header>
 
-<% if (!api.configured) { %>
-  <div class="cs1-sync is-off" role="status"><%- icon('alert') %><span><strong>Sync not set up.</strong> <%= api.message %> Until then, customers can be added by hand.</span></div>
-<% } %>
-<% if (last || api.configured) { %>
-<div class="cs1-sync <%= last && last.status === 'failed' ? 'is-failed' : '' %>" role="status">
-  <% if (last) { %>
-    <% if (last.status === 'failed') { %>
-      <%- icon('alert') %><span><strong>Last sync failed</strong> <%= fmtDate(last.started_at) %><%= last.trigger_type === 'schedule' ? ' (daily)' : last.user_name ? ` (${last.user_name})` : '' %>: <%= last.error %><% if (sync.lastOkAt) { %> <span class="muted">Last good sync <%= fmtDate(sync.lastOkAt) %>.</span><% } %></span>
-    <% } else if (last.status === 'running') { %>
-      <%- icon('refresh') %><span><strong>Sync running</strong> since <%= fmtTime(last.started_at) %>…</span>
+<%# Top line: counts, the last refresh (dashboard list) and the last API sync with their results. %>
+<div class="cs1-topline">
+  <p class="cs1-topline-counts"><strong><%= listed %> customer<%= listed === 1 ? '' : 's' %></strong><% if (needsId) { %> · <a href="<%= qs({ status: 'Missing CS1 ID' }) %>" class="cs1-unknown-note"><%- icon('flag') %> <%= needsId %> missing CS1 ID</a><% } else { %> · <span class="muted">0 missing CS1 ID</span><% } %></p>
+  <p class="cs1-topline-run">
+    <%- icon('external') %><span><strong>Last refresh:</strong>
+    <% if (refresh) { %>
+      <%= fmtDate(refresh.finished_at || refresh.started_at) %><%= by(refresh) %>: <%= refresh.total %> customers from CallSwitch, <%= refresh.added %> new, <%= refresh.updated %> updated<%= refresh.rematched ? `, ${refresh.rematched} billing line${refresh.rematched === 1 ? '' : 's'} named` : '' %>.
     <% } else { %>
-      <%- icon('check') %><span><strong>Last sync</strong> <%= fmtDate(last.finished_at || last.started_at) %><%= last.trigger_type === 'schedule' ? ' (daily)' : last.user_name ? ` (${last.user_name})` : '' %>: <%= last.total %> customers from CallSwitch One, <%= last.added %> added, <%= last.updated %> updated, <%= last.removed %> marked removed<%= last.rematched ? `, ${last.rematched} billing line${last.rematched === 1 ? '' : 's'} re-matched` : '' %>. <span class="muted">Syncs daily at 06:30.</span></span>
-    <% } %>
-    <% if (last.endpoint || last.fields) { %>
+      <span class="muted">never. Click Refresh from CallSwitch to load the CS1 IDs, users and numbers.</span>
+    <% } %></span>
+  </p>
+  <p class="cs1-topline-run <%= last && last.status === 'failed' ? 'is-failed' : '' %>">
+    <%- icon(last && last.status === 'failed' ? 'alert' : 'refresh') %><span><strong>Last sync:</strong>
+    <% if (!api.configured) { %>
+      <span class="muted">not set up. <%= api.message %></span>
+    <% } else if (!last) { %>
+      <span class="muted">never. It runs every day at 06:30, or use Sync now.</span>
+    <% } else if (last.status === 'failed') { %>
+      failed <%= fmtDate(last.started_at) %><%= by(last) %>: <%= last.error %><% if (sync.lastOkAt) { %> <span class="muted">Last good sync <%= fmtDate(sync.lastOkAt) %>.</span><% } %>
+    <% } else if (last.status === 'running') { %>
+      running since <%= fmtTime(last.started_at) %>…
+    <% } else { %>
+      <%= fmtDate(last.finished_at || last.started_at) %><%= by(last) %>: <%= last.total %> from the API, <%= last.added %> new, <%= last.updated %> company name<%= last.updated === 1 ? '' : 's' %> updated, <%= last.removed %> removed. <span class="muted">Daily at 06:30.</span>
+    <% } %></span>
+    <% if (last && (last.endpoint || last.fields)) { %>
       <details class="cs1-fields">
-        <summary>Details of the last sync</summary>
+        <summary>Details</summary>
         <dl class="cs1-sync-details">
-          <dt>Endpoint</dt><dd><code>GET <%= last.endpoint || '—' %></code></dd>
-          <dt>HTTP status</dt><dd><%= last.http_status || '—' %></dd>
-          <dt>Records</dt><dd><%= last.records === null || last.records === undefined ? '—' : last.records %></dd>
-          <dt>Fields returned</dt><dd><code><%= last.fields || '—' %></code></dd>
-          <dt>Samples</dt><dd><code><%= last.sample_ids || '—' %></code></dd>
-          <% if (last.status === 'ok') { %><dt>Billing re-matched</dt><dd><%= last.rematched || 0 %> line<%= last.rematched === 1 ? '' : 's' %> in saved months now have a company</dd><% } %>
+          <dt>Endpoint</dt><dd><code>GET <%= last.endpoint || dash %></code></dd>
+          <dt>HTTP status</dt><dd><%= last.http_status || dash %></dd>
+          <dt>Records</dt><dd><%= last.records === null || last.records === undefined ? dash : last.records %></dd>
+          <dt>Fields returned</dt><dd><code><%= last.fields || dash %></code></dd>
+          <% if (last.status === 'ok') { %><dt>Billing re-matched</dt><dd><%= last.rematched || 0 %> line<%= last.rematched === 1 ? '' : 's' %></dd><% } %>
         </dl>
       </details>
     <% } %>
-  <% } else if (api.configured) { %>
-    <%- icon('clock') %><span>Not synced yet. It runs every day at 06:30, or use <strong>Sync now</strong>.</span>
-  <% } %>
+  </p>
 </div>
-<% } %>
 
 <details class="card cs1-refresh" id="refresh" data-cs1-refresh>
-  <summary><%- icon('external') %> <strong>Refresh from CallSwitch</strong> <span class="muted small">adds CS1 IDs, companies, users and numbers from the CallSwitch dashboard</span></summary>
-  <ol class="cs1-steps">
-    <li><a href="<%= dashboardUrl %>" target="_blank" rel="noopener noreferrer">Open the CallSwitch customer list</a> in a new tab. If you're logged in to CallSwitch, the data appears in the new tab.</li>
-    <li>Press <kbd>Ctrl</kbd>+<kbd>A</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>, then paste it below (or save it with <kbd>Ctrl</kbd>+<kbd>S</kbd> and upload the file).</li>
-    <li>Check the preview, then confirm. Your CallSwitch login is never sent to or kept by the portal, and the pasted text is not stored.</li>
-  </ol>
+  <summary><%- icon('external') %> <strong>Refresh from CallSwitch</strong> <span class="muted small">CS1 IDs, companies, account holders, users and numbers from the CallSwitch dashboard</span></summary>
+  <p><a href="<%= dashboardUrl %>" target="_blank" rel="noopener noreferrer">Open the CallSwitch customer list</a> in a new tab. If you're logged in to CallSwitch, copy everything on that page (<kbd>Ctrl</kbd>+<kbd>A</kbd>, <kbd>Ctrl</kbd>+<kbd>C</kbd>) and paste it below, or save it with <kbd>Ctrl</kbd>+<kbd>S</kbd> and upload the file.</p>
+  <p class="muted small">You'll see a preview before anything is saved. Your CallSwitch login is never sent to or kept by the portal, and the pasted text is not stored.</p>
   <form method="post" action="/call-switch-one/customers/refresh" enctype="multipart/form-data" class="form">
     <%- csrfField %>
     <label class="field">
@@ -107,21 +115,12 @@
       <button type="submit" class="btn btn-primary"><%- icon('eye') %><span>Preview</span></button>
     </div>
   </form>
-  <details class="cs1-export-import">
-    <summary class="muted small">Or import the CS1 dashboard Customers export (.xlsx / .csv)</summary>
-    <form method="post" action="/call-switch-one/customers/import" enctype="multipart/form-data" class="form">
-      <%- csrfField %>
-      <label class="field"><span>Customers export</span><input type="file" name="file" accept=".xlsx,.csv" required>
-        <small class="muted">ID column (CS1-512319) and Company and / or Email; matched to customers from the API and saved straight away. The file is not kept.</small></label>
-      <div class="form-actions"><button type="submit" class="btn btn-small"><%- icon('upload') %><span>Import</span></button></div>
-    </form>
-  </details>
 </details>
 
 <section class="card">
   <form method="get" action="/call-switch-one/customers" class="cs1-filters">
     <input type="hidden" name="sort" value="<%= filters.sort %>"><input type="hidden" name="dir" value="<%= filters.dir %>"><% if (filters.demo) { %><input type="hidden" name="demo" value="1"><% } %>
-    <label class="search cs1-search"><%- icon('search') %><input type="search" name="q" value="<%= filters.q %>" placeholder="Search company, ID, holder, email, client" aria-label="Search customers" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
+    <label class="search cs1-search"><%- icon('search') %><input type="search" name="q" value="<%= filters.q %>" placeholder="Search company, ID, holder, email, phone, client" aria-label="Search customers" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
     <select name="status" data-autosubmit aria-label="Filter by status">
       <option value="">All statuses</option>
       <% for (const s of statuses) { %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s %></option><% } %>
@@ -134,28 +133,30 @@
     <button type="submit" class="btn btn-small">Search</button>
     <% if (filtered) { %><a href="<%= qs({ q: '', status: '', store: '' }) %>" class="btn btn-small btn-ghost">Clear</a><% } %>
     <% if (demoCount) { %><a href="<%= qs({ demo: filters.demo ? '' : '1' }) %>" class="btn btn-small btn-ghost"><%= filters.demo ? 'Hide' : 'Show' %> demo accounts (<%= demoCount %>)</a><% } %>
-    <span class="muted small cs1-count"><%= customers.length %><%= filtered ? ` of ${total}` : '' %> customer<%= customers.length === 1 ? '' : 's' %><% if (unnamed) { %> · <span class="cs1-unknown-note"><%- icon('flag') %> <%= unnamed %> without a company</span><% } %><% if (needsId) { %> · <a href="<%= qs({ status: 'Needs CS1 ID' }) %>" class="cs1-unknown-note"><%- icon('flag') %> <%= needsId %> CS1 ID missing</a><% } %></span>
+    <span class="muted small cs1-count"><%= customers.length %><%= filtered ? ` of ${total}` : '' %> shown</span>
   </form>
   <div class="table-wrap">
     <table class="table cs1-customers">
       <thead><tr>
         <%- col('registered', 'Registered', 'c-reg') %><%- col('status', 'Status', 'c-status') %><%- col('company', 'Company') %><%- col('holder', 'Account Holder', 'c-holder') %>
-        <%- col('store', 'Store', 'c-store') %><%- col('id', 'ID', 'c-id') %><%- col('email', 'Email', 'c-email') %><%- col('users', 'Users', 'num c-users') %><%- col('numbers', 'Numbers', 'num c-numbers') %>
-        <%- col('client', 'Linked portal client', 'c-client') %><th class="cs1-cust-actions"><span class="visually-hidden">Actions</span></th>
+        <%- col('store', 'Store', 'c-store') %><%- col('id', 'CS1 ID', 'c-id') %><%- col('email', 'Email', 'c-email') %><%- col('phone', 'Phone', 'c-phone') %>
+        <%- col('users', 'Users', 'num c-users') %><%- col('numbers', 'Numbers', 'num c-numbers') %><%- col('client', 'Linked portal client', 'c-client') %>
+        <th class="cs1-cust-actions">Actions</th>
       </tr></thead>
       <tbody>
         <% for (const c of customers) { const synced = c.source === 'api'; %>
           <tr class="<%= c.removed_at ? 'is-removed' : '' %> <%= c.company ? '' : 'is-unknown' %>">
-            <td><%= regDate(c.registered_on) || '—' %></td>
-            <td><span class="status-pill is-<%= c.tone %>" <% if (c.ceasedText) { %>title="Ceased <%= c.ceasedText %>"<% } %>><%= c.statusText %><%= c.ceasedText ? ` ${c.ceasedText}` : '' %></span></td>
+            <td><%= regDate(c.registered_on) || dash %></td>
+            <td><span class="status-pill is-<%= c.tone %>" title="<%= c.ceasedText ? `Ceased ${c.ceasedText}` : c.statusText === 'New' ? 'New, CS1 ID missing' : c.removed_at ? 'No longer returned by CallSwitch' : '' %>"><%= c.statusText %><%= c.ceasedText ? ` ${c.ceasedText}` : '' %></span></td>
             <td title="<%= c.company || `Unknown (${c.identifier || 'no CS1 ID'})` %>"><% if (c.company) { %><strong><%= c.company %></strong><% if (c.is_demo) { %> <span class="chip">Demo</span><% } %><% } else { %><span class="cs1-unknown-note"><%- icon('flag') %> Unknown (<%= c.identifier || 'no CS1 ID' %>)</span><% } %></td>
-            <td><%= c.account_holder || '' %></td>
-            <td><%= c.store || '' %></td>
-            <td><% if (c.identifier) { %><code><%= c.identifier %></code><% } else { %><span class="cs1-unknown-note" title="New, CS1 ID missing: use Refresh from CallSwitch (or Edit)"><%- icon('flag') %> CS1 ID missing</span><% } %></td>
-            <td title="<%= [c.email, c.phone].filter(Boolean).join(' · ') %>"><% if (c.email) { %><a href="mailto:<%= c.email %>"><%= c.email %></a><% } else if (c.phone) { %><%= c.phone %><% } %></td>
-            <td class="num"><%= c.users_count === null ? '' : c.users_count %></td>
-            <td class="num"><%= c.numbers_count === null ? '' : c.numbers_count %></td>
-            <td><% if (c.client_id) { %><a href="/clients/<%= c.client_id %>"><%= c.client_name %></a><% } else { %><span class="muted">—</span><% } %></td>
+            <td><%= c.account_holder || dash %></td>
+            <td><%= c.store || dash %></td>
+            <td><% if (c.identifier) { %><code><%= c.identifier %></code><% } else { %><span class="cs1-unknown-note" title="New, CS1 ID missing: use Refresh from CallSwitch (or Edit)"><%- icon('flag') %> Missing</span><% } %></td>
+            <td><% if (c.email) { %><a href="mailto:<%= c.email %>"><%= c.email %></a><% } else { %><%= dash %><% } %></td>
+            <td><%= c.phone || dash %></td>
+            <td class="num"><%= c.users_count === null || c.users_count === undefined ? dash : c.users_count %></td>
+            <td class="num"><%= c.numbers_count === null || c.numbers_count === undefined ? dash : c.numbers_count %></td>
+            <td><% if (c.client_id) { %><a href="/clients/<%= c.client_id %>"><%= c.client_name %></a><% } else { %><span class="muted"><%= dash %></span><% } %></td>
             <td class="cs1-row-actions">
               <details class="edit edit-right">
                 <summary class="icon-btn" title="Edit" aria-label="Edit <%= c.company || c.identifier || 'customer' %>"><%- icon('edit') %></summary>
@@ -164,10 +165,10 @@
                     <%- csrfField %>
                     <input type="hidden" name="back" value="<%= qs({}) %>">
                     <% if (synced && !c.identifier) { %>
-                      <p class="muted small"><strong><%= c.company || 'This customer' %></strong> is synced from CallSwitch One but has no CS1 ID yet. Use Refresh from CallSwitch, or type it here.</p>
+                      <p class="muted small"><strong><%= c.company || 'This customer' %></strong> has no CS1 ID yet. Use Refresh from CallSwitch, or type it here.</p>
                       <label class="field"><span>CS1 ID</span><input type="text" name="identifier" value="" placeholder="CS1-123456" maxlength="40" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
                     <% } else if (synced) { %>
-                      <p class="muted small"><strong><%= c.identifier %></strong> is synced from CallSwitch One<%= c.synced_at ? ` (last ${fmtShort(c.synced_at)})` : '' %>: change its details there.</p>
+                      <p class="muted small"><strong><%= c.identifier %></strong> comes from CallSwitch<%= c.refreshed_at ? ` (refreshed ${fmtShort(c.refreshed_at)})` : '' %>: change its details there.</p>
                     <% } else { %>
                       <label class="field"><span>CS1 ID</span><input type="text" name="identifier" value="<%= c.identifier %>" required maxlength="191" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
                     <% } %>
@@ -193,16 +194,16 @@
             </td>
           </tr>
         <% } %>
-        <% if (!customers.length) { %><tr><td colspan="11" class="empty"><%= total ? 'No customers match.' : (api.configured ? 'No customers yet: use Sync now.' : 'No customers yet. Set up the sync, or add them by hand.') %></td></tr><% } %>
+        <% if (!customers.length) { %><tr><td colspan="12" class="empty"><%= total ? 'No customers match.' : 'No customers yet. Click Refresh from CallSwitch.' %></td></tr><% } %>
       </tbody>
     </table>
   </div>
 </section>
 
 <% if (unknown.length) { %>
-  <section class="card">
-    <h2>Unknown CS1 IDs in uploads <span class="muted small">(<%= unknown.length %>)</span></h2>
-    <p class="muted small">These CS1 IDs are in a CDR file but match no customer. Use <a href="#refresh" data-cs1-refresh-panel>Refresh from CallSwitch</a> first; anything still here shows as "Unknown (ID)" on the call charges until it has a company.</p>
+  <details class="card cs1-unknown">
+    <summary><strong>Unknown CS1 IDs in uploads</strong> <span class="count-badge"><%= unknown.length %></span> <span class="muted small">in CDR files but matching no CallSwitch customer</span></summary>
+    <p class="muted small">They show as "Unknown (ID)" on the call charges. Name one here to save it as a Manual customer; saved billing months pick the name up straight away.</p>
     <ul class="cs1-unknown-list">
       <% for (const u of unknown) { %>
         <li>
@@ -216,6 +217,6 @@
         </li>
       <% } %>
     </ul>
-  </section>
+  </details>
 <% } %>
 <%- include('../partials/foot') %>

@@ -704,6 +704,7 @@ CREATE TABLE IF NOT EXISTS cs1_customers (
   account_id VARCHAR(64) NULL,
   id_alerted_at DATETIME NULL,
   is_demo TINYINT(1) NOT NULL DEFAULT 0,
+  refreshed_at DATETIME NULL,
   client_id INT UNSIGNED NULL,
   created_by INT UNSIGNED NULL,
   updated_by INT UNSIGNED NULL,

@@ -67,6 +67,7 @@ const ADDED_COLUMNS = [
   ['cs1_customers', 'phone', 'VARCHAR(40) NULL AFTER email'],
   ['cs1_customers', 'ceased_on', 'DATE NULL AFTER status'],
   ['cs1_customers', 'is_demo', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER id_alerted_at'],
+  ['cs1_customers', 'refreshed_at', 'DATETIME NULL AFTER is_demo'],
 ];
 
 // The old inventory (people, assets, stock, access, shared accounts, offboarding, custom
@@ -158,6 +159,14 @@ const ONE_TIME_STEPS = [
     await conn.query('ALTER TABLE cs1_customers MODIFY identifier VARCHAR(191) NULL');
     const [[idx]] = await conn.query("SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs1_customers' AND INDEX_NAME = 'idx_cs1_customers_uuid'");
     if (!Number(idx.n)) await conn.query('ALTER TABLE cs1_customers ADD KEY idx_cs1_customers_uuid (uuid)');
+  }],
+  // Call Switch One: values that earlier API syncs wrote but the API cannot give correctly
+  // (store_front uuids as Store, "Status 2", the API users count): cleared once; the next
+  // Refresh from CallSwitch fills them from the dashboard list.
+  ['cs1_clean_api_values_v1', async (conn) => {
+    await conn.query("UPDATE cs1_customers SET store = NULL WHERE store REGEXP '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'");
+    await conn.query("UPDATE cs1_customers SET status = NULL WHERE status REGEXP '^Status [0-9]+$'");
+    await conn.query("UPDATE cs1_customers SET users_count = NULL, numbers_count = NULL WHERE source = 'api' AND refreshed_at IS NULL");
   }],
 ];
 

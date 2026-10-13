@@ -8,11 +8,13 @@
 //
 // Daily sync (syncCustomers; 06:30 UK in index.js + "Sync now", at most once every 5 minutes):
 // GET CS1_API_HOST/account/reseller with the API headers. Records are matched to saved
-// customers by uuid and refresh the company (contact_name), status (when the record says it)
-// and contact details; empty values never wipe saved ones and a CS1 ID is never cleared. An
-// unknown uuid is added as "New, CS1 ID missing" (identifier NULL) and admins are alerted once:
-// "New CallSwitch customer: {company}. Click Refresh from CallSwitch to add their CS1 ID."
-// Synced customers no longer returned (and not Ceased) are marked removed (never deleted).
+// customers by uuid and may ONLY update the Company (contact_name) and find new / removed
+// customers: no other field from the dashboard refresh is ever overwritten (the API's users,
+// store_front and status_id are never used) and a CS1 ID is never touched. An unknown uuid is
+// added as "New, CS1 ID missing" (identifier NULL) and admins are alerted once: "New
+// CallSwitch customer: {company}. Click Refresh from CallSwitch to add their CS1 ID."
+// Customers linked to the API that it no longer returns are marked removed (never deleted).
+// Refreshes are cs1_sync_log rows too (source 'dashboard'), so the page shows both.
 //
 // Each sync run is in cs1_sync_log (endpoint, HTTP status, records, field names (never values),
 // sample IDs, re-matched lines, error); refreshes and syncs are logged as entity_type 'cs1',
@@ -150,6 +152,7 @@ async function applyRefresh(user, mapped) {
       if (step.kind === 'add') {
         await conn.query(`INSERT INTO cs1_customers (identifier, name, account_holder, store, email, phone, status, ceased_on, registered_on, users_count, numbers_count, is_demo, uuid, account_id, source, synced_at, created_by, updated_by)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'api', NOW(), ?, ?)`, [n.identifier, ...values, user ? user.id : null, user ? user.id : null]);
+        await conn.query('UPDATE cs1_customers SET refreshed_at = NOW() WHERE identifier = ?', [n.identifier]);
         continue;
       }
       if (step.merge) {
@@ -157,11 +160,14 @@ async function applyRefresh(user, mapped) {
         await mergeRows(conn, { id: step.id }, step.merge);
       }
       await conn.query(`UPDATE cs1_customers SET identifier = ?, name = ?, account_holder = ?, store = ?, email = ?, phone = ?, status = ?, ceased_on = ?, registered_on = ?,
-        users_count = ?, numbers_count = ?, is_demo = ?, uuid = COALESCE(?, uuid), account_id = COALESCE(?, account_id), source = 'api', removed_at = NULL, synced_at = NOW(), updated_by = ? WHERE id = ?`,
+        users_count = ?, numbers_count = ?, is_demo = ?, uuid = COALESCE(?, uuid), account_id = COALESCE(?, account_id), source = 'api', removed_at = NULL, synced_at = NOW(), refreshed_at = NOW(), updated_by = ? WHERE id = ?`,
       [n.identifier, ...values, user ? user.id : null, step.id]);
     }
     const match = await rematchLines(conn, unknownBefore);
     const result = { added: plan.added.length, updated: plan.updated.length, unchanged: plan.unchanged, conflicts: plan.conflicts, rematched: match.newlyMatched, months: match.months };
+    await conn.query(`INSERT INTO cs1_sync_log (trigger_type, status, user_id, source, finished_at, total, added, updated, records, rematched, endpoint)
+      VALUES ('refresh', 'ok', ?, 'dashboard', NOW(), ?, ?, ?, ?, ?, 'Refresh from CallSwitch (pasted dashboard list)')`,
+    [user ? user.id : null, mapped.length, result.added, result.updated, mapped.length, match.newlyMatched]);
     await logActivity(conn, user, {
       type: 'cs1', action: 'synced', subject: 'Call Switch One',
       summary: `Refreshed Call Switch One customers from CallSwitch (dashboard list): ${plural(result.added, 'new customer')}, ${result.updated} updated, ${result.unchanged} unchanged${result.conflicts.length ? `, ${result.conflicts.length} skipped` : ''}; ${plural(match.newlyMatched, 'billing line')} in ${plural(match.months, 'month')} now matched${plan.added.length ? ` (new: ${plan.added.slice(0, 15).map((a) => `${a.company || a.identifier} ${a.identifier}`).join(', ')})` : ''}`,
@@ -180,7 +186,7 @@ async function syncCustomers(user, { trigger = 'manual' } = {}) {
   if (!cfg.configured) return { ok: false, error: cfg.message, notConfigured: true };
   if (busy) return { ok: false, error: 'A Call Switch One sync is already running. Try again in a minute.' };
   if (trigger === 'manual') {
-    const [[gap]] = await pool.query('SELECT TIMESTAMPDIFF(SECOND, MAX(started_at), NOW()) AS ago FROM cs1_sync_log');
+    const [[gap]] = await pool.query("SELECT TIMESTAMPDIFF(SECOND, MAX(started_at), NOW()) AS ago FROM cs1_sync_log WHERE COALESCE(source, 'official') <> 'dashboard'");
     if (gap && gap.ago !== null && Number(gap.ago) < SYNC_NOW_GAP_SECONDS) {
       const wait = Math.max(1, Math.ceil((SYNC_NOW_GAP_SECONDS - Number(gap.ago)) / 60));
       return { ok: false, error: `Sync now can run once every 5 minutes. Try again in ${plural(wait, 'minute')}.` };
@@ -216,36 +222,25 @@ async function syncCustomers(user, { trigger = 'manual' } = {}) {
         touched.add(`u:${c.uuid}`);
         const row = byUuid.get(c.uuid);
         if (!row) {
-          // Unknown uuid: "New, CS1 ID missing" until Refresh from CallSwitch adds the ID.
-          const [ins] = await conn.query(`INSERT INTO cs1_customers (identifier, name, account_holder, store, email, phone, status, ceased_on, registered_on, users_count, numbers_count, is_demo, uuid, source, synced_at)
-            VALUES (NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'api', NOW())`,
-          [c.company, c.holder || null, c.store || null, c.email || null, c.phone || null, c.status, c.ceasedOn, c.registered, c.users, c.numbers, c.demo ? 1 : 0, c.uuid]);
+          // Unknown uuid: "New, CS1 ID missing" until Refresh from CallSwitch adds the ID and details.
+          const [ins] = await conn.query("INSERT INTO cs1_customers (identifier, name, uuid, source, synced_at) VALUES (NULL, ?, ?, 'api', NOW())", [c.company, c.uuid]);
           touched.add(ins.insertId);
           added += 1;
           newUnlinked.push({ id: ins.insertId, company: c.company || 'a new customer' });
           continue;
         }
         touched.add(row.id);
-        // Company, status (when the API says it) and contact details from the API; store, registered
-        // and the users / numbers counts only fill gaps (the dashboard refresh has the real VoIP counts).
-        // Empty values never wipe saved ones; the CS1 ID is never touched.
-        const next = {
-          name: c.company || row.name, account_holder: c.holder || row.account_holder, store: row.store || c.store || null, email: c.email || row.email,
-          phone: c.phone || row.phone, status: c.status || row.status, ceased_on: c.status ? c.ceasedOn : dayOf(row.ceased_on),
-          registered_on: dayOf(row.registered_on) || c.registered, users_count: row.users_count ?? c.users, numbers_count: row.numbers_count ?? c.numbers,
-          is_demo: c.demo === null ? row.is_demo : (c.demo ? 1 : 0),
-        };
-        const changed = Object.keys(next).filter((k) => !same(dayOf(row[k]), next[k]));
+        // The API may only update the Company; every other field stays as the dashboard refresh
+        // (or a person) saved it, and the CS1 ID is never touched.
+        const name = c.company || row.name;
         if (row.removed_at) restored += 1;
-        await conn.query(`UPDATE cs1_customers SET name = ?, account_holder = ?, store = ?, email = ?, phone = ?, status = ?, ceased_on = ?, registered_on = ?, users_count = ?,
-          numbers_count = ?, is_demo = ?, source = 'api', removed_at = NULL, synced_at = NOW() WHERE id = ?`,
-        [next.name, next.account_holder, next.store, next.email, next.phone, next.status, next.ceased_on, next.registered_on, next.users_count, next.numbers_count, next.is_demo, row.id]);
-        if (changed.length) updated += 1;
-        if (!row.identifier && !row.id_alerted_at) newUnlinked.push({ id: row.id, company: next.name || 'a customer' });
+        if (name !== row.name) updated += 1;
+        await conn.query('UPDATE cs1_customers SET name = ?, removed_at = NULL, synced_at = NOW() WHERE id = ?', [name, row.id]);
+        if (!row.identifier && !row.id_alerted_at) newUnlinked.push({ id: row.id, company: name || 'a customer' });
       }
-      // Customers with an API link that the API no longer returns: Removed (Ceased ones stay Ceased).
+      // Customers linked to the API that it no longer returns: Removed (never deleted).
       for (const e of existing) {
-        if (e.uuid && e.source === 'api' && !e.removed_at && !touched.has(e.id) && e.status !== 'Ceased') {
+        if (e.uuid && !e.removed_at && !touched.has(e.id)) {
           await conn.query('UPDATE cs1_customers SET removed_at = NOW() WHERE id = ?', [e.id]);
           removed += 1;
         }
@@ -285,13 +280,17 @@ async function syncCustomers(user, { trigger = 'manual' } = {}) {
   }
 }
 
+// The last API sync (last, lastOkAt) and the last Refresh from CallSwitch (refresh).
 async function lastSync(db = pool) {
-  const [[last]] = await db.query(`
-    SELECT s.*, COALESCE(NULLIF(u.display_name, ''), u.username) AS user_name
-    FROM cs1_sync_log s LEFT JOIN users u ON u.id = s.user_id ORDER BY s.id DESC LIMIT 1
-  `);
-  const [[ok]] = await db.query("SELECT MAX(started_at) AS at FROM cs1_sync_log WHERE status = 'ok'");
-  return { last: last || null, lastOkAt: ok ? ok.at : null };
+  const pick = async (where) => {
+    const [[row]] = await db.query(`
+      SELECT s.*, COALESCE(NULLIF(u.display_name, ''), u.username) AS user_name
+      FROM cs1_sync_log s LEFT JOIN users u ON u.id = s.user_id WHERE ${where} ORDER BY s.id DESC LIMIT 1
+    `);
+    return row || null;
+  };
+  const [[ok]] = await db.query("SELECT MAX(started_at) AS at FROM cs1_sync_log WHERE status = 'ok' AND COALESCE(source, 'official') <> 'dashboard'");
+  return { last: await pick("COALESCE(s.source, 'official') <> 'dashboard'"), lastOkAt: ok ? ok.at : null, refresh: await pick("s.source = 'dashboard'") };
 }
 
 // ---- Import CS1 IDs (the CS1 dashboard Customers export) ----

@@ -183,23 +183,38 @@ The sidebar group **Call Switch One** has **Customers** (`/call-switch-one/custo
 
 ### Customers (CallSwitch One, read only)
 
-The portal never changes anything in CallSwitch One and never stores or sends anyone's CallSwitch dashboard username, password or cookies. Customers come from two places:
+The portal never changes anything in CallSwitch One and never stores or sends anyone's CallSwitch dashboard username, password or cookies. There are two sources:
 
-- **Refresh from CallSwitch** (the CS1 IDs): the button on Call Switch One → Customers opens `https://www.callswitchone.com/service/account/reseller` (the list the CS1 dashboard uses) in a new tab and opens a panel. If you're logged in to CallSwitch, the data appears in the new tab: press Ctrl+A, Ctrl+C and paste it in the panel (or save it with Ctrl+S and upload the .json / .txt). The portal checks it is the customer list (`status_code` + `result[]`; otherwise "Looks like you weren't logged in to CallSwitch"), shows a preview (new, updated with what changes, unchanged) and saves only on **Confirm**. The pasted text is never stored. The server cannot read that address itself (it answers HTTP 401 to the API login).
-- **Daily API sync** (06:30 UK, and **Sync now** at most once every 5 minutes): `GET https://CS1_API_HOST/account/reseller` with the API headers. Records are matched to saved customers by `uuid` and refresh the company, status (when the record says it) and contact details; store, registered and the user / number counts only fill gaps, empty values never wipe saved ones and a CS1 ID is never cleared. A `uuid` the portal does not know is added as **New, CS1 ID missing**, and admins are alerted once: "New CallSwitch customer: {company}. Click Refresh from CallSwitch to add their CS1 ID." (more than five at once is one alert). Synced customers the API no longer returns are marked **Removed** (Ceased ones stay Ceased); nothing is deleted.
+**A) Refresh from CallSwitch (the main source).** The button opens `https://www.callswitchone.com/service/account/reseller` (the list the CS1 dashboard uses) in a new tab and opens a panel: "If you're logged in to CallSwitch, copy everything on that page (Ctrl+A, Ctrl+C) and paste it below, or save it with Ctrl+S and upload the file." Paste it or upload the .json / .txt. When it isn't the list (`status_code` + `result[]`), the page says "That doesn't look like the CallSwitch customer list. Make sure you're logged in to CallSwitch and try again." A preview shows the new, updated (with what changes) and unchanged customers, and nothing is saved until **Confirm**. The pasted text is never kept. The server cannot read that address itself (it needs a dashboard login).
 
-Only `GET /account/reseller` and `GET /account/reseller/{uuid}` on `CS1_API_HOST` can be called (allow-list in `src/lib/cs1/api.js`; both are documented as not chargeable).
+**B) Daily API sync** (06:30 Europe/London, and **Sync now** at most once every 5 minutes): `GET https://CS1_API_HOST/account/reseller` with the headers `X-Auth-Reseller`, `X-Auth-User` and `X-Auth-Password`. Records are matched by `uuid`. The sync may **only** update the Company (`contact_name`) and find new or removed customers. It never overwrites anything the refresh saved, and never uses the API's `users` (wrong counts, e.g. 209 instead of 16), `store_front` (a uuid) or `status_id`. A `uuid` it has not seen before is added as **New, CS1 ID missing**, and admins are alerted once: "New CallSwitch customer: {company}. Click Refresh from CallSwitch to add their CS1 ID." Customers it no longer returns are marked **Removed** (never deleted). Only `GET /account/reseller` and `GET /account/reseller/{uuid}` can be called (allow-list in `src/lib/cs1/api.js`; neither is chargeable).
 
+Setup:
 1. Use (or create in the CallSwitch One portal, Customer Management → Reseller Users) an API user for our reseller account.
-2. In `.env` set `CS1_API_HOST` (`api.callswitchone.com`), `CS1_RESELLER`, `CS1_USER` and `CS1_PASSWORD` (sent as `X-Auth-Reseller`, `X-Auth-User`, `X-Auth-Password`; the password is never logged or shown). `npm run cs1-fields` tests the API without the database.
-3. `npm run migrate`, `pm2 restart itsupport`, then **Sync now** and **Refresh from CallSwitch** on Call Switch One → Customers.
+2. In `.env` set `CS1_API_HOST` (`api.callswitchone.com`), `CS1_RESELLER`, `CS1_USER` and `CS1_PASSWORD`. The password is never logged or shown. `npm run cs1-fields` tests the API without the database (it makes a real GET request).
+3. Run `npm run migrate` and `pm2 restart itsupport`, then click **Refresh from CallSwitch** (and **Sync now**) on Call Switch One → Customers. `migrate` clears once the values that older API syncs wrote (uuid stores, "Status 2", API user counts), so do a Refresh straight after it.
 
-**Field mapping** (fixed in `src/lib/cs1/api.js`), from the CallSwitch list (`result[]`): `customer_id` → CS1 ID (the key), `uuid` → link to the API record, `contact_name` → Company (a ` : CEASED - d/m/yyyy` suffix is removed and sets Status Ceased with that date; `name` is an internal code and is not used), `is_ceased` / `is_locked` → Ceased / Locked, otherwise Active, `first_name` + `last_name` → Account Holder, `email_address` → Email, `phone` → Phone, `store_name` → Store, `created_on` → Registered, `products.voip_user_count` → Users, `products.voip_number_count` → Numbers, `is_demo` → demo account (hidden unless **Show demo accounts**). From the API: `contact_name`, `phone`, `users`, `created_on` (no CS1 ID; its `store_front` is a uuid, so Store comes from the refresh).
+**Field mapping** (from the dashboard list `result[]`, fixed in `src/lib/cs1/api.js`):
 
-- **Billing:** after every refresh, sync, import or change by hand the lines of every saved billing month are re-matched (CS1 IDs normalised, so `CS1-001234`, `cs1 1234` and `1234` are the same), so unsent months show the companies (e.g. CS1-512319 = Felix Legal); months already sent keep the names they were sent with. "Unknown CS1 IDs in uploads" lists only IDs that match no customer.
-- **Page:** Registered ("29 Apr 25") | Status (Active green; Ceased with its date, Locked, Removed red; New grey) | Company | Account Holder | Store | ID ("CS1 ID missing") | Email | Users | Numbers | Linked portal client. Search, sort by any column, filter by status and store, show / hide demo accounts. The top shows the last sync time and result with its details (endpoint, HTTP status, records, field names); a failure is shown in red and admins are alerted once a day. Synced customers are read only except the portal client link (and a missing CS1 ID); customers can still be added by hand, and the CS1 dashboard Customers export (.xlsx / .csv) can be imported from the Refresh panel.
-- **Names:** the Company is the customer name everywhere (Billing, email, Excel). Without one the customer is shown as "Unknown (CS1-123456)" and flagged; the ID is never used as the name.
-- Refreshes, syncs, imports and alerts are logged in `/activity` (entity type `cs1`), never on the Daily Report.
+| Field | Becomes |
+| --- | --- |
+| `customer_id` | CS1 ID (the key) |
+| `uuid` | link to the API record |
+| `contact_name` | Company, with any ` : CEASED - d/m/yyyy` suffix removed (`name` is an internal code and is not used) |
+| `is_ceased` / `is_locked` | Status: Ceased (with the date from the suffix), Locked, otherwise Active |
+| `first_name` + `last_name` | Account Holder |
+| `email_address` / `phone` | Email / Phone |
+| `store_name` | Store |
+| `created_on` | Registered (UK date, e.g. "18 Oct 24") |
+| `products.voip_user_count` / `products.voip_number_count` | Users / Numbers |
+| `is_demo` | demo account, hidden unless **Show demo accounts** |
+
+Known examples to check after a refresh: Simple Insurance Solutions = CS1-517164 (16 users, 6 numbers), Felix Legal = CS1-512319 (23 users, 1 number), Oushk = CS1-575445.
+
+- **Table:** Registered | Status | Company | Account Holder | Store | CS1 ID | Email | Phone | Users | Numbers | Linked portal client | Actions. Pills: Active green, Locked amber, Ceased grey, Removed red, New blue. Unknown values show "—" (never raw codes). Search covers company, ID, holder, email, phone and client. Filter by status (including Missing CS1 ID), store and demo, and sort by any column (Company A-Z by default). The top line shows "{n} customers · {m} missing CS1 ID", the last refresh and the last sync with their results (failures in red; admins are alerted once a day).
+- **Unknown CS1 IDs in uploads:** after a refresh, CS1 IDs from CDR files that still match no customer are listed in a collapsed section with a count, hidden when there are none. Name one with **Add company** to save it as a **Manual** customer.
+- **Billing:** after every refresh, sync or name typed by hand, the lines of every saved billing month are re-matched (CS1 IDs normalised, so `CS1-001234`, `cs1 1234` and `1234` are the same), so their customer names fill in (e.g. CS1-512319 = Felix Legal). Months already sent keep the names they were sent with. Without a company a line shows "Unknown (CS1-123456)"; the ID is never used as the name.
+- Refreshes, syncs and alerts are logged in `/activity` (entity type `cs1`), never on the Daily Report.
 
 ### Billing
 

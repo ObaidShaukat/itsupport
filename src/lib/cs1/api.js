@@ -224,17 +224,14 @@ const ID_RE = /^CS1[\s_-]*\d+$/i;
 //
 // Dashboard records (mapDashboard; result[] of the pasted JSON):
 //   customer_id                 -> CS1 ID (the key)            uuid -> link to the API record
-//   contact_name                -> Company ("name" is a code). A " : CEASED - d/m/yyyy" suffix is
-//                                  stripped and gives Status Ceased with that date (ceased_on)
+//   contact_name                -> Company ("name" is a code), any " : CEASED - d/m/yyyy" suffix
+//                                  removed (its date is the ceased date when is_ceased)
 //   is_ceased / is_locked       -> Status Ceased / Locked, otherwise Active
 //   first_name + last_name      -> Account Holder              email_address -> Email
 //   phone                       -> Phone                       store_name -> Store
-//   created_on                  -> Registered                  is_demo -> demo account (hidden)
+//   created_on                  -> Registered (UK day)         is_demo -> demo account (hidden)
 //   products.voip_user_count    -> Users                       products.voip_number_count -> Numbers
-// Official API records (mapOfficial): contact_name -> Company (same suffix rule), phone,
-// store_front -> Store only when it is a name (the API gives the storefront's uuid), users -> Users, created_on; status only when the record says it
-// (is_ceased / is_locked / the CEASED suffix), otherwise null = keep the saved status.
-const STATUS_LABELS = {}; // status_id names, if ever needed (the dashboard has is_ceased / is_locked)
+// Official API records (mapOfficial): uuid and contact_name (-> Company) only.
 
 // Value at "a.b.c", or undefined.
 function getPath(obj, path) {
@@ -299,14 +296,16 @@ const first = (rec, paths, accept = () => true) => {
 const isTrue = (v) => v === true || v === 1 || /^(1|true|yes|y)$/i.test(String(v === undefined || v === null ? '' : v).trim());
 
 // "2025-04-29T10:00:00Z", "2025-04-29 10:00:00", "29/04/2025", unix seconds / ms -> "2025-04-29".
+const UK_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/London', year: 'numeric', month: '2-digit', day: '2-digit' });
+const ukDay = (d) => (Number.isNaN(d.getTime()) ? null : UK_DAY.format(d));
 function dateOf(v) {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v === 'number' || /^\d{9,13}$/.test(String(v))) {
     const n = Number(v);
-    const d = new Date(n < 1e12 ? n * 1000 : n);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+    return ukDay(new Date(n < 1e12 ? n * 1000 : n));
   }
   const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/i.test(s)) return ukDay(new Date(s.replace(' ', 'T')));
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(s);
@@ -322,16 +321,13 @@ function companyOf(value) {
   return { company: raw.slice(0, m.index).trim().slice(0, 200), ceasedOn: `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` };
 }
 
-// Ceased / Locked / Active from is_ceased / is_locked (and the CEASED suffix); null when the
-// record does not say.
-function statusOf(rec, ceasedOn) {
-  if (isTrue(rec.is_ceased) || ceasedOn) return 'Ceased';
+// Ceased if is_ceased, Locked if is_locked, else Active (dashboard records).
+function statusOf(rec) {
+  if (isTrue(rec.is_ceased)) return 'Ceased';
   if (isTrue(rec.is_locked)) return 'Locked';
-  if ('is_ceased' in rec || 'is_locked' in rec) return 'Active';
-  return null;
+  return 'Active';
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const holderOf = (rec) => [first(rec, ['first_name'], scalar), first(rec, ['last_name'], scalar)].filter(Boolean).join(' ');
 
 // A dashboard record (result[] of the pasted JSON) -> customer; identifier '' without customer_id.
@@ -344,12 +340,12 @@ function mapDashboard(rec) {
     uuid: text(first(rec, ['uuid'], scalar), 64),
     accountId: text(first(rec, ['account_id'], scalar), 64),
     company,
-    ceasedOn,
+    ceasedOn: isTrue(rec.is_ceased) ? ceasedOn : null,
     holder: text(holderOf(rec), 200),
-    email: text(first(rec, ['email_address', 'email'], scalar), 255),
-    phone: text(first(rec, ['phone', 'phone_number'], scalar), 40),
+    email: text(first(rec, ['email_address'], scalar), 255),
+    phone: text(first(rec, ['phone'], scalar), 40),
     store: text(first(rec, ['store_name'], scalar), 200),
-    status: statusOf(rec, ceasedOn) || 'Active',
+    status: statusOf(rec),
     registered: dateOf(first(rec, ['created_on'], scalar)),
     users: count(first(rec, ['products.voip_user_count'])),
     numbers: count(first(rec, ['products.voip_number_count'])),
@@ -357,27 +353,13 @@ function mapDashboard(rec) {
   };
 }
 
-// An official API record -> what it can tell (null / '' = unknown, keep the saved value).
+// An official API record -> { uuid, company }: the daily sync may only update the Company and
+// see new / removed customers. Its other fields are never used (users gives wrong counts, e.g.
+// 209 instead of 16; store_front is a uuid; status_id has no names).
 function mapOfficial(rec) {
-  const { company, ceasedOn } = companyOf(first(rec, ['contact_name'], scalar));
-  const storefront = getPath(rec, 'store_front');
   return {
-    identifier: '',
-    rawId: '',
     uuid: text(first(rec, ['uuid'], scalar), 64),
-    company,
-    ceasedOn,
-    holder: text(holderOf(rec), 200),
-    email: text(first(rec, ['email_address', 'email'], scalar), 255),
-    phone: text(first(rec, ['phone'], scalar), 40),
-    // store_front is the storefront's uuid in the API, not its name: only a real name is used.
-    store: text([typeof storefront === 'string' ? storefront : null, first(rec, ['store_front.name', 'store_name'], scalar)]
-      .find((v) => v && !UUID_RE.test(String(v).trim())) || '', 200),
-    status: statusOf(rec, ceasedOn),
-    registered: dateOf(first(rec, ['created_on'], scalar)),
-    users: count(first(rec, ['users', 'products.voip_user_count'])),
-    numbers: count(first(rec, ['products.voip_number_count'])),
-    demo: 'is_demo' in rec ? isTrue(rec.is_demo) : null,
+    company: companyOf(first(rec, ['contact_name'], scalar)).company,
   };
 }
 
@@ -387,29 +369,26 @@ const mapCustomer = (rec) => (rec && rec.customer_id !== undefined ? mapDashboar
 // The text copied from (or saved off) the dashboard list in the browser -> { records } or
 // { error }. Ctrl+A in a browser JSON viewer can add text around the JSON, so the first "{"
 // to the last "}" is read. Only status_code + result[] is accepted.
-const NOT_LOGGED_IN = "That isn't the CallSwitch customer list. Looks like you weren't logged in to CallSwitch: log in at callswitchone.com, open the link again and copy the whole page.";
+const NOT_LOGGED_IN = "That doesn't look like the CallSwitch customer list. Make sure you're logged in to CallSwitch and try again.";
 function parseDashboard(input) {
   const s = String(input || '').replace(/^﻿/, '').trim();
   if (!s) return { error: 'Paste the page from the new tab, or choose the saved file.' };
   const start = s.indexOf('{');
   const end = s.lastIndexOf('}');
-  if (start < 0 || end <= start) return { error: /<html|<!doctype|log ?in|sign ?in/i.test(s) ? NOT_LOGGED_IN : "That isn't valid JSON. Copy the whole page in the new tab (Ctrl+A, then Ctrl+C) and paste it again." };
+  if (start < 0 || end <= start) return { error: NOT_LOGGED_IN };
   let body;
   try { body = JSON.parse(s.slice(start, end + 1)); } catch {
-    return { error: "That isn't valid JSON. Copy the whole page in the new tab (Ctrl+A, then Ctrl+C) and paste it again, or save it with Ctrl+S and upload the file." };
+    return { error: NOT_LOGGED_IN };
   }
-  if (!body || typeof body !== 'object' || !Array.isArray(body.result)) {
-    const code = body && body.status_code;
-    return { error: code && Number(code) !== 200 ? `CallSwitch answered ${code}${body.status_message ? ` (${body.status_message})` : ''}. ${NOT_LOGGED_IN}` : NOT_LOGGED_IN };
-  }
-  if (body.status_code !== undefined && Number(body.status_code) !== 200) return { error: `CallSwitch answered ${body.status_code}${body.status_message ? ` (${body.status_message})` : ''}. ${NOT_LOGGED_IN}` };
+  if (!body || typeof body !== 'object' || !Array.isArray(body.result)) return { error: NOT_LOGGED_IN };
+  if (body.status_code !== undefined && Number(body.status_code) !== 200) return { error: NOT_LOGGED_IN };
   const records = body.result.filter((r) => r && typeof r === 'object');
   if (!records.length) return { error: 'The customer list is empty.' };
-  if (!records.some((r) => r.customer_id)) return { error: 'This list has no customer_id. Open the link from the Refresh panel (the dashboard list), not the API.' };
+  if (!records.some((r) => r.customer_id)) return { error: NOT_LOGGED_IN };
   return { records };
 }
 
 module.exports = {
   cs1ApiConfig, cs1Get, allowedUrl, listOfficial, listCustomers, fieldNames, mapCustomer, mapDashboard, mapOfficial, companyOf,
-  parseDashboard, recordsOf, dateOf, normaliseId, deepFind, getPath, ID_RE, STATUS_LABELS, CUSTOMERS_PATH, DASHBOARD_URL, ENV_KEYS,
+  parseDashboard, recordsOf, dateOf, normaliseId, deepFind, getPath, ID_RE, CUSTOMERS_PATH, DASHBOARD_URL, ENV_KEYS,
 };

@@ -337,7 +337,7 @@ if (!cs1ApiConfig().configured) console.warn(cs1ApiConfig().message);
 setTimeout(async () => {
   if (!cs1ApiConfig().configured) return;
   try {
-    const [[row]] = await pool.query("SELECT MAX(started_at) AS last FROM cs1_sync_log WHERE status = 'ok'");
+    const [[row]] = await pool.query("SELECT MAX(started_at) AS last FROM cs1_sync_log WHERE status = 'ok' AND COALESCE(source, 'official') <> 'dashboard'");
     if (!row.last || Date.now() - new Date(row.last).getTime() > 24 * 60 * 60 * 1000) await cs1Daily();
   } catch (err) {
     console.error('Call Switch One catch-up failed:', err.message);
