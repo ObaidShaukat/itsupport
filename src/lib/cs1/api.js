@@ -12,13 +12,12 @@
 //   CS1_RESELLER   sent as X-Auth-Reseller
 //   CS1_USER       sent as X-Auth-User
 //   CS1_PASSWORD   sent as X-Auth-Password (never logged or shown)
-//   CS1_API_FIELDS optional, when the automatic matching picks the wrong field:
-//                  "id=account_code,company=company_name,store=storefront.name" (keys: id,
-//                  company, holder, store, email, status, registered, users, numbers).
+//
+// The fields are mapped by fixed names (see "CS1 Sub Reseller record -> customer" below).
 //
 // The response shape is not assumed: the records are the array in the body (or under
-// result / data / items / ...), paging follows a next link (body or Link header) or page /
-// last_page numbers, and fields are matched by name (mapCustomer).
+// result / data / items / ..., or an object keyed by ID: each record then gets that key as
+// _key), paging follows a next link (body or Link header) or page / last_page numbers.
 const TIMEOUT_MS = 30 * 1000;
 const MAX_PAGES = 200;
 const MAX_DETAILS = 3000;
@@ -85,16 +84,27 @@ async function cs1Get(url, cfg = cs1ApiConfig()) {
 const LIST_KEYS = ['result', 'data', 'items', 'results', 'customers', 'resellers', 'records', 'rows', 'content', 'value'];
 // One record from a detail reply: { result: { ... } } or the object itself.
 const detailOf = (body) => (body && body.result && typeof body.result === 'object' && !Array.isArray(body.result) ? body.result : body);
+// { "575445": { ... }, "575446": { ... } } -> records with _key = their key.
+const keyed = (obj) => {
+  const entries = Object.entries(obj || {});
+  if (entries.length < 1 || !entries.every(([, v]) => v && typeof v === 'object' && !Array.isArray(v))) return null;
+  return entries.map(([k, v]) => ({ _key: k, ...v }));
+};
+
 function recordsOf(body) {
   if (Array.isArray(body)) return body;
   if (!body || typeof body !== 'object') return null;
   for (const k of LIST_KEYS) {
     if (Array.isArray(body[k])) return body[k];
+    // A list keyed by ID ("result": { "575445": {...} }); a single record has scalar values.
+    if (body[k] && typeof body[k] === 'object' && keyed(body[k]) && Object.keys(body[k]).every((key) => /^[\w-]+$/.test(key)) && !('uuid' in body[k])) return keyed(body[k]);
     if (body[k] && typeof body[k] === 'object') {
       const inner = recordsOf(body[k]);
       if (inner) return inner;
     }
   }
+  // The whole body keyed by CS1 number ({ "575445": {...} }).
+  if (Object.keys(body).length && Object.keys(body).every((key) => /^(CS1[-_]?)?\d+$/i.test(key))) return keyed(body);
   const arrays = Object.values(body).filter((v) => Array.isArray(v) && v.some((x) => x && typeof x === 'object'));
   return arrays.length === 1 ? arrays[0] : null;
 }
@@ -187,18 +197,43 @@ function normaliseId(value) {
 }
 const ID_RE = /^CS1[\s_-]*\d+$/i;
 
-// ---- Mapping by field name ----
+// ---- CS1 Sub Reseller record -> customer (fixed mapping) ----
+//
+// A record from GET /account/reseller (or /account/reseller/{uuid}):
+//   name            -> Company (the customer name everywhere)
+//   contact_name    -> Account Holder
+//   storefront.name -> Store (also storefront_name, or storefront when it is a plain string)
+//   created_on      -> Registered
+//   status_id       -> Status (STATUS_LABELS; a text status field wins when there is one)
+//   users / phone numbers counts when the record has them
+//   CS1 ID          -> ID_PATHS below, as "CS1-{number}"
+//
+// ID_PATHS: where the number shown as CS1-xxxxxx in the CS1 dashboard is found (known test
+// case: Oushk = CS1-575445). "_key" is the record's own key when the reply is an object keyed
+// by ID. Only paths confirmed with `npm run cs1-find -- "Oushk" 575445` belong here; until
+// then a record only gets an ID from a value already written like CS1-123456, and a sync
+// without IDs changes nothing.
+const ID_PATHS = [];
+const STATUS_LABELS = {};
+const USERS_PATHS = ['users_count', 'user_count', 'sip_users_count', 'sip_user_count', 'users', 'sip_users'];
+const NUMBERS_PATHS = ['numbers_count', 'number_count', 'phone_numbers_count', 'phone_number_count', 'numbers', 'phone_numbers'];
 
-const norm = (k) => String(k).toLowerCase().replace(/[^a-z0-9]/g, '');
+// Value at "a.b.c" (arrays by index), or undefined.
+function getPath(obj, path) {
+  let cur = obj;
+  for (const part of String(path).split('.')) {
+    if (cur === null || cur === undefined || typeof cur !== 'object') return undefined;
+    cur = cur[part];
+  }
+  return cur;
+}
 
-// One level of nesting flattened: { store: { name } } -> "store.name".
+// One level of nesting flattened: { storefront: { name } } -> "storefront.name".
 function flatten(rec) {
   const out = {};
   for (const [k, v] of Object.entries(rec || {})) {
-    if (v && typeof v === 'object' && !Array.isArray(v)) {
-      for (const [k2, v2] of Object.entries(v)) out[`${k}.${k2}`] = v2;
-      out[k] = v;
-    } else out[k] = v;
+    out[k] = v;
+    if (v && typeof v === 'object' && !Array.isArray(v)) for (const [k2, v2] of Object.entries(v)) out[`${k}.${k2}`] = v2;
   }
   return out;
 }
@@ -210,40 +245,21 @@ function fieldNames(records) {
   return [...names].sort();
 }
 
-const FIELDS = {
-  id: ['cs1id', 'cs1number', 'customerid', 'customernumber', 'accountid', 'accountnumber', 'accountno', 'accountcode', 'resellerid', 'resellernumber', 'accountref', 'accountreference', 'customerreference', 'customeridentifier', 'identifier', 'reference', 'ref', 'code', 'id'],
-  company: ['company', 'companyname', 'customername', 'businessname', 'organisation', 'organization', 'organisationname', 'organizationname', 'accountname', 'name'],
-  holder: ['accountholder', 'accountholdername', 'holder', 'holdername', 'contactname', 'primarycontact', 'primarycontactname', 'ownername', 'owner', 'fullname'],
-  store: ['store', 'storename', 'storefront', 'storefrontname', 'storefronttitle', 'storefront.name', 'store.name', 'reseller', 'resellername'],
-  email: ['email', 'emailaddress', 'accountemail', 'contactemail', 'primaryemail', 'accountholderemail'],
-  status: ['status', 'accountstatus', 'customerstatus', 'state'],
-  registered: ['registered', 'registeredat', 'registereddate', 'registeredon', 'registrationdate', 'datecreated', 'createddate', 'createdat', 'created', 'signupdate', 'startdate'],
-  users: ['users', 'userscount', 'usercount', 'numberofusers', 'totalusers', 'usertotal', 'seats', 'extensions', 'sipaccounts'],
-  numbers: ['numbers', 'numberscount', 'numbercount', 'numberofnumbers', 'phonenumbers', 'phonenumberscount', 'numberofphonenumbers', 'totalnumbers', 'dids', 'ddis', 'didcount'],
-};
-
-// CS1_API_FIELDS: "key=field,key=field" chosen by hand, tried before the automatic names.
-function overrides() {
-  const out = {};
-  for (const part of String(process.env.CS1_API_FIELDS || '').split(',')) {
-    const [k, v] = part.split('=').map((x) => (x || '').trim());
-    if (k && v && FIELDS[k]) out[k] = v;
+// Every path (keys included, any depth) whose key or value contains needle:
+// [{ path, where: 'value' | 'key', value }]. Used by npm run cs1-find.
+function deepFind(obj, needle, base = '', out = [], depth = 0) {
+  const n = String(needle);
+  if (depth > 12 || obj === null || obj === undefined) return out;
+  if (typeof obj !== 'object') {
+    if (String(obj).includes(n)) out.push({ path: base || '(value)', where: 'value', value: obj });
+    return out;
+  }
+  for (const [k, v] of Object.entries(obj)) {
+    const path = base ? `${base}${Array.isArray(obj) ? `[${k}]` : `.${k}`}` : (Array.isArray(obj) ? `[${k}]` : k);
+    if (!Array.isArray(obj) && k.includes(n)) out.push({ path, where: 'key', value: k });
+    deepFind(v, n, path, out, depth + 1);
   }
   return out;
-}
-const fieldsFor = (key) => {
-  const o = overrides()[key];
-  return o ? [o, ...FIELDS[key]] : FIELDS[key];
-};
-
-function pick(flat, candidates, accept = () => true) {
-  const byNorm = new Map();
-  for (const [k, v] of Object.entries(flat)) if (!byNorm.has(norm(k))) byNorm.set(norm(k), v);
-  for (const c of candidates) {
-    const v = byNorm.get(norm(c));
-    if (v !== undefined && v !== null && v !== '' && accept(v)) return v;
-  }
-  return null;
 }
 
 const scalar = (v) => typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean';
@@ -255,8 +271,15 @@ const count = (v) => {
   const n = Number(v);
   return Number.isFinite(n) && n >= 0 ? Math.min(Math.round(n), 1e6) : null;
 };
+const first = (rec, paths, accept = () => true) => {
+  for (const p of paths) {
+    const v = getPath(rec, p);
+    if (v !== undefined && v !== null && v !== '' && accept(v)) return v;
+  }
+  return null;
+};
 
-// "2025-04-29T10:00:00Z", "2025-04-29", "29/04/2025", unix seconds / ms -> "2025-04-29".
+// "2025-04-29T10:00:00Z", "2025-04-29 10:00:00", "29/04/2025", unix seconds / ms -> "2025-04-29".
 function dateOf(v) {
   if (v === null || v === undefined || v === '') return null;
   if (typeof v === 'number' || /^\d{9,13}$/.test(String(v))) {
@@ -272,54 +295,50 @@ function dateOf(v) {
   return null;
 }
 
-function statusOf(flat) {
-  const s = pick(flat, fieldsFor('status'), scalar);
-  if (typeof s === 'boolean') return s ? 'Active' : 'Inactive';
-  if (s !== null) {
-    const t = text(s, 40);
-    // "ACTIVE" / "active" / "on_hold" -> "Active" / "On hold".
-    const words = t.replace(/[_-]+/g, ' ').toLowerCase();
-    return words ? words.charAt(0).toUpperCase() + words.slice(1) : '';
-  }
-  const active = pick(flat, ['active', 'isactive', 'enabled', 'isenabled']);
-  if (active !== null) return active === true || active === 1 || /^(1|true|yes)$/i.test(String(active)) ? 'Active' : 'Inactive';
-  const suspended = pick(flat, ['suspended', 'issuspended']);
-  if (suspended === true || suspended === 1) return 'Suspended';
-  return '';
+const label = (t) => {
+  const words = String(t).trim().replace(/[_-]+/g, ' ').toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : '';
+};
+// status_id -> label; a text status (status / status_name) wins when the record has one.
+function statusOf(rec) {
+  const named = first(rec, ['status_name', 'status.name', 'status'], (v) => typeof v === 'string');
+  if (named) return label(named).slice(0, 40);
+  const id = first(rec, ['status_id', 'status.id', 'status'], scalar);
+  if (id === null) return '';
+  return STATUS_LABELS[String(id)] || `Status ${id}`;
 }
 
-// One API record -> { identifier, company, holder, store, email, status, registered, users, numbers }.
-// The CS1 ID is any field whose value looks like CS1-123456 first, else an id-like field.
-function mapCustomer(rec) {
-  const flat = flatten(rec);
-  const forced = overrides();
-  let id = forced.id ? pick(flat, [forced.id], scalar) : null;
-  if (!id) id = Object.values(flat).find((v) => typeof v === 'string' && ID_RE.test(v.trim()));
-  if (!id) id = pick(flat, FIELDS.id.filter((k) => k !== 'id'), (v) => typeof v === 'string' || typeof v === 'number');
-  // Last: a numeric id (the dashboard shows it as CS1-xxxxxx), never the uuid.
-  if (!id && /^\d+$/.test(String(flat.id ?? ''))) id = flat.id;
-  let holder = pick(flat, fieldsFor('holder'), scalar);
-  if (holder === null) {
-    const first = pick(flat, ['firstname', 'forename', 'contactfirstname'], scalar);
-    const last = pick(flat, ['lastname', 'surname', 'contactlastname'], scalar);
-    holder = [first, last].filter(Boolean).join(' ') || null;
+// The CS1 number from the confirmed ID_PATHS, else a value written like CS1-123456.
+function idOf(rec) {
+  for (const p of ID_PATHS) {
+    const v = getPath(rec, p);
+    if ((typeof v === 'number' || typeof v === 'string') && (/^\d+$/.test(String(v).trim()) || ID_RE.test(String(v).trim()))) return String(v).trim();
   }
-  const storeValue = pick(flat, fieldsFor('store'));
-  const store = storeValue && typeof storeValue === 'object' ? (storeValue.name || storeValue.title || '') : storeValue;
+  const flat = flatten(rec);
+  const written = Object.values(flat).find((v) => typeof v === 'string' && ID_RE.test(v.trim()));
+  return written ? written.trim() : null;
+}
+
+// One API record -> { identifier, rawId, company, holder, store, email, status, registered, users, numbers }.
+function mapCustomer(rec) {
+  const id = idOf(rec);
+  const storefront = getPath(rec, 'storefront');
+  const store = typeof storefront === 'string' ? storefront : first(rec, ['storefront.name', 'storefront_name', 'store.name', 'store_name'], scalar);
   return {
     identifier: normaliseId(id),
     rawId: text(id, 191),
-    company: text(pick(flat, fieldsFor('company'), scalar), 200),
-    holder: text(holder, 200),
+    company: text(first(rec, ['name'], scalar), 200),
+    holder: text(first(rec, ['contact_name'], scalar), 200),
     store: text(store, 200),
-    email: text(pick(flat, fieldsFor('email'), scalar), 255),
-    status: statusOf(flat),
-    registered: dateOf(pick(flat, fieldsFor('registered'), scalar)),
-    users: count(pick(flat, fieldsFor('users'))),
-    numbers: count(pick(flat, fieldsFor('numbers'))),
+    email: text(first(rec, ['email', 'contact_email', 'email_address'], scalar), 255),
+    status: statusOf(rec),
+    registered: dateOf(first(rec, ['created_on'], scalar)),
+    users: count(first(rec, USERS_PATHS)),
+    numbers: count(first(rec, NUMBERS_PATHS)),
   };
 }
 
 module.exports = {
-  cs1ApiConfig, cs1Get, listCustomers, fieldNames, mapCustomer, recordsOf, dateOf, normaliseId, ID_RE, CUSTOMERS_PATH, ENV_KEYS,
+  cs1ApiConfig, cs1Get, listCustomers, fieldNames, mapCustomer, recordsOf, dateOf, normaliseId, deepFind, getPath,
+  ID_RE, ID_PATHS, STATUS_LABELS, CUSTOMERS_PATH, ENV_KEYS,
 };

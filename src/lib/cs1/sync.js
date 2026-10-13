@@ -52,7 +52,7 @@ async function syncCustomers(user, { trigger = 'manual' } = {}) {
     for (const c of mapped) if (c.identifier && !byId.has(c.identifier)) byId.set(c.identifier, c);
     // Never mark everyone removed because of an empty or unrecognised reply.
     if (!records.length) throw new Error('The CallSwitch One API returned no customers, so nothing was changed.');
-    if (!byId.size) throw new Error(`No CS1 IDs were found in the reply, so nothing was changed. Fields returned: ${seen.fields.join(', ').slice(0, 600)}. Set CS1_API_FIELDS (e.g. id=account_number) if the ID is in one of them.`);
+    if (!byId.size) throw new Error(`No CS1 IDs were found in the reply, so nothing was changed. Fields returned: ${seen.fields.join(', ').slice(0, 600)}. Run npm run cs1-find -- "Oushk" 575445 on the server to find where the CS1 number is, so it can be added to ID_PATHS in src/lib/cs1/api.js.`);
 
     const counts = await transaction(async (conn) => {
       const [existing] = await conn.query('SELECT * FROM cs1_customers FOR UPDATE');

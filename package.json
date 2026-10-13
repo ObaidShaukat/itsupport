@@ -8,7 +8,8 @@
     "migrate": "node scripts/migrate.js",
     "seed": "node scripts/seed.js",
     "create-user": "node scripts/create-user.js",
-    "cs1-fields": "node scripts/cs1-fields.js"
+    "cs1-fields": "node scripts/cs1-fields.js",
+    "cs1-find": "node scripts/cs1-find.js"
   },
   "repository": {
     "type": "git",
