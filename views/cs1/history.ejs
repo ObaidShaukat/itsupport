@@ -1,0 +1,33 @@
+<%- include('../partials/head') %>
+<%- include('_head', { area, settings, heading: 'Billing history', intro: 'Every month calculated, with its totals and where it was sent.' }) %>
+<section class="card">
+  <% if (!runs.length) { %>
+    <p class="empty">No months yet. <a href="/call-switch-one/billing">Upload the first CDR file</a>.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table cs1-history">
+        <thead><tr><th class="w-15">Month</th><th class="w-15">Uploaded by</th><th class="num w-sm">Raw total</th><th class="num w-sm">Included</th><th class="num w-num">Customers</th><th>Sent to</th><th class="w-md">Sent</th><th class="cs1-history-actions"><span class="visually-hidden">Actions</span></th></tr></thead>
+        <tbody>
+          <% for (const r of runs) { %>
+            <tr>
+              <td><a href="/call-switch-one/billing/runs/<%= r.id %>"><strong><%= monthLabel(r.billing_month) %></strong></a></td>
+              <td title="<%= fmtDate(r.uploaded_at) %>"><%= r.uploaded_name || '—' %> <span class="muted small"><%= fmtShort(r.uploaded_at) %></span></td>
+              <td class="num"><%= pounds(penniesOf(r.raw_total)) %></td>
+              <td class="num"><strong><%= pounds(r.sent_at && r.sent_total !== null ? penniesOf(r.sent_total) : r.totals.includedPennies) %></strong></td>
+              <td class="num"><%= r.totals.included %> <span class="muted small">/ <%= r.totals.lines %></span></td>
+              <td title="<%= r.sent_to || '' %>"><%= r.sent_to || '' %><% if (!r.sent_to) { %><span class="muted">Not sent</span><% } %></td>
+              <td><%= r.sent_at ? fmtShort(r.sent_at) : '—' %></td>
+              <td class="cs1-history-actions">
+                <a href="/call-switch-one/billing/runs/<%= r.id %>" class="icon-btn" title="View <%= monthLabel(r.billing_month) %>" aria-label="View"><%- icon('eye') %></a>
+                <a href="/call-switch-one/billing/runs/<%= r.id %>/excel" class="icon-btn" title="Download Excel" aria-label="Download Excel"><%- icon('download') %></a>
+                <a href="/call-switch-one/billing/runs/<%= r.id %>#send" class="icon-btn" title="<%= r.sent_at ? 'Resend' : 'Send' %>" aria-label="<%= r.sent_at ? 'Resend' : 'Send' %>"><%- icon('mail') %></a>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">"Included" is the total that was emailed (or, if not sent yet, the current included total).</p>
+  <% } %>
+</section>
+<%- include('../partials/foot') %>

@@ -1,0 +1,45 @@
+<%- include('../partials/head') %>
+<%- include('_head', { area, settings }) %>
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <h2><%- icon('upload') %> Upload the CDR file</h2>
+    <form method="post" action="/call-switch-one/billing/upload" enctype="multipart/form-data" class="form" data-cs1-upload data-existing="<%= JSON.stringify(existing) %>">
+      <%- csrfField %>
+      <label class="field">
+        <span>Billing month</span>
+        <select name="month" data-cs1-month>
+          <% for (const m of months) { %><option value="<%= m.value %>"><%= m.label %><%= existing[m.value] ? ' (already calculated)' : '' %></option><% } %>
+        </select>
+      </label>
+      <label class="field">
+        <span>CallSwitch One CDR file (V3, .txt or .csv)</span>
+        <input type="file" name="file" accept=".txt,.csv,text/plain,text/csv" required>
+        <small class="muted">Up to 50 MB. Only "Customer Identifier" and "Salesprice" are read; the file is deleted as soon as it has been added up.</small>
+      </label>
+      <label class="choice cs1-replace" data-cs1-replace hidden>
+        <input type="checkbox" name="replace" value="1">
+        <span><strong>Replace the existing calculation</strong> for this month (its overrides and the record of the sent email are replaced too).</span>
+      </label>
+      <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('upload') %><span>Upload and calculate</span></button></div>
+    </form>
+  </section>
+  <section class="card">
+    <h2>How it is calculated</h2>
+    <ul class="cs1-steps small">
+      <li>Salesprice is added up per Customer Identifier (blank identifiers are ignored).</li>
+      <li>The raw total of every Salesprice is shown, to check against the "Cost" on the CallSwitch dashboard.</li>
+      <li>Charge = sum × <%= (100 + Number(settings.margin)) / 100 %> (<%= settings.margin %>% margin), to the penny.</li>
+      <li>Customers with a charge of at least £<%= settings.minimum %> are included; you can change any line before sending.</li>
+    </ul>
+    <% if (runs.length) { %>
+      <h3 class="cs1-subhead">Recent months</h3>
+      <ul class="cs1-recent">
+        <% for (const r of runs.slice(0, 6)) { %>
+          <li><a href="/call-switch-one/billing/runs/<%= r.id %>"><%= monthLabel(r.billing_month) %></a>
+            <span class="muted small"><%= r.line_count %> customers<%= r.sent_at ? ` · sent ${fmtShort(r.sent_at)}` : ' · not sent' %></span></li>
+        <% } %>
+      </ul>
+    <% } %>
+  </section>
+</div>
+<%- include('../partials/foot') %>

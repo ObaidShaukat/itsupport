@@ -1,0 +1,135 @@
+<%- include('../partials/head') %>
+<%- include('_head', { area, settings, heading: `Billing · ${month}`, intro: `${run.file_name || 'CDR file'} · ${run.row_count} call lines · uploaded by ${run.uploaded_name || 'someone'} ${fmtDate(run.uploaded_at)} · ${Number(run.margin)}% margin, £${run.minimum} minimum` }) %>
+<% const back = `/call-switch-one/billing/runs/${run.id}${showExcluded ? '?excluded=1' : ''}`; const shown = lines.filter((l) => showExcluded || l.included); const unknown = lines.filter((l) => !l.known).length; %>
+
+<div class="cs1-cards">
+  <div class="cs1-card"><span class="cs1-card-value"><%= pounds(penniesOf(run.raw_total)) %></span><span class="cs1-card-label" title="Every Salesprice in the file: compare with the Cost on the CallSwitch dashboard">Raw total (all Salesprice)</span><span class="muted small">£<%= unitsToDecimal(totals.rawUnits) %></span></div>
+  <div class="cs1-card"><span class="cs1-card-value"><%= totals.lines %></span><span class="cs1-card-label">Customer identifiers</span><span class="muted small"><%= run.ignored_rows ? `${run.ignored_rows} blank-identifier lines ignored (${pounds(penniesOf(run.ignored_total))})` : 'no blank identifiers' %></span></div>
+  <div class="cs1-card cs1-card-included"><span class="cs1-card-value"><%= pounds(totals.includedPennies) %></span><span class="cs1-card-label">Included total (with margin)</span><span class="muted small"><%= totals.included %> customers · cost £<%= unitsToDecimal(totals.includedCostUnits).replace(/(\.\d{2})\d+$/, '$1') %></span></div>
+  <div class="cs1-card cs1-card-excluded"><span class="cs1-card-value"><%= totals.excluded %></span><span class="cs1-card-label">Excluded</span><span class="muted small">under £<%= run.minimum %> or left out by hand</span></div>
+</div>
+
+<section class="card">
+  <div class="cs1-toolbar">
+    <a href="<%= showExcluded ? `/call-switch-one/billing/runs/${run.id}` : `/call-switch-one/billing/runs/${run.id}?excluded=1` %>" class="btn btn-small btn-ghost"><%- icon(showExcluded ? 'eye-off' : 'eye') %><span><%= showExcluded ? 'Hide excluded' : `Show excluded (${totals.excluded})` %></span></a>
+    <% if (unknown) { %><span class="cs1-unknown-note"><%- icon('flag') %> <%= unknown %> identifier<%= unknown === 1 ? ' has' : 's have' %> no name yet</span><% } %>
+    <span class="cs1-toolbar-right">
+      <a href="/call-switch-one/billing/runs/<%= run.id %>/excel" class="btn btn-small"><%- icon('download') %><span>Excel</span></a>
+      <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/recalculate" class="inline" data-confirm="Recalculate <%= month %> with the current settings (<%= settings.margin %>% margin, £<%= settings.minimum %> minimum)? Overrides are kept." data-confirm-ok="Recalculate">
+        <%- csrfField %>
+        <button type="submit" class="btn btn-small btn-ghost" title="Use the current margin and minimum"><%- icon('sliders') %><span>Recalculate</span></button>
+      </form>
+      <a href="#send" class="btn btn-small btn-primary"><%- icon('mail') %><span>Send email</span></a>
+    </span>
+  </div>
+  <div class="table-wrap">
+    <table class="table cs1-table">
+      <thead><tr><th>Customer name</th><th class="w-15">Identifier</th><th class="num cs1-money">Cost (sum)</th><th class="num cs1-money">Charge (+<%= Number(run.margin) %>%)</th><th class="cs1-incl">Included</th></tr></thead>
+      <tbody>
+        <% for (const l of shown) { %>
+          <tr class="<%= l.included ? '' : 'is-excluded' %> <%= l.known ? '' : 'is-unknown' %>">
+            <td class="cs1-name-cell">
+              <% if (l.known) { %>
+                <span title="<%= l.name %>"><%= l.name %></span><% if (l.client_name) { %> <a href="/clients/<%= l.client_id %>" class="muted small" title="Portal client"><%- icon('briefcase') %></a><% } %>
+              <% } else { %>
+                <form method="post" action="/call-switch-one/billing/customers" class="cs1-addname">
+                  <%- csrfField %>
+                  <input type="hidden" name="identifier" value="<%= l.identifier %>">
+                  <input type="hidden" name="back" value="<%= back %>">
+                  <input type="text" name="name" placeholder="Add name" maxlength="200" required aria-label="Name for <%= l.identifier %>" autocomplete="off" data-1p-ignore data-lpignore="true">
+                  <button type="submit" class="icon-btn" title="Save name" aria-label="Save name"><%- icon('check') %></button>
+                </form>
+              <% } %>
+            </td>
+            <td title="<%= l.identifier %>"><code><%= l.identifier %></code></td>
+            <td class="num" title="£<%= l.cost %>"><%= l.costText %></td>
+            <td class="num cs1-charge-cell">
+              <details class="edit edit-right cs1-override">
+                <summary class="cs1-charge <%= l.overridden ? 'is-overridden' : '' %>" title="<%= l.overridden ? `Overridden (calculated ${pounds(l.chargePennies)})` : 'Change the charge for this month' %>"><%= l.chargeText %><%- icon('edit') %></summary>
+                <div class="edit-panel">
+                  <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/lines/<%= l.id %>" class="form">
+                    <%- csrfField %>
+                    <input type="hidden" name="back" value="<%= back %>">
+                    <label class="field">
+                      <span>Charge for <%= month %> (£)</span>
+                      <input type="text" name="override" value="<%= l.overridden ? money(l.effective) : '' %>" placeholder="<%= money(l.chargePennies) %>" inputmode="decimal" maxlength="12">
+                      <small class="muted">Calculated: <%= pounds(l.chargePennies) %> (cost £<%= l.cost %> + <%= Number(run.margin) %>%). Leave empty to use it.</small>
+                    </label>
+                    <div class="form-actions">
+                      <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+                      <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                    </div>
+                  </form>
+                </div>
+              </details>
+            </td>
+            <td>
+              <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/lines/<%= l.id %>" class="inline cs1-include" data-autosubmit>
+                <%- csrfField %>
+                <input type="hidden" name="back" value="<%= back %>">
+                <select name="include" aria-label="Include <%= l.name || l.identifier %>" class="cs1-include-select <%= l.included ? 'is-yes' : 'is-no' %>">
+                  <option value="auto" <%= !l.manual ? 'selected' : '' %>><%= l.auto ? 'Yes' : 'No' %> (auto)</option>
+                  <option value="1" <%= l.manual && l.included ? 'selected' : '' %>>Yes</option>
+                  <option value="0" <%= l.manual && !l.included ? 'selected' : '' %>>No</option>
+                </select>
+                <noscript><button type="submit" class="btn btn-small">Save</button></noscript>
+              </form>
+            </td>
+          </tr>
+        <% } %>
+        <% if (!shown.length) { %><tr><td colspan="5" class="empty">No customers are included<%= showExcluded ? '' : ': show the excluded ones to include some by hand' %>.</td></tr><% } %>
+      </tbody>
+      <tfoot>
+        <tr><td colspan="2"><strong>Included total</strong> <span class="muted small">(<%= totals.included %> customers)</span></td><td class="num">£<%= unitsToDecimal(totals.includedCostUnits).replace(/(\.\d{4})\d+$/, '$1') %></td><td class="num"><strong><%= pounds(totals.includedPennies) %></strong></td><td></td></tr>
+        <tr class="muted"><td colspan="2">Raw total (all Salesprice in the file)</td><td class="num">£<%= unitsToDecimal(totals.rawUnits).replace(/(\.\d{4})\d+$/, '$1') %></td><td></td><td></td></tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="send">
+  <div class="card-head">
+    <h2><%- icon('mail') %> Send email</h2>
+    <% if (run.sent_at) { %><span class="chip">Sent <%= fmtDate(run.sent_at) %> to <%= run.sent_to %><%= run.sent_name ? ` by ${run.sent_name}` : '' %></span><% } %>
+  </div>
+  <% if (!email.status.enabled) { %>
+    <div class="flash flash-error" role="alert"><%= email.status.message %></div>
+  <% } else if (!email.sender) { %>
+    <div class="flash flash-error" role="alert">Your username is not an email address, so the email cannot be sent from you.</div>
+  <% } %>
+  <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/send" class="form cs1-send" data-confirm="Send the <%= month %> call charges (<%= pounds(totals.includedPennies) %>, <%= totals.included %> customers) now?" data-confirm-ok="Send">
+    <%- csrfField %>
+    <div class="form-row">
+      <label class="field"><span>To</span><input type="text" name="to_emails" value="<%= email.to %>" required placeholder="accounts@cleartwo.co.uk" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
+      <label class="field"><span>CC</span><input type="text" name="cc_emails" value="<%= email.cc %>" placeholder="Optional" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
+    </div>
+    <label class="field"><span>Subject</span><input type="text" name="subject" value="<%= email.subject %>" maxlength="200" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
+    <label class="field">
+      <span>Message</span>
+      <textarea name="intro" rows="5" maxlength="5000" data-autogrow><%= email.intro %></textarea>
+      <small class="muted">The table below and your email signature<%= email.hasSignature ? '' : ' (you have none yet: add one on My profile)' %> are added after it. The Excel file is attached.</small>
+    </label>
+    <div class="cs1-preview" aria-label="Preview of the table">
+      <table class="cs1-preview-table">
+        <thead><tr><th>Customer</th><th class="num">Charge ex VAT</th></tr></thead>
+        <tbody>
+          <% for (const l of lines.filter((x) => x.included)) { %><tr><td><%= l.name || l.identifier %></td><td class="num"><%= pounds(l.effective) %></td></tr><% } %>
+          <tr class="cs1-preview-total"><td>Total</td><td class="num"><%= pounds(totals.includedPennies) %></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <label class="choice"><input type="checkbox" name="send_copy" value="1" <%= email.copy ? 'checked' : '' %>> <span>Send me a copy</span></label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary" <%= email.status.enabled && email.sender ? '' : 'disabled' %>><%- icon('mail') %><span><%= run.sent_at ? 'Send again' : 'Send email' %></span></button>
+      <span class="muted small">From you (<%= email.sender || 'no email address' %>), with the Excel file attached.</span>
+    </div>
+  </form>
+</section>
+
+<section class="card cs1-danger">
+  <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/delete" class="inline" data-confirm="Delete the <%= month %> calculation? Its lines, overrides and the record of the sent email are deleted. Customer names are kept." data-confirm-ok="Delete">
+    <%- csrfField %>
+    <button type="submit" class="btn btn-small btn-danger"><%- icon('trash') %><span>Delete this month</span></button>
+  </form>
+</section>
+<%- include('../partials/foot') %>

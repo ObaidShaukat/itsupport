@@ -19,6 +19,7 @@
 //   inv_config                         -> tabs, fields and stock categories (no id)
 //   inv_secret                         -> record id; a password / PIN was revealed or copied
 //   gdap                               -> gdap_relationships id (or none for syncs / settings)
+//   cs1                                -> cs1_runs id (Call Switch One billing month; none for names / settings)
 // related_person_id ties an inventory entry to the employee record it concerns (their History).
 //   manual                             -> null
 // client_name and subject (ticket title, service name, ...) are snapshots, so the
@@ -31,7 +32,7 @@ const { pool } = require('../db');
 
 const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report',
   'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting',
-  'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'manual'];
+  'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'manual'];
 const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed', 'sent',
   'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced'];
 

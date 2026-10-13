@@ -1,0 +1,45 @@
+<%#
+  Call Switch One billing header: title, Settings popover (margin, minimum) and the tabs
+  Upload & review | History | Customers. area: 'upload' | 'history' | 'customers'.
+  settings: from cs1_settings (optional; the popover shows when given).
+%>
+<header class="page-head">
+  <div>
+    <p class="crumbs">Call Switch One</p>
+    <h1><%= locals.heading || 'Billing' %></h1>
+    <p class="muted"><%= locals.intro || 'Monthly call charges from the CallSwitch One CDR file: the sum of Salesprice per customer, plus the margin.' %></p>
+  </div>
+  <% if (locals.settings) { %>
+    <div class="actions">
+      <details class="edit edit-right">
+        <summary class="btn btn-small btn-ghost"><%- icon('sliders') %><span>Settings</span></summary>
+        <div class="edit-panel">
+          <form method="post" action="/call-switch-one/billing/settings" class="form">
+            <%- csrfField %>
+            <input type="hidden" name="back" value="<%= locals.currentPath || '/call-switch-one/billing' %>">
+            <label class="field">
+              <span>Margin (%)</span>
+              <input type="text" name="margin" value="<%= settings.margin %>" inputmode="decimal" maxlength="7" required>
+              <small class="muted">Charge = cost × (1 + margin). Default 30.</small>
+            </label>
+            <label class="field">
+              <span>Minimum charge (£)</span>
+              <input type="text" name="minimum" value="<%= settings.minimum %>" inputmode="decimal" maxlength="10" required>
+              <small class="muted">Customers below this are left out unless included by hand. Default 1.00.</small>
+            </label>
+            <p class="muted small">New uploads use these. For a month already calculated use "Recalculate" on its review.</p>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+            </div>
+          </form>
+        </div>
+      </details>
+    </div>
+  <% } %>
+</header>
+<nav class="tabs cs1-tabs" aria-label="Billing">
+  <a href="/call-switch-one/billing" class="<%= area === 'upload' ? 'active' : '' %>">Upload &amp; review</a>
+  <a href="/call-switch-one/billing/history" class="<%= area === 'history' ? 'active' : '' %>">History</a>
+  <a href="/call-switch-one/billing/customers" class="<%= area === 'customers' ? 'active' : '' %>">Customers</a>
+</nav>

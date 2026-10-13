@@ -106,4 +106,5 @@ module.exports = {
   isStoredName,
   storedPath,
   inlineType,
+  originalName,
 };

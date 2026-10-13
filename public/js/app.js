@@ -3083,3 +3083,58 @@ document.querySelectorAll('form[data-rename-form]').forEach((form) => {
   form.querySelectorAll('input[name="kind"]').forEach((r) => r.addEventListener('change', sync));
   sync();
 });
+
+// ---- Sidebar groups (Inventory, Call Switch One) ----
+// The group name or the chevron opens / closes it. Each group's state is remembered in
+// this browser (localStorage); the group of the current page is always open.
+(() => {
+  const KEY = 'itsupport-nav-groups';
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (err) { saved = {}; }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (err) { /* private mode: not remembered */ } };
+  document.querySelectorAll('[data-nav-group]').forEach((group) => {
+    const key = group.dataset.navGroup;
+    const head = group.querySelector('[data-nav-group-toggle]');
+    const set = (open) => {
+      group.classList.toggle('is-open', open);
+      head.setAttribute('aria-expanded', String(open));
+    };
+    if (!group.classList.contains('is-current') && saved[key] === true) set(true);
+    head.addEventListener('click', () => {
+      // Icons-only sidebar: the sub-items are a hover flyout, so a click opens the first one.
+      const shell = document.querySelector('[data-shell]');
+      if (shell && shell.classList.contains('nav-collapsed') && window.matchMedia('(min-width: 861px)').matches) {
+        const first = group.querySelector('.nav-sub a');
+        if (first) window.location.href = first.href;
+        return;
+      }
+      const open = !group.classList.contains('is-open');
+      set(open);
+      saved[key] = open;
+      save();
+    });
+  });
+})();
+
+// ---- Call Switch One: "Replace" only for a month that is already calculated ----
+document.querySelectorAll('form[data-cs1-upload]').forEach((form) => {
+  let existing = {};
+  try { existing = JSON.parse(form.dataset.existing || '{}'); } catch (err) { existing = {}; }
+  const month = form.querySelector('[data-cs1-month]');
+  const box = form.querySelector('[data-cs1-replace]');
+  const sync = () => {
+    const has = Boolean(existing[month.value]);
+    box.hidden = !has;
+    if (!has) box.querySelector('input').checked = false;
+  };
+  month.addEventListener('change', sync);
+  form.addEventListener('submit', (e) => {
+    if (existing[month.value] && !box.querySelector('input').checked) {
+      e.preventDefault();
+      box.hidden = false;
+      box.classList.add('is-attention');
+      box.querySelector('input').focus();
+    }
+  });
+  sync();
+});

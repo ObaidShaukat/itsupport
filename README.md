@@ -176,6 +176,21 @@ The **Microsoft Partner** page (`/microsoft-partner`; old `/gdap` links redirect
 - **Alerts:** 30, 14, 7 and 1 days before a relationship ends (the days can be changed in Settings) and when it has expired (can be turned off), once each per relationship (a new end date after renewal starts them again). They go to the people chosen in Settings (everyone by default), each by their own choice of popup, email and desktop notification. The email subject is "Microsoft Partner: GDAP expiring in {n} days: {customer}". Settings also has a **daily digest** email listing everything ending in the next 30 days.
 - Syncs, alerts, links and settings changes are in `/activity`, never on the Daily Report.
 
+## Call Switch One (monthly call charges)
+
+**Call Switch One → Billing** (`/call-switch-one/billing`) turns the monthly CallSwitch One CDR into a call charges email. It needs no extra `.env` keys. Run `npm run migrate` after updating to create the `cs1_customers`, `cs1_runs`, `cs1_lines` and `cs1_settings` tables. Email uses the same SMTP settings as the Daily Report.
+
+- **Upload & review:** choose the billing month (last month by default) and upload the CDR V3 export (`.txt` or `.csv`, max 50 MB). The delimiter, quotes and header row are detected automatically. The columns **Customer Identifier** and **Salesprice** are found by name. The file is deleted straight after reading; only the totals per identifier are kept. Uploading a month that already exists asks you to tick **Replace**.
+- **Calculation:** Salesprice is summed per identifier at full precision. Rows with a blank identifier are ignored but still counted in the raw total. Charge = cost + margin (default 30%), rounded to the penny. Lines below the minimum (default £1.00) are left out. You can change both in Settings and recalculate a month. You can override a line's charge or force it in or out; each change is logged.
+- **Customers:** map each identifier to a customer name, optionally linked to a portal client. Unknown identifiers can be named straight from the review table.
+- **Send email:** To / CC are remembered. The subject is "CallSwitch One call charges: {Month YYYY}". The body has the editable intro, a Customer | Charge ex VAT table with a Total row, then your signature, plus an Excel attachment. From and "Send me a copy" follow the Daily Report rules.
+- **History:** every month with totals, who uploaded it, and when and to whom it was sent; view, download Excel or resend.
+- Everything is logged in `/activity` (entity type `cs1`), never on the Daily Report.
+
+## Sidebar groups
+
+Inventory and Call Switch One are collapsible groups in the sidebar. Click the name or the arrow to open or close one. The group of the current page opens automatically, and each browser remembers the others (localStorage). With the sidebar collapsed to icons, hovering a group shows its sub-items as a flyout. To add a sub-item, add it to the group's `children` in `navItems` in `index.js`.
+
 ## Desktop notifications
 
 Desktop notifications use Web Push (the `web-push` package, a service worker at `/sw.js` and the `push_subscriptions` table, created by `npm run migrate`). To turn them on:

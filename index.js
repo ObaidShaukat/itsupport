@@ -74,8 +74,15 @@ app.locals.navItems = [
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
   { key: 'kb', href: '/articles', label: 'Articles', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
-  { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard' },
+  // Groups open and close in the sidebar; their sub-items come from children (Inventory:
+  // its tabs, loaded per page as navInvTabs). Add more Call Switch One tools (Devices,
+  // Numbers...) as children here.
+  { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard', group: true },
   { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield' },
+  {
+    key: 'cs1', href: '/call-switch-one/billing', label: 'Call Switch One', icon: 'phone', group: true,
+    children: [{ href: '/call-switch-one/billing', label: 'Billing', match: '/call-switch-one/billing' }],
+  },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
@@ -161,6 +168,7 @@ const NAV_PREFIXES = [
   ['/articles', 'kb'],
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
   ['/inventory', 'inventory'],
+  ['/call-switch-one', 'cs1'],
 ];
 app.use((req, res, next) => {
   // Sidebar collapsed to icons (cookie set by the toggle in app.js), rendered server-side so it does not flash.
@@ -189,6 +197,9 @@ app.use(async (req, res, next) => {
     // Profile pictures (or initials) wherever a user is shown: avatar({ id, name }).
     const [people] = await pool.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name, avatar_file FROM users");
     res.locals.avatar = avatarHelper(people);
+    // Inventory tabs for the sidebar group (on every page, so it can be opened anywhere).
+    const [invTabs] = await pool.query('SELECT id, kind, name FROM inventory_tabs ORDER BY sort_order, id');
+    res.locals.navInvTabs = invTabs.map((t) => ({ label: t.name, href: t.kind === 'stock' ? '/inventory/stock' : `/inventory/t/${t.id}` }));
     // Desktop notifications: the VAPID public key for the banner / My profile toggle.
     const push = pushStatus();
     res.locals.push = { enabled: push.enabled, publicKey: push.publicKey || '', message: push.message || '', wanted: channelsOf(req.user).has('desktop') };
@@ -217,6 +228,7 @@ app.use('/notifications', require('./src/routes/notifications'));
 app.use('/push', require('./src/routes/push'));
 app.use('/microsoft-partner', require('./src/routes/gdap'));
 app.use('/gdap', moved('/microsoft-partner'));
+app.use('/call-switch-one', require('./src/routes/cs1'));
 app.use('/inventory', require('./src/routes/inventory'));
 
 // ---- Errors ----

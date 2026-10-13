@@ -1,0 +1,89 @@
+<%- include('../partials/head') %>
+<%- include('_head', { area, settings, heading: 'Customers', intro: 'CS1 Customer Identifier → the name used on the call charges, optionally linked to a portal client. Names are kept for every month.' }) %>
+<div class="grid-2 grid-wide-left">
+  <section class="card">
+    <div class="ticket-filters">
+      <h2 class="cs1-h2">Names <span class="muted small">(<%= customers.length %>)</span></h2>
+      <%- include('../partials/search', { target: '#cs1-customers', placeholder: 'Search identifier, name or client' }) %>
+    </div>
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th class="w-20">Identifier</th><th>Name</th><th class="w-20">Portal client</th><th class="w-md">Updated</th><th class="w-num"><span class="visually-hidden">Actions</span></th></tr></thead>
+        <tbody id="cs1-customers">
+          <% for (const c of customers) { %>
+            <tr data-filter-item data-search="<%= [c.identifier, c.name, c.client_name].filter(Boolean).join(' ') %>">
+              <td title="<%= c.identifier %>"><code><%= c.identifier %></code></td>
+              <td title="<%= c.name %>"><%= c.name %></td>
+              <td><% if (c.client_id) { %><a href="/clients/<%= c.client_id %>"><%= c.client_name %></a><% } else { %><span class="muted">—</span><% } %></td>
+              <td title="<%= fmtDate(c.updated_at) %>"><%= fmtShort(c.updated_at) %><% if (c.updated_name) { %> <span class="muted small"><%= c.updated_name %></span><% } %></td>
+              <td class="cs1-row-actions">
+                <details class="edit edit-right">
+                  <summary class="icon-btn" title="Edit" aria-label="Edit <%= c.identifier %>"><%- icon('edit') %></summary>
+                  <div class="edit-panel">
+                    <form method="post" action="/call-switch-one/billing/customers/<%= c.id %>" class="form">
+                      <%- csrfField %>
+                      <label class="field"><span>CS1 Customer Identifier</span><input type="text" name="identifier" value="<%= c.identifier %>" required maxlength="191"></label>
+                      <label class="field"><span>Customer name</span><input type="text" name="name" value="<%= c.name %>" required maxlength="200"></label>
+                      <label class="field"><span>Portal client <span class="muted">(optional)</span></span>
+                        <select name="client_id" data-combobox>
+                          <option value="">Not linked</option>
+                          <% for (const cl of clients) { %><option value="<%= cl.id %>" <%= cl.id === c.client_id ? 'selected' : '' %>><%= cl.name %></option><% } %>
+                        </select>
+                      </label>
+                      <div class="form-actions">
+                        <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+                        <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                      </div>
+                    </form>
+                  </div>
+                </details>
+                <%- include('../partials/delete', { action: `/call-switch-one/billing/customers/${c.id}/delete`, confirm: `Delete the name for ${c.identifier}? Months already sent keep the name they used.`, label: `Delete ${c.identifier}` }) %>
+              </td>
+            </tr>
+          <% } %>
+          <tr data-filter-empty hidden><td colspan="5" class="empty">No names match.</td></tr>
+          <% if (!customers.length) { %><tr><td colspan="5" class="empty">No names yet. Add them here or straight from a month's review.</td></tr><% } %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div>
+    <section class="card">
+      <h2>Add a name</h2>
+      <form method="post" action="/call-switch-one/billing/customers" class="form">
+        <%- csrfField %>
+        <label class="field"><span>CS1 Customer Identifier</span><input type="text" name="identifier" required maxlength="191" placeholder="As in the CDR file" list="cs1-unknown-ids"></label>
+        <label class="field"><span>Customer name</span><input type="text" name="name" required maxlength="200"></label>
+        <label class="field"><span>Portal client <span class="muted">(optional)</span></span>
+          <select name="client_id" data-combobox>
+            <option value="">Not linked</option>
+            <% for (const cl of clients) { %><option value="<%= cl.id %>"><%= cl.name %></option><% } %>
+          </select>
+        </label>
+        <div class="form-actions"><button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add</span></button></div>
+      </form>
+      <datalist id="cs1-unknown-ids"><% for (const u of unknown) { %><option value="<%= u.identifier %>"></option><% } %></datalist>
+    </section>
+
+    <% if (unknown.length) { %>
+      <section class="card">
+        <h2>Seen in uploads without a name <span class="muted small">(<%= unknown.length %>)</span></h2>
+        <ul class="cs1-unknown-list">
+          <% for (const u of unknown) { %>
+            <li>
+              <form method="post" action="/call-switch-one/billing/customers" class="cs1-addname">
+                <%- csrfField %>
+                <input type="hidden" name="identifier" value="<%= u.identifier %>">
+                <code title="Last seen <%= monthLabel(u.last_month) %>"><%= u.identifier %></code>
+                <input type="text" name="name" placeholder="Add name" maxlength="200" required aria-label="Name for <%= u.identifier %>" autocomplete="off" data-1p-ignore data-lpignore="true">
+                <button type="submit" class="icon-btn" title="Save name" aria-label="Save name"><%- icon('check') %></button>
+              </form>
+            </li>
+          <% } %>
+        </ul>
+      </section>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/foot') %>

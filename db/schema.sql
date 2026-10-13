@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                    'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'manual') NOT NULL,
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
               'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced') NOT NULL,
@@ -681,6 +681,76 @@ CREATE TABLE IF NOT EXISTS gdap_settings (
   PRIMARY KEY (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Call Switch One (CS1) monthly call charges (src/lib/cs1.js, /call-switch-one/billing).
+-- The uploaded CDR file is never kept: only the sum of Salesprice per Customer Identifier
+-- (cost, full precision), the charge with the margin and the per-line overrides.
+CREATE TABLE IF NOT EXISTS cs1_customers (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  identifier VARCHAR(191) NOT NULL,
+  name VARCHAR(200) NOT NULL,
+  client_id INT UNSIGNED NULL,
+  created_by INT UNSIGNED NULL,
+  updated_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_cs1_customers_identifier (identifier),
+  CONSTRAINT fk_cs1_customers_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One calculation per billing month (billing_month = the 1st). margin / minimum are the
+-- settings used; sent_* record the last email.
+CREATE TABLE IF NOT EXISTS cs1_runs (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  billing_month DATE NOT NULL,
+  file_name VARCHAR(255) NULL,
+  row_count INT UNSIGNED NOT NULL DEFAULT 0,
+  -- raw_total: every Salesprice in the file (to check against the CallSwitch dashboard);
+  -- ignored_*: rows with a blank Customer Identifier (in raw_total, not charged).
+  raw_total DECIMAL(20,8) NOT NULL DEFAULT 0,
+  ignored_rows INT UNSIGNED NOT NULL DEFAULT 0,
+  ignored_total DECIMAL(20,8) NOT NULL DEFAULT 0,
+  margin DECIMAL(7,3) NOT NULL,
+  minimum DECIMAL(10,2) NOT NULL,
+  uploaded_by INT UNSIGNED NULL,
+  uploaded_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  sent_to VARCHAR(1000) NULL,
+  sent_cc VARCHAR(1000) NULL,
+  sent_subject VARCHAR(255) NULL,
+  sent_total DECIMAL(14,2) NULL,
+  sent_at DATETIME NULL,
+  sent_by INT UNSIGNED NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_cs1_runs_month (billing_month),
+  CONSTRAINT fk_cs1_runs_uploader FOREIGN KEY (uploaded_by) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_cs1_runs_sender FOREIGN KEY (sent_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One line per Customer Identifier in a month. charge = cost x (1 + margin), rounded to
+-- pennies; override_charge replaces it for that month; include_override (1 / 0) beats
+-- the minimum rule; name_snapshot is the name used in the sent email.
+CREATE TABLE IF NOT EXISTS cs1_lines (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  run_id INT UNSIGNED NOT NULL,
+  identifier VARCHAR(191) NOT NULL,
+  cost DECIMAL(20,8) NOT NULL,
+  charge DECIMAL(14,2) NOT NULL,
+  override_charge DECIMAL(14,2) NULL,
+  include_override TINYINT(1) NULL,
+  name_snapshot VARCHAR(200) NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_cs1_lines_run_identifier (run_id, identifier),
+  CONSTRAINT fk_cs1_lines_run FOREIGN KEY (run_id) REFERENCES cs1_runs (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- CS1 settings: margin (percent, default 30), minimum (pounds, default 1.00), email_to /
+-- email_cc (last recipients), copy:<user id> ("Send me a copy").
+CREATE TABLE IF NOT EXISTS cs1_settings (
+  name VARCHAR(50) NOT NULL,
+  value TEXT NULL,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Notifications. Only the 'portal' channel (bell + toast) is delivered today;
 -- 'email' and 'teams' are reserved for later. delivered_at is when the toast was first
 -- shown (the sound plays then). A due reminder gets one unread 'ticket_reminder' row;
@@ -774,7 +844,7 @@ ALTER TABLE ticket_history
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                           'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'manual') NOT NULL;
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'manual') NOT NULL;
 
 ALTER TABLE activity_log
   MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',

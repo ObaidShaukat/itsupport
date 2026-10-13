@@ -35,12 +35,31 @@
       <label for="nav-toggle" class="nav-button" aria-label="Toggle menu"><%- icon('menu') %></label>
     </div>
     <nav class="nav" aria-label="Main">
+      <% const path = (locals.currentPath || '').split('?')[0]; %>
       <% for (const item of navItems) { %>
-        <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>" title="<%= item.label %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
-        <% if (item.key === 'inventory' && locals.nav === 'inventory' && locals.invTabs) { %>
-          <div class="nav-sub">
-            <% for (const t of invTabs) { %><a href="<%= t.href %>" class="<%= (locals.currentPath || '').split('?')[0] === t.href ? 'active' : '' %>" title="<%= t.name %>"><span><%= t.name %></span></a><% } %>
+        <% if (item.group) {
+          // Collapsible group (Inventory, Call Switch One): the group of the current page is
+          // open and its sub-item highlighted; others remember open / closed (app.js).
+          const children = item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []);
+          const here = locals.nav === item.key;
+          const subId = `nav-sub-${item.key}`; %>
+          <div class="nav-group <%= here ? 'is-open is-current' : '' %>" data-nav-group="<%= item.key %>">
+            <button type="button" class="nav-group-head <%= here ? 'active' : '' %>" data-nav-group-toggle aria-expanded="<%= here ? 'true' : 'false' %>" aria-controls="<%= subId %>" title="<%= item.label %>">
+              <%- icon(item.icon) %><span class="nav-group-label"><%= item.label %></span><span class="nav-chevron" aria-hidden="true"><%- icon('right') %></span>
+            </button>
+            <div class="nav-sub-outer" id="<%= subId %>">
+              <div class="nav-sub">
+                <span class="nav-flyout-title"><%= item.label %></span>
+                <% for (const c of children) {
+                  const active = path === c.href || path.startsWith(`${c.match || c.href}/`); %>
+                  <a href="<%= c.href %>" class="<%= here && active ? 'active' : '' %>" title="<%= c.label %>" <%- here && active ? 'aria-current="page"' : '' %>><span><%= c.label %></span></a>
+                <% } %>
+                <% if (!children.length) { %><a href="<%= item.href %>"><span>Open</span></a><% } %>
+              </div>
+            </div>
           </div>
+        <% } else { %>
+          <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>" title="<%= item.label %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
         <% } %>
       <% } %>
       <div class="nav-foot">
