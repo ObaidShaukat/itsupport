@@ -4,17 +4,26 @@
   this record only). One form: 1) Field name, 2) Value for this record, 3) Type, with one
   Save for all changed parts and Cancel. Footer: Up, Down, Hide (shared) / Make shared
   (extra), Delete. Esc or a click outside closes it without saving. v, recordId, back,
-  types, first / last (disable moves).
+  types, first / last (disable moves). Every local is read through locals, so a missing
+  one never breaks the page: without recordId a shared field can still be renamed (all
+  records) and moved / hidden / deleted; the value and type parts need the record.
 %>
 <%
   const x = locals.extra || null;
+  const field = locals.field || null;
+  const rid = locals.recordId || null;
+  const types = locals.types || {};
+  const back = locals.back || (rid ? `/inventory/r/${rid}` : '/inventory');
   const shared = !x;
   const id = shared ? field.id : `x${x.id}`;
   const name = shared ? field.label : x.name;
   const type = shared ? field.field_type : x.field_type;
   const isAccess = type === 'access';
   const asField = shared ? field : { id, label: name, field_type: type, optionList: [], required: false };
-  const action = shared ? `/inventory/r/${recordId}/fields/${field.id}` : `/inventory/r/${recordId}/extras/${x.id}`;
+  // With the record: one Save for name, value and type. Without it (shared field only):
+  // rename through the Columns route.
+  const withRecord = Boolean(rid);
+  const action = !withRecord ? `/inventory/fields/${field.id}/rename` : shared ? `/inventory/r/${rid}/fields/${field.id}` : `/inventory/r/${rid}/extras/${x.id}`;
   const scopeText = shared ? 'all records' : 'this record only';
 %>
 <details class="edit edit-right field-menu">
@@ -38,7 +47,7 @@
         <div><strong>This looks like a value, not a field name.</strong> Put it in Value instead.
           <label class="checkbox-field small"><input type="checkbox" name="name_ok" value="1"> <span>Use it as the field name anyway</span></label></div>
       </div>
-      <% if (!isAccess) { %>
+      <% if (!isAccess && withRecord) { %>
         <div class="field-menu-section">
           <label class="field-menu-label" for="vi_<%= id %>_menu">Value <span class="muted">(this record)</span></label>
           <%- include('_value-input', shared ? { field: asField, v: locals.v, idSuffix: 'menu' } : { field: asField, v: locals.v, idSuffix: 'menu', inputName: 'value', clearName: 'clear' }) %>
@@ -57,7 +66,7 @@
             </label>
           <% } %>
         </div>
-      <% } else { %>
+      <% } else if (isAccess) { %>
         <p class="muted small field-menu-section">Granted / Not granted is switched on the record itself.</p>
       <% } %>
       <div class="field-menu-save">
@@ -67,7 +76,7 @@
     </form>
 
     <div class="field-menu-section field-menu-actions">
-      <form method="post" action="<%= shared ? `/inventory/fields/${field.id}/move` : `/inventory/r/${recordId}/extras/${x.id}/move` %>" class="inline">
+      <form method="post" action="<%= shared ? `/inventory/fields/${field.id}/move` : `/inventory/r/${rid}/extras/${x.id}/move` %>" class="inline">
         <%- csrfField %>
         <input type="hidden" name="back" value="<%= back %>">
         <button type="submit" name="dir" value="up" class="btn btn-small btn-ghost" <%= locals.first ? 'disabled' : '' %> title="Move up"><%- icon('up') %><span>Up</span></button>
@@ -81,12 +90,12 @@
         </form>
         <a href="/inventory/fields/<%= field.id %>/delete?back=<%= encodeURIComponent(back) %>" class="btn btn-small btn-danger field-menu-delete" title="Delete from every record"><%- icon('trash') %><span>Delete</span></a>
       <% } else { %>
-        <form method="post" action="/inventory/r/<%= recordId %>/extras/<%= x.id %>/share" class="inline" data-confirm="Make &quot;<%= name %>&quot; a field for every record in this tab? This record keeps its value; the others start empty." data-confirm-ok="Make shared">
+        <form method="post" action="/inventory/r/<%= rid %>/extras/<%= x.id %>/share" class="inline" data-confirm="Make &quot;<%= name %>&quot; a field for every record in this tab? This record keeps its value; the others start empty." data-confirm-ok="Make shared">
           <%- csrfField %>
           <input type="hidden" name="back" value="<%= back %>">
           <button type="submit" class="btn btn-small btn-ghost" title="Add this field to all records"><%- icon('users') %><span>Make shared</span></button>
         </form>
-        <form method="post" action="/inventory/r/<%= recordId %>/extras/<%= x.id %>/delete" class="inline field-menu-delete" data-confirm="Delete &quot;<%= name %>&quot;<%= locals.v && (locals.v.value || locals.v.hasSecret) ? ' and its value' : '' %> from this record only? Other records are not affected. This cannot be undone." data-confirm-ok="Delete">
+        <form method="post" action="/inventory/r/<%= rid %>/extras/<%= x.id %>/delete" class="inline field-menu-delete" data-confirm="Delete &quot;<%= name %>&quot;<%= locals.v && (locals.v.value || locals.v.hasSecret) ? ' and its value' : '' %> from this record only? Other records are not affected. This cannot be undone." data-confirm-ok="Delete">
           <%- csrfField %>
           <input type="hidden" name="back" value="<%= back %>">
           <button type="submit" class="btn btn-small btn-danger" title="Delete from this record only"><%- icon('trash') %><span>Delete</span></button>

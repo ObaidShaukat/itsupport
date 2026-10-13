@@ -91,7 +91,7 @@
             <span class="access-name">
               <% if (!readOnly) { %><span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span><% } %>
               <span><%= f.label %></span>
-              <% if (!readOnly) { %><%- include('_field-menu', { field: f, back: back + '#access', types: invFieldTypes, first: i === 0, last: i === accessFields.length - 1 }) %><% } %>
+              <% if (!readOnly) { %><%- include('_field-menu', { field: f, v: values.get(f.id), recordId: record.id, back: back + '#access', types: invFieldTypes, first: i === 0, last: i === accessFields.length - 1 }) %><% } %>
             </span>
             <% if (readOnly) { %>
               <span class="access-badge <%= on ? 'is-granted' : '' %>"><%= on ? 'Granted' : 'Not granted' %></span>

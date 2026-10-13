@@ -5,7 +5,7 @@
 %>
 <% if (field.field_type === 'password' || field.field_type === 'pin') { %>
   <% if (v && v.hasSecret) { %>
-    <%- include('_secret', { recordId, field, hasSecret: true, extraId: locals.extraId }) %>
+    <%- include('_secret', { recordId: locals.recordId, field, hasSecret: true, extraId: locals.extraId }) %>
   <% } else { %>
     <span class="inv-empty"><span class="muted">—</span><span class="inv-add-hint">Click to add</span></span>
   <% } %>

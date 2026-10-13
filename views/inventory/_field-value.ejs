@@ -8,9 +8,12 @@
 %>
 <%
   const x = locals.extra || null;
+  const field = locals.field || null;
+  const recordId = locals.recordId || null;
   const f = x ? { id: `x${x.id}`, label: x.name, field_type: x.field_type, optionList: [], required: false } : field;
   const val = x ? { value: x.value, hasSecret: x.hasSecret } : locals.v;
-  const editable = locals.manage && f.field_type !== 'access';
+  // Editing in place needs the record; without it the value is shown read-only.
+  const editable = Boolean(locals.manage && recordId) && f.field_type !== 'access';
   const valueAction = x ? `/inventory/r/${recordId}/extras/${x.id}/value` : `/inventory/r/${recordId}/value`;
 %>
 <li class="inv-detail <%= x ? 'is-extra' : '' %>" <% if (!x) { %>data-id="<%= f.id %>"<% } %>>
