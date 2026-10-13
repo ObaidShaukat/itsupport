@@ -2710,3 +2710,38 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 .cs1-h2 { margin: 0; }
 .cs1-replace.is-attention { padding: 6px 10px; border-radius: var(--radius-sm); background: #FFF6E5; border: 1px solid #F0B04A; color: #7A4A00; font-weight: 600; }
 @media (max-width: 900px) { .cs1-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cs1-table { width: max(720px, 100%); } }
+
+/* ==== Call Switch One customers ==== */
+.cs1-sync { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; margin: 0 0 var(--sp-3); padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); font-size: var(--fs-table); }
+.cs1-sync > .icon { width: 15px; height: 15px; flex: none; margin-top: 1px; color: var(--green); }
+.cs1-sync > span { flex: 1; min-width: 0; }
+.cs1-sync.is-failed { border-color: #F5B5BE; background: var(--red-soft); color: var(--red); }
+.cs1-sync.is-failed > .icon, .cs1-sync.is-off > .icon { color: currentColor; }
+.cs1-sync.is-off { border-color: #F0D49A; background: #FFF6E5; color: #7A4A00; }
+.cs1-fields { flex-basis: 100%; color: var(--muted); }
+.cs1-fields summary { cursor: pointer; font-size: 0.8571rem; }
+.cs1-fields code { display: block; margin-top: 4px; white-space: normal; word-break: break-word; font-size: 0.8214rem; }
+.cs1-filters { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
+.cs1-filters select { width: auto; min-width: 150px; height: var(--pill-h); min-height: var(--pill-h); padding: 2px 8px; font-size: var(--fs-table); }
+.cs1-search { position: relative; flex: 1 1 260px; max-width: 360px; }
+.cs1-search .icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.cs1-search input { width: 100%; padding-left: 32px; border-radius: 999px; }
+.cs1-count { margin-left: auto; }
+.cs1-customers .c-reg { width: 86px; }
+.cs1-customers .c-status { width: 96px; }
+.cs1-customers .c-holder { width: 11%; }
+.cs1-customers .c-store { width: 96px; }
+.cs1-customers .c-id { width: 112px; }
+.cs1-customers .c-email { width: 13%; }
+.cs1-customers .c-users { width: 64px; }
+.cs1-customers .c-numbers { width: 80px; }
+.cs1-customers .c-client { width: 11%; }
+.cs1-customers .cs1-cust-actions { width: 60px; }
+.cs1-customers td.num, .cs1-customers th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.cs1-customers tr.is-removed td { color: var(--muted); }
+.cs1-customers tr.is-removed td strong { font-weight: 500; text-decoration: line-through; }
+.cs1-customers tr.is-unknown td:nth-child(3) { background: #FFF6E5; }
+.status-pill.is-ok { background: var(--green-soft); color: var(--green); }
+.status-pill.is-bad { background: var(--red-soft); color: var(--red); }
+.status-pill.is-muted { background: var(--grey-soft); color: var(--muted); }
+@media (max-width: 900px) { .cs1-customers { width: max(1100px, 100%); } }

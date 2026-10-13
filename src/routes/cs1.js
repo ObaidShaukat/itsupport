@@ -1,5 +1,6 @@
-// Call Switch One (/call-switch-one): Billing = the monthly call charges from the CDR
-// file (Upload & review, History, Customers). More sub-items (Devices, Numbers...) can be
+// Call Switch One (/call-switch-one): Customers (synced daily from the CallSwitch One API,
+// read only) and Billing = the monthly call charges from the CDR file (Upload & review,
+// History). More sub-items (Devices, Numbers...) can be
 // added here and in navItems (index.js). Every change is logged (entity_type 'cs1'),
 // never on the Daily Report.
 const fs = require('fs');
@@ -14,8 +15,10 @@ const { originalName } = require('../lib/uploads');
 const { parseCdr, penniesOf, money, pounds, unitsToDecimal } = require('../lib/cs1/parse');
 const {
   getSettings, saveSetting, monthStart, monthLabel, monthChoices, logCs1, saveRun, recalculate, getRun, reviewLines,
-  excelBuffer, emailBody, defaultSubject, defaultIntro,
+  excelBuffer, emailBody, defaultSubject, defaultIntro, realName,
 } = require('../lib/cs1/billing');
+const { syncCustomers, lastSync } = require('../lib/cs1/sync');
+const { cs1ApiConfig } = require('../lib/cs1/api');
 
 const router = express.Router();
 const BASE = '/call-switch-one/billing';
@@ -237,50 +240,120 @@ router.get('/billing/history', async (req, res) => {
   res.render('cs1/history', { title: 'Call Switch One billing history', nav: 'cs1', area: 'history', runs: withTotals, monthLabel, pounds, unitsToDecimal, penniesOf, settings: await getSettings() });
 });
 
-// ---- Customers (CS1 Customer Identifier -> name, optional portal client) ----
+// ---- Customers (/call-switch-one/customers): synced from CallSwitch One (read only) ----
+// CS1 ID -> Company (the customer name everywhere), account holder, store, email, users,
+// numbers, status; optional link to a portal client. The old /billing/customers address
+// redirects here.
 
-router.get('/billing/customers', async (req, res) => {
-  const [customers] = await pool.query(`
+const CUSTOMERS = '/call-switch-one/customers';
+router.use('/billing/customers', (req, res) => res.redirect(req.method === 'GET' || req.method === 'HEAD' ? 301 : 308, CUSTOMERS + (req.url === '/' ? '' : req.url.startsWith('/?') ? req.url.slice(1) : req.url)));
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+// "2025-04-29" -> "29 Apr 25" (the CS1 dashboard style).
+const regDate = (d) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(d || ''));
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1].slice(2)}` : '';
+};
+const statusOfRow = (c) => (c.removed_at ? 'Removed' : (c.status || (c.source === 'api' ? 'Unknown' : 'Added by hand')));
+const statusTone = (s) => (/^active$/i.test(s) ? 'ok' : /removed|suspend|cancel|closed|terminat|disabled|blocked|deleted/i.test(s) ? 'bad' : 'muted');
+
+// Sortable columns (sorting happens in JavaScript on the fetched rows; never SQL from input).
+const SORTS = {
+  registered: (c) => c.registered_on || '',
+  status: (c) => statusOfRow(c).toLowerCase(),
+  company: (c) => (realName(c.name, c.identifier) || '').toLowerCase() || '￿',
+  holder: (c) => (c.account_holder || '').toLowerCase() || '￿',
+  store: (c) => (c.store || '').toLowerCase() || '￿',
+  id: (c) => c.identifier.toLowerCase(),
+  email: (c) => (c.email || '').toLowerCase() || '￿',
+  users: (c) => (c.users_count === null ? -1 : Number(c.users_count)),
+  numbers: (c) => (c.numbers_count === null ? -1 : Number(c.numbers_count)),
+  client: (c) => (c.client_name || '').toLowerCase() || '￿',
+};
+
+router.get('/customers', async (req, res) => {
+  const [all] = await pool.query(`
     SELECT c.*, cl.name AS client_name, COALESCE(NULLIF(u.display_name, ''), u.username) AS updated_name
     FROM cs1_customers c LEFT JOIN clients cl ON cl.id = c.client_id LEFT JOIN users u ON u.id = c.updated_by
-    ORDER BY c.name, c.identifier
   `);
-  // Identifiers seen in uploads that have no name yet.
+  // CS1 IDs seen in uploads that are not customers yet.
   const [unknown] = await pool.query(`
     SELECT l.identifier, MAX(r.billing_month) AS last_month, COUNT(*) AS months
     FROM cs1_lines l JOIN cs1_runs r ON r.id = l.run_id LEFT JOIN cs1_customers c ON c.identifier = l.identifier
     WHERE c.id IS NULL GROUP BY l.identifier ORDER BY l.identifier
   `);
   const [clients] = await pool.query('SELECT id, name FROM clients ORDER BY name');
-  res.render('cs1/customers', { title: 'Call Switch One customers', nav: 'cs1', area: 'customers', customers, unknown, clients, monthLabel, settings: await getSettings() });
+  for (const c of all) {
+    c.company = realName(c.name, c.identifier);
+    c.statusText = statusOfRow(c);
+    c.tone = statusTone(c.statusText);
+  }
+  const q = str(req.query.q, 100).toLowerCase();
+  const status = str(req.query.status, 40);
+  const store = str(req.query.store, 200);
+  const sort = SORTS[req.query.sort] ? req.query.sort : 'company';
+  const dir = req.query.dir === 'desc' ? 'desc' : 'asc';
+  const statuses = [...new Set(all.map((c) => c.statusText))].sort((a, b) => (a === 'Active' ? -1 : b === 'Active' ? 1 : a.localeCompare(b)));
+  const stores = [...new Set(all.map((c) => c.store).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  let customers = all.filter((c) => (!status || c.statusText === status) && (!store || (store === '-' ? !c.store : c.store === store)));
+  if (q) {
+    customers = customers.filter((c) => [c.company, c.identifier, c.account_holder, c.store, c.email, c.client_name, c.statusText]
+      .some((v) => v && String(v).toLowerCase().includes(q)));
+  }
+  const key = SORTS[sort];
+  customers.sort((a, b) => {
+    const x = key(a); const y = key(b);
+    const r = x < y ? -1 : x > y ? 1 : a.identifier.localeCompare(b.identifier);
+    return dir === 'desc' ? -r : r;
+  });
+  const sync = await lastSync();
+  res.render('cs1/customers', {
+    title: 'Call Switch One customers', nav: 'cs1', customers, total: all.length, unknown, clients, monthLabel, regDate,
+    filters: { q: str(req.query.q, 100), status, store, sort, dir }, statuses, stores, sync, api: cs1ApiConfig(),
+    unnamed: all.filter((c) => !c.company && !c.removed_at).length,
+  });
 });
 
-// Add or update a name (also from the review screen's inline "Add name").
-router.post('/billing/customers', async (req, res) => {
-  const back = backPath(req, `${BASE}/customers`);
-  const identifier = str(req.body.identifier, 191);
+router.post('/customers/sync', async (req, res) => {
+  const result = await syncCustomers(req.user, { trigger: 'manual' });
+  if (result.ok) {
+    flash(req, 'saved', `Synced: ${result.total} customers from CallSwitch One, ${result.added} added, ${result.updated} updated, ${result.removed} marked removed.`);
+  } else flash(req, 'error', result.error);
+  res.redirect(CUSTOMERS);
+});
+
+// Add a customer by hand (also the review screen's inline "Add company" for an unknown
+// CS1 ID). The daily sync takes over the row when CallSwitch One returns that ID.
+router.post('/customers', async (req, res) => {
+  const back = backPath(req, CUSTOMERS);
+  const identifier = str(req.body.identifier, 191).toUpperCase();
   const name = str(req.body.name, 200);
   const clientId = toId(req.body.client_id);
-  if (!identifier || !name) { flash(req, 'error', 'Enter the CS1 Customer Identifier and a name.'); return res.redirect(back); }
+  if (!identifier || !name) { flash(req, 'error', 'Enter the CS1 ID and the company name.'); return res.redirect(back); }
+  if (!realName(name, identifier)) { flash(req, 'error', 'Enter the company name, not the CS1 ID.'); return res.redirect(back); }
   const [[before]] = await pool.query('SELECT id, name, client_id FROM cs1_customers WHERE identifier = ?', [identifier]);
   let client = null;
   if (clientId) [[client]] = await pool.query('SELECT id, name FROM clients WHERE id = ?', [clientId]);
   const keepClient = !('client_id' in req.body) && before ? before.client_id : (client ? client.id : null);
   if (before) await pool.query('UPDATE cs1_customers SET name = ?, client_id = ?, updated_by = ? WHERE id = ?', [name, keepClient, req.user.id, before.id]);
-  else await pool.query('INSERT INTO cs1_customers (identifier, name, client_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?)', [identifier, name, keepClient, req.user.id, req.user.id]);
-  await logActivity2(req, before ? `Changed the Call Switch One customer ${identifier}: "${before.name}" → "${name}"${client ? ` (client ${client.name})` : ''}` : `Named the Call Switch One customer ${identifier} "${name}"${client ? ` (client ${client.name})` : ''}`, client);
+  else await pool.query('INSERT INTO cs1_customers (identifier, name, client_id, source, created_by, updated_by) VALUES (?, ?, ?, \'manual\', ?, ?)', [identifier, name, keepClient, req.user.id, req.user.id]);
+  await logActivity2(req, before ? `Changed the Call Switch One customer ${identifier}: "${before.name}" → "${name}"${client ? ` (client ${client.name})` : ''}` : `Added the Call Switch One customer ${identifier} "${name}"${client ? ` (client ${client.name})` : ''}`, client);
   flash(req, 'saved', `Saved. ${identifier} is "${name}".`);
   res.redirect(back);
 });
 
-router.post('/billing/customers/:id', async (req, res) => {
+// Edit: the portal client link; the company only for customers added by hand or when
+// CallSwitch One has none (synced fields are overwritten by the next sync anyway).
+router.post('/customers/:id', async (req, res) => {
   const id = requireId(req.params.id);
-  const back = backPath(req, `${BASE}/customers`);
+  const back = backPath(req, CUSTOMERS);
   const [[before]] = await pool.query('SELECT * FROM cs1_customers WHERE id = ?', [id]);
   if (!before) { flash(req, 'error', 'That customer no longer exists.'); return res.redirect(back); }
-  const identifier = str(req.body.identifier, 191) || before.identifier;
-  const name = str(req.body.name, 200);
-  if (!name) { flash(req, 'error', 'Enter a name.'); return res.redirect(back); }
+  const synced = before.source === 'api';
+  const identifier = synced ? before.identifier : (str(req.body.identifier, 191).toUpperCase() || before.identifier);
+  const canName = !synced || !realName(before.name, before.identifier);
+  const name = canName && 'name' in req.body ? str(req.body.name, 200) : before.name;
+  if (canName && 'name' in req.body && !realName(name, identifier)) { flash(req, 'error', 'Enter the company name, not the CS1 ID.'); return res.redirect(back); }
   const clientId = toId(req.body.client_id);
   let client = null;
   if (clientId) [[client]] = await pool.query('SELECT id, name FROM clients WHERE id = ?', [clientId]);
@@ -288,23 +361,32 @@ router.post('/billing/customers/:id', async (req, res) => {
     await pool.query('UPDATE cs1_customers SET identifier = ?, name = ?, client_id = ?, updated_by = ? WHERE id = ?', [identifier, name, client ? client.id : null, req.user.id, id]);
   } catch (err) {
     if (err.code !== 'ER_DUP_ENTRY') throw err;
-    flash(req, 'error', `Another customer already uses the identifier ${identifier}.`);
+    flash(req, 'error', `Another customer already uses the CS1 ID ${identifier}.`);
     return res.redirect(back);
   }
-  await logActivity2(req, `Changed the Call Switch One customer ${before.identifier} "${before.name}" → ${identifier} "${name}"${client ? ` (client ${client.name})` : ''}`, client);
+  const changes = [];
+  if (identifier !== before.identifier) changes.push(`CS1 ID ${before.identifier} → ${identifier}`);
+  if (name !== before.name) changes.push(`company "${before.name}" → "${name}"`);
+  if ((client ? client.id : null) !== (before.client_id || null)) changes.push(client ? `linked to the client ${client.name}` : 'no longer linked to a client');
+  if (changes.length) await logActivity2(req, `Changed the Call Switch One customer ${before.identifier}: ${changes.join(', ')}`, client);
   flash(req, 'saved', 'Saved.');
   res.redirect(back);
 });
 
-router.post('/billing/customers/:id/delete', async (req, res) => {
+router.post('/customers/:id/delete', async (req, res) => {
   const id = requireId(req.params.id);
+  const back = backPath(req, CUSTOMERS);
   const [[before]] = await pool.query('SELECT * FROM cs1_customers WHERE id = ?', [id]);
+  if (before && before.source === 'api' && !before.removed_at) {
+    flash(req, 'error', `${before.identifier} comes from CallSwitch One, so it cannot be deleted here. It is marked Removed when CallSwitch One no longer lists it.`);
+    return res.redirect(back);
+  }
   if (before) {
     await pool.query('DELETE FROM cs1_customers WHERE id = ?', [id]);
-    await logActivity2(req, `Deleted the Call Switch One customer name ${before.identifier} "${before.name}"`);
+    await logActivity2(req, `Deleted the Call Switch One customer ${before.identifier} "${before.name}"`);
   }
   flash(req, 'saved', before ? `Deleted ${before.identifier}.` : 'Already deleted.');
-  res.redirect(backPath(req, `${BASE}/customers`));
+  res.redirect(back);
 });
 
 const logActivity2 = (req, summary, client = null) => logCs1(null, req.user, {

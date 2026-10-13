@@ -304,7 +304,7 @@ async function bellFor(user, fmtDate) {
   `, [todayStart, userId]);
   const [mentionRows] = await pool.query(`
     SELECT id, type, title, body, created_at, delivered_at FROM notifications
-    WHERE user_id = ? AND type IN ('mention', 'gdap') AND read_at IS NULL
+    WHERE user_id = ? AND type IN ('mention', 'gdap', 'cs1') AND read_at IS NULL
     ORDER BY id DESC LIMIT 20
   `, [userId]);
 
@@ -323,8 +323,8 @@ async function bellFor(user, fmtDate) {
   const upcoming = rows.filter((r) => !r.is_due).map(shape);
   const note = (m) => ({ id: m.id, title: m.title, body: m.body || '', time: fmtDate(m.created_at), link: `/notifications/${m.id}/open` });
   const mentions = mentionRows.filter((m) => m.type === 'mention').map(note);
-  // GDAP alerts (expiring relationships, sync failures, client secret).
-  const alerts = mentionRows.filter((m) => m.type === 'gdap').map(note);
+  // Alerts: GDAP (expiring relationships, sync failures, client secret) and Call Switch One sync failures.
+  const alerts = mentionRows.filter((m) => m.type === 'gdap' || m.type === 'cs1').map(note);
   return {
     count: due.length + missed.length + mentions.length + alerts.length, due, missed, upcoming, mentions, alerts, popup,
     sound: (popup && fresh.length > 0) || freshMentions.length > 0,

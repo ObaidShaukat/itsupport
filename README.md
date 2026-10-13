@@ -53,6 +53,7 @@ Fill in:
 | `MAIL_FROM_EMAIL`, `MAIL_FROM_NAME` | Address and name emails are sent from (e.g. `it@cleartwo.co.uk`, `Cleartwo IT Support`) |
 | `APP_URL` | Address of the portal, e.g. `https://support.cleartwo.co.uk`, used for the "Open ticket" button in reminder emails |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Desktop notifications (Web Push). Generate the keys once with `npx web-push generate-vapid-keys` (in the app folder) and keep them; `VAPID_SUBJECT` is `mailto:` plus a contact address, e.g. `mailto:it@cleartwo.co.uk`. Browsers only allow desktop notifications when the portal is on https. Left empty, desktop notifications are off and the rest works as before |
+| `CS1_API_URL`, `CS1_API_TOKEN`, `CS1_API_AUTH`, `CS1_API_FIELDS` | Call Switch One customer sync (read only, GET only; see Call Switch One below). Left empty, the Customers page says the sync is not set up and customers can still be added by hand |
 | `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET` | Microsoft Partner (GDAP) monitoring (read only): the partner tenant id and an Entra ID app registration with the application permission `DelegatedAdminRelationship.Read.All` and a client secret (see GDAP below). Left empty, the Microsoft Partner page says "GDAP not configured" |
 | `ENCRYPTION_KEY` | 64 hex characters used to encrypt inventory passwords and PINs. Generate with `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` and keep a safe copy: if it is lost or changed, saved passwords cannot be read |
 
@@ -176,13 +177,30 @@ The **Microsoft Partner** page (`/microsoft-partner`; old `/gdap` links redirect
 - **Alerts:** 30, 14, 7 and 1 days before a relationship ends (the days can be changed in Settings) and when it has expired (can be turned off), once each per relationship (a new end date after renewal starts them again). They go to the people chosen in Settings (everyone by default), each by their own choice of popup, email and desktop notification. The email subject is "Microsoft Partner: GDAP expiring in {n} days: {customer}". Settings also has a **daily digest** email listing everything ending in the next 30 days.
 - Syncs, alerts, links and settings changes are in `/activity`, never on the Daily Report.
 
-## Call Switch One (monthly call charges)
+## Call Switch One (customers and monthly call charges)
 
-**Call Switch One → Billing** (`/call-switch-one/billing`) turns the monthly CallSwitch One CDR into a call charges email. It needs no extra `.env` keys. Run `npm run migrate` after updating to create the `cs1_customers`, `cs1_runs`, `cs1_lines` and `cs1_settings` tables. Email uses the same SMTP settings as the Daily Report.
+The sidebar group **Call Switch One** has **Customers** (`/call-switch-one/customers`) and **Billing** (`/call-switch-one/billing`). Run `npm run migrate` after updating: it creates the `cs1_*` tables (including `cs1_sync_log`), adds the new customer columns, and once clears names that were really CS1 IDs. Email uses the same SMTP settings as the Daily Report.
+
+### Customers (synced from CallSwitch One, read only)
+
+The portal reads our customer accounts from the CallSwitch One API with GET requests only; it never changes anything in CallSwitch One. In the API docs (callswitchone.com/api-docs → Customer Management) these accounts are the **Sub Resellers**: `GET /account/reseller` lists them and `GET /account/reseller/{uuid}` gives one (read automatically when the list only has ids). The public docs do not list their fields, so every sync records the field names returned (never values), shown under "Fields returned" on the Customers page.
+
+1. In the CallSwitch One portal create an API user / token for our reseller account (Customer Management → Reseller Users).
+2. In `.env` set `CS1_API_URL` to the full list URL on the CallSwitch One API host (ending `/account/reseller`), `CS1_API_TOKEN`, and `CS1_API_AUTH` (`bearer` by default, `basic` when the token is `user:password`, or a header name such as `X-Api-Key`).
+3. Check it without the database: `npm run cs1-fields` prints how many customers came back, the field names and how the first five are read (CS1 ID, company, store, status, registered, users, numbers).
+4. If a field is read from the wrong place, set `CS1_API_FIELDS`, e.g. `id=account_reference,company=company_name,store=storefront.name` (keys: id, company, holder, store, email, status, registered, users, numbers). Then `pm2 restart itsupport`.
+
+- **Sync:** every day at 06:30 UK and with **Sync now** (caught up after a restart when the last good sync is over a day old). Customers are matched by CS1 ID: existing ones are updated, new ones added, and synced customers no longer returned are marked **Removed** (kept, so old months keep their names). An empty or unrecognised reply changes nothing. The top of the page shows the last sync time and result; a failure is shown in red and admins are alerted once a day (bell, email and desktop, by their notification settings).
+- **Page:** Registered ("29 Apr 25") | Status (Active green, Removed / suspended red, others grey) | Company | Account Holder | Store | ID | Email | Users | Numbers | Linked portal client. Search, sort by any column, filter by status and store. Synced customers are read only except the portal client link; CS1 IDs not in CallSwitch One can be added by hand.
+- **Names:** the Company is the customer name everywhere (Billing, email, Excel). Without one the customer is shown as "Unknown (CS1-123456)" and flagged; the ID is never used as the name.
+
+### Billing
+
+**Billing** turns the monthly CallSwitch One CDR into a call charges email.
 
 - **Upload & review:** choose the billing month (last month by default) and upload the CDR V3 export (`.txt` or `.csv`, max 50 MB). The delimiter, quotes and header row are detected automatically. The columns **Customer Identifier** and **Salesprice** are found by name. The file is deleted straight after reading; only the totals per identifier are kept. Uploading a month that already exists asks you to tick **Replace**.
 - **Calculation:** Salesprice is summed per identifier at full precision. Rows with a blank identifier are ignored but still counted in the raw total. Charge = cost + margin (default 30%), rounded to the penny. Lines below the minimum (default £1.00) are left out. You can change both in Settings and recalculate a month. You can override a line's charge or force it in or out; each change is logged.
-- **Customers:** map each identifier to a customer name, optionally linked to a portal client. Unknown identifiers can be named straight from the review table.
+- **Unknown customers:** CS1 IDs without a company are flagged on the review and can be given one straight from the table (or on Customers).
 - **Send email:** To / CC are remembered. The subject is "CallSwitch One call charges: {Month YYYY}". The body has the editable intro, a Customer name | CS1 ID | Charge ex VAT table (one row per customer, no grand total), then your signature, plus an Excel attachment (Customer name | CS1 ID | Cost | Charge ex VAT, no total row). The review page shows each customer's own charge only; the one total kept is the raw total of every Salesprice, to check against the Cost on the CallSwitch dashboard. From and "Send me a copy" follow the Daily Report rules.
 - **History:** every month with totals, who uploaded it, and when and to whom it was sent; view, download Excel or resend.
 - Everything is logged in `/activity` (entity type `cs1`), never on the Daily Report.

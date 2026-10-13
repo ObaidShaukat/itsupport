@@ -70,11 +70,21 @@ async function getRun(db, id) {
   return run || null;
 }
 
+// The name shown for a customer: the Company from CallSwitch One (or typed by hand), never
+// the CS1 ID; without one, "Unknown (CS1-123456)" and the line is flagged (known false).
+const unknownLabel = (identifier) => `Unknown (${identifier})`;
+// A "name" that is really an ID (the CS1 ID itself, or anything like CS1-123456) is no name.
+const realName = (name, identifier) => {
+  const n = String(name || '').trim();
+  if (!n || n.toUpperCase() === String(identifier || '').trim().toUpperCase() || /^CS1-d+$/i.test(n)) return null;
+  return n;
+};
+
 // Lines of a month with their name (live mapping, or the name used when it was sent),
 // effective charge and whether they are included; sorted by charge, highest first.
 async function reviewLines(db, run) {
   const [rows] = await db.query(`
-    SELECT l.*, c.id AS customer_id, c.name AS customer_name, c.client_id, cl.name AS client_name
+    SELECT l.*, c.id AS customer_id, c.name AS customer_name, c.removed_at AS customer_removed_at, c.client_id, cl.name AS client_name
     FROM cs1_lines l
     LEFT JOIN cs1_customers c ON c.identifier = l.identifier
     LEFT JOIN clients cl ON cl.id = c.client_id
@@ -86,13 +96,14 @@ async function reviewLines(db, run) {
     const effective = l.override_charge !== null ? penniesOf(l.override_charge) : chargeP;
     const auto = effective >= minimum;
     const included = l.include_override === null ? auto : Boolean(l.include_override);
+    const name = realName(l.customer_name, l.identifier) || realName(l.name_snapshot, l.identifier);
     return {
-      ...l, name: l.customer_name || l.name_snapshot || null, known: Boolean(l.customer_name), costUnits: toUnits(l.cost),
+      ...l, name, known: Boolean(name), label: name || unknownLabel(l.identifier), costUnits: toUnits(l.cost),
       chargePennies: chargeP, effective, auto, included, overridden: l.override_charge !== null, manual: l.include_override !== null,
       costText: Number(l.cost).toFixed(4), chargeText: pounds(effective),
     };
   });
-  lines.sort((a, b) => (b.effective > a.effective ? 1 : b.effective < a.effective ? -1 : String(a.name || a.identifier).localeCompare(String(b.name || b.identifier))));
+  lines.sort((a, b) => (b.effective > a.effective ? 1 : b.effective < a.effective ? -1 : a.label.localeCompare(b.label)));
   const sum = (list, key) => list.reduce((n, l) => n + l[key], 0n);
   const included = lines.filter((l) => l.included);
   return {
@@ -119,7 +130,7 @@ async function excelBuffer(run, lines) {
   ];
   sheet.getRow(1).font = { bold: true };
   for (const l of lines.filter((x) => x.included)) {
-    sheet.addRow({ customer: l.name || l.identifier, identifier: l.identifier, cost: Number(l.cost), charge: Number(money(l.effective)) });
+    sheet.addRow({ customer: l.label, identifier: l.identifier, cost: Number(l.cost), charge: Number(money(l.effective)) });
   }
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
   return Buffer.from(await book.xlsx.writeBuffer());
@@ -141,19 +152,19 @@ function emailBody({ intro, lines, signatureHtml, signatureText }) {
   const cell = 'padding: 4px 10px; border: 1px solid #D9D9D9;';
   const table = `<table cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 14pt; ${font}">
 <tr><th align="left" style="${font} ${cell} background: #F2F2F2;">Customer name</th><th align="left" style="${font} ${cell} background: #F2F2F2;">CS1 ID</th><th align="right" style="${font} ${cell} background: #F2F2F2;">Charge ex VAT</th></tr>
-${included.map((l) => `<tr><td style="${font} ${cell}">${escapeHtml(l.name || l.identifier)}</td><td style="${font} ${cell}">${escapeHtml(l.identifier)}</td><td align="right" style="${font} ${cell}">${pounds(l.effective)}</td></tr>`).join('\n')}
+${included.map((l) => `<tr><td style="${font} ${cell}">${escapeHtml(l.label)}</td><td style="${font} ${cell}">${escapeHtml(l.identifier)}</td><td align="right" style="${font} ${cell}">${pounds(l.effective)}</td></tr>`).join('\n')}
 </table>`;
   const html = `<!doctype html><html><body style="${font}">${paras}${table}${signatureHtml ? `<div>${signatureHtml}</div>` : ''}</body></html>`;
-  const width = Math.max(13, ...included.map((l) => String(l.name || l.identifier).length));
+  const width = Math.max(13, ...included.map((l) => l.label.length));
   const idWidth = Math.max(6, ...included.map((l) => String(l.identifier).length));
   const text = [String(intro || '').replace(/\r/g, ''), '',
     `${'Customer name'.padEnd(width)}  ${'CS1 ID'.padEnd(idWidth)}  Charge ex VAT`,
-    ...included.map((l) => `${String(l.name || l.identifier).padEnd(width)}  ${String(l.identifier).padEnd(idWidth)}  ${pounds(l.effective)}`),
+    ...included.map((l) => `${l.label.padEnd(width)}  ${String(l.identifier).padEnd(idWidth)}  ${pounds(l.effective)}`),
     '', signatureText || ''].join('\n').trim();
   return { html, text, total };
 }
 
 module.exports = {
   DEFAULTS, getSettings, saveSetting, monthStart, monthLabel, monthChoices, logCs1, saveRun, recalculate, getRun, reviewLines,
-  excelBuffer, emailBody, defaultSubject, defaultIntro,
+  excelBuffer, emailBody, defaultSubject, defaultIntro, unknownLabel, realName,
 };

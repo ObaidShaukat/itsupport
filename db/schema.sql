@@ -688,6 +688,16 @@ CREATE TABLE IF NOT EXISTS cs1_customers (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   identifier VARCHAR(191) NOT NULL,
   name VARCHAR(200) NOT NULL,
+  account_holder VARCHAR(200) NULL,
+  store VARCHAR(200) NULL,
+  email VARCHAR(255) NULL,
+  status VARCHAR(40) NULL,
+  registered_on DATE NULL,
+  users_count INT UNSIGNED NULL,
+  numbers_count INT UNSIGNED NULL,
+  source VARCHAR(10) NOT NULL DEFAULT 'manual',
+  synced_at DATETIME NULL,
+  removed_at DATETIME NULL,
   client_id INT UNSIGNED NULL,
   created_by INT UNSIGNED NULL,
   updated_by INT UNSIGNED NULL,
@@ -696,6 +706,25 @@ CREATE TABLE IF NOT EXISTS cs1_customers (
   PRIMARY KEY (id),
   UNIQUE KEY uq_cs1_customers_identifier (identifier),
   CONSTRAINT fk_cs1_customers_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Customer syncs from the CallSwitch One API (read only): counts, the field names the API
+-- returned (never values) and the error of a failed run.
+CREATE TABLE IF NOT EXISTS cs1_sync_log (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finished_at DATETIME NULL,
+  trigger_type VARCHAR(20) NOT NULL DEFAULT 'manual',
+  status VARCHAR(10) NOT NULL DEFAULT 'running',
+  total INT UNSIGNED NULL,
+  added INT UNSIGNED NULL,
+  updated INT UNSIGNED NULL,
+  removed INT UNSIGNED NULL,
+  fields TEXT NULL,
+  error TEXT NULL,
+  user_id INT UNSIGNED NULL,
+  PRIMARY KEY (id),
+  KEY idx_cs1_sync_log_started (started_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- One calculation per billing month (billing_month = the 1st). margin / minimum are the

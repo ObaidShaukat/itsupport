@@ -4,14 +4,14 @@
 
 <div class="cs1-cards">
   <div class="cs1-card"><span class="cs1-card-value"><%= pounds(penniesOf(run.raw_total)) %></span><span class="cs1-card-label" title="Every Salesprice in the file: compare with the Cost on the CallSwitch dashboard">Raw total (all Salesprice)</span><span class="muted small">£<%= unitsToDecimal(totals.rawUnits) %></span></div>
-  <div class="cs1-card"><span class="cs1-card-value"><%= totals.lines %></span><span class="cs1-card-label">Customer identifiers</span><span class="muted small"><%= run.ignored_rows ? `${run.ignored_rows} blank-identifier lines ignored (${pounds(penniesOf(run.ignored_total))})` : 'no blank identifiers' %></span></div>
+  <div class="cs1-card"><span class="cs1-card-value"><%= totals.lines %></span><span class="cs1-card-label">CS1 IDs</span><span class="muted small"><%= run.ignored_rows ? `${run.ignored_rows} blank-identifier lines ignored (${pounds(penniesOf(run.ignored_total))})` : 'no blank identifiers' %></span></div>
   <div class="cs1-card cs1-card-excluded"><span class="cs1-card-value"><%= totals.excluded %></span><span class="cs1-card-label">Excluded</span><span class="muted small">under £<%= run.minimum %> or left out by hand</span></div>
 </div>
 
 <section class="card">
   <div class="cs1-toolbar">
     <a href="<%= showExcluded ? `/call-switch-one/billing/runs/${run.id}` : `/call-switch-one/billing/runs/${run.id}?excluded=1` %>" class="btn btn-small btn-ghost"><%- icon(showExcluded ? 'eye-off' : 'eye') %><span><%= showExcluded ? 'Hide excluded' : `Show excluded (${totals.excluded})` %></span></a>
-    <% if (unknown) { %><span class="cs1-unknown-note"><%- icon('flag') %> <%= unknown %> identifier<%= unknown === 1 ? ' has' : 's have' %> no name yet</span><% } %>
+    <% if (unknown) { %><span class="cs1-unknown-note"><%- icon('flag') %> <%= unknown %> <%= unknown === 1 ? "customer is" : "customers are" %> Unknown (no company yet) · <a href="/call-switch-one/customers">Customers</a></span><% } %>
     <span class="cs1-toolbar-right">
       <a href="/call-switch-one/billing/runs/<%= run.id %>/excel" class="btn btn-small"><%- icon('download') %><span>Excel</span></a>
       <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/recalculate" class="inline" data-confirm="Recalculate <%= month %> with the current settings (<%= settings.margin %>% margin, £<%= settings.minimum %> minimum)? Overrides are kept." data-confirm-ok="Recalculate">
@@ -31,12 +31,12 @@
               <% if (l.known) { %>
                 <span title="<%= l.name %>"><%= l.name %></span><% if (l.client_name) { %> <a href="/clients/<%= l.client_id %>" class="muted small" title="Portal client"><%- icon('briefcase') %></a><% } %>
               <% } else { %>
-                <form method="post" action="/call-switch-one/billing/customers" class="cs1-addname">
+                <form method="post" action="/call-switch-one/customers" class="cs1-addname" title="Unknown (<%= l.identifier %>): add the company">
                   <%- csrfField %>
                   <input type="hidden" name="identifier" value="<%= l.identifier %>">
                   <input type="hidden" name="back" value="<%= back %>">
-                  <input type="text" name="name" placeholder="Add name" maxlength="200" required aria-label="Name for <%= l.identifier %>" autocomplete="off" data-1p-ignore data-lpignore="true">
-                  <button type="submit" class="icon-btn" title="Save name" aria-label="Save name"><%- icon('check') %></button>
+                  <input type="text" name="name" placeholder="Unknown (<%= l.identifier %>): add company" maxlength="200" required aria-label="Company for <%= l.identifier %>" autocomplete="off" data-1p-ignore data-lpignore="true">
+                  <button type="submit" class="icon-btn" title="Save company" aria-label="Save company"><%- icon('check') %></button>
                 </form>
               <% } %>
             </td>
@@ -66,7 +66,7 @@
               <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/lines/<%= l.id %>" class="inline cs1-include" data-autosubmit>
                 <%- csrfField %>
                 <input type="hidden" name="back" value="<%= back %>">
-                <select name="include" aria-label="Include <%= l.name || l.identifier %>" class="cs1-include-select <%= l.included ? 'is-yes' : 'is-no' %>">
+                <select name="include" aria-label="Include <%= l.label %>" class="cs1-include-select <%= l.included ? 'is-yes' : 'is-no' %>">
                   <option value="auto" <%= !l.manual ? 'selected' : '' %>><%= l.auto ? 'Yes' : 'No' %> (auto)</option>
                   <option value="1" <%= l.manual && l.included ? 'selected' : '' %>>Yes</option>
                   <option value="0" <%= l.manual && !l.included ? 'selected' : '' %>>No</option>
@@ -108,7 +108,7 @@
       <table class="cs1-preview-table">
         <thead><tr><th>Customer name</th><th>CS1 ID</th><th class="num">Charge ex VAT</th></tr></thead>
         <tbody>
-          <% for (const l of lines.filter((x) => x.included)) { %><tr><td><%= l.name || l.identifier %></td><td><%= l.identifier %></td><td class="num"><%= pounds(l.effective) %></td></tr><% } %>
+          <% for (const l of lines.filter((x) => x.included)) { %><tr><td><%= l.label %></td><td><%= l.identifier %></td><td class="num"><%= pounds(l.effective) %></td></tr><% } %>
         </tbody>
       </table>
     </div>

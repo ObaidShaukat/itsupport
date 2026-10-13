@@ -43,6 +43,16 @@ const ADDED_COLUMNS = [
     [table, 'issue_id', 'INT UNSIGNED NULL'],
     [table, 'report_detail', 'VARCHAR(255) NULL'],
   ]),
+  ['cs1_customers', 'account_holder', "VARCHAR(200) NULL AFTER name"],
+  ['cs1_customers', 'store', "VARCHAR(200) NULL AFTER account_holder"],
+  ['cs1_customers', 'email', "VARCHAR(255) NULL AFTER store"],
+  ['cs1_customers', 'status', "VARCHAR(40) NULL AFTER email"],
+  ['cs1_customers', 'registered_on', "DATE NULL AFTER status"],
+  ['cs1_customers', 'users_count', "INT UNSIGNED NULL AFTER registered_on"],
+  ['cs1_customers', 'numbers_count', "INT UNSIGNED NULL AFTER users_count"],
+  ['cs1_customers', 'source', "VARCHAR(10) NOT NULL DEFAULT 'manual' AFTER numbers_count"],
+  ['cs1_customers', 'synced_at', "DATETIME NULL AFTER source"],
+  ['cs1_customers', 'removed_at', "DATETIME NULL AFTER synced_at"],
 ];
 
 // The old inventory (people, assets, stock, access, shared accounts, offboarding, custom
@@ -104,6 +114,12 @@ const ONE_TIME_STEPS = [
   // "+ Add field" on Old Accounts adds a field for that record only by default.
   ['add_field_default_v1', async (conn) => {
     await conn.query("UPDATE inventory_tabs SET add_field_default = 'record' WHERE kind = 'records' AND LOWER(name) LIKE 'old account%'");
+  }],
+  // Call Switch One: names that were really the CS1 ID are cleared (shown as "Unknown (ID)"
+  // until the customer sync or a person fills in the company).
+  ['cs1_clear_id_names', async (conn) => {
+    await conn.query("UPDATE cs1_customers SET name = '' WHERE TRIM(name) = identifier OR TRIM(name) REGEXP '^CS1-[0-9]+$'");
+    await conn.query("UPDATE cs1_lines SET name_snapshot = NULL WHERE TRIM(name_snapshot) = identifier OR TRIM(name_snapshot) REGEXP '^CS1-[0-9]+$'");
   }],
 ];
 

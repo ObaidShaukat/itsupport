@@ -641,7 +641,7 @@ if (bell) {
     bellToggle.setAttribute('aria-label', count ? `Notifications (${count})` : 'Notifications');
     bellList.replaceChildren();
     // Unread GDAP alerts and @mentions first; opening one marks it read.
-    for (const [key, label, list] of [['alerts', 'Microsoft Partner alerts', data.alerts || []], ['mentions', 'Mentions', data.mentions || []]]) {
+    for (const [key, label, list] of [['alerts', 'Alerts', data.alerts || []], ['mentions', 'Mentions', data.mentions || []]]) {
       if (!list.length) continue;
       const mentions = list;
       const group = el('section', `bell-group bell-group-${key}`);

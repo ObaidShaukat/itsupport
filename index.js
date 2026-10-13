@@ -23,6 +23,8 @@ const cron = require('node-cron');
 const { syncGdap } = require('./src/lib/gdap/sync');
 const { runDailyChecks } = require('./src/lib/gdap/alerts');
 const { gdapConfig } = require('./src/lib/gdap/graph');
+const { syncCustomers: syncCs1Customers } = require('./src/lib/cs1/sync');
+const { cs1ApiConfig } = require('./src/lib/cs1/api');
 const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
 const { avatarHelper } = require('./src/lib/avatars');
 const { setStore } = require('./src/lib/sessions');
@@ -81,7 +83,10 @@ app.locals.navItems = [
   { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield' },
   {
     key: 'cs1', href: '/call-switch-one/billing', label: 'Call Switch One', icon: 'phone', group: true,
-    children: [{ href: '/call-switch-one/billing', label: 'Billing', match: '/call-switch-one/billing' }],
+    children: [
+      { href: '/call-switch-one/customers', label: 'Customers', match: '/call-switch-one/customers' },
+      { href: '/call-switch-one/billing', label: 'Billing', match: '/call-switch-one/billing' },
+    ],
   },
   { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
@@ -314,3 +319,27 @@ setTimeout(async () => {
     console.error('GDAP catch-up failed:', err.message);
   }
 }, 90 * 1000).unref();
+
+// Call Switch One customers: read from the CallSwitch One API (read only) every day at
+// 06:30 UK (src/lib/cs1/sync.js), caught up after a restart when the last good sync is
+// more than a day old. A failure is stored and admins are alerted once a day.
+async function cs1Daily() {
+  if (!cs1ApiConfig().configured) return;
+  try {
+    const result = await syncCs1Customers(null, { trigger: 'schedule' });
+    if (!result.ok) console.error('Call Switch One customer sync failed:', result.error);
+  } catch (err) {
+    console.error('Call Switch One customer sync failed:', err.message);
+  }
+}
+cron.schedule('30 6 * * *', cs1Daily, { timezone: 'Europe/London' });
+if (!cs1ApiConfig().configured) console.warn(cs1ApiConfig().message);
+setTimeout(async () => {
+  if (!cs1ApiConfig().configured) return;
+  try {
+    const [[row]] = await pool.query("SELECT MAX(started_at) AS last FROM cs1_sync_log WHERE status = 'ok'");
+    if (!row.last || Date.now() - new Date(row.last).getTime() > 24 * 60 * 60 * 1000) await cs1Daily();
+  } catch (err) {
+    console.error('Call Switch One catch-up failed:', err.message);
+  }
+}, 120 * 1000).unref();

@@ -1,6 +1,6 @@
 <%#
   Call Switch One billing header: title, Settings popover (margin, minimum) and the tabs
-  Upload & review | History | Customers. area: 'upload' | 'history' | 'customers'.
+  Upload & review | History. area: 'upload' | 'history'. (Customers is its own sidebar item.)
   settings: from cs1_settings (optional; the popover shows when given).
 %>
 <header class="page-head">
@@ -41,5 +41,4 @@
 <nav class="tabs cs1-tabs" aria-label="Billing">
   <a href="/call-switch-one/billing" class="<%= area === 'upload' ? 'active' : '' %>">Upload &amp; review</a>
   <a href="/call-switch-one/billing/history" class="<%= area === 'history' ? 'active' : '' %>">History</a>
-  <a href="/call-switch-one/billing/customers" class="<%= area === 'customers' ? 'active' : '' %>">Customers</a>
 </nav>
