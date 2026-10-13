@@ -2745,3 +2745,7 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 .status-pill.is-bad { background: var(--red-soft); color: var(--red); }
 .status-pill.is-muted { background: var(--grey-soft); color: var(--muted); }
 @media (max-width: 900px) { .cs1-customers { width: max(1100px, 100%); } }
+.cs1-sync-details { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 6px 0 0; font-size: 0.8571rem; }
+.cs1-sync-details dt { font-weight: 600; color: var(--text); }
+.cs1-sync-details dd { margin: 0; min-width: 0; }
+.cs1-sync-details code { display: inline; margin: 0; }

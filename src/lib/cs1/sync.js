@@ -10,8 +10,8 @@ const { pool, transaction } = require('../../db');
 const { logActivity, londonDate } = require('../activity');
 const { channelsOf } = require('../notify');
 const { pushToUser } = require('../push');
-const { listCustomers, fieldNames, mapCustomer, cs1ApiConfig } = require('./api');
-const { getSettings, saveSetting } = require('./billing');
+const { listCustomers, fieldNames, mapCustomer, cs1ApiConfig, normaliseId } = require('./api');
+const { getSettings, saveSetting, rematchLines, unknownLines, realName } = require('./billing');
 
 const mailer = () => require('../mailer'); // eslint-disable-line global-require
 const COLUMNS = ['name', 'account_holder', 'store', 'email', 'status', 'registered_on', 'users_count', 'numbers_count'];
@@ -24,6 +24,10 @@ const same = (a, b) => String(a === null || a === undefined ? '' : a) === String
 
 let busy = false;
 
+// "CS1-001234" or "001234 → CS1-001234" when the API wrote it differently; first 8.
+const samplesOf = (mapped) => mapped.filter((c) => c.identifier).slice(0, 8)
+  .map((c) => (c.rawId && c.rawId.toUpperCase() !== c.identifier ? `${c.rawId} → ${c.identifier}` : c.identifier)).join(', ');
+
 async function syncCustomers(user, { trigger = 'manual' } = {}) {
   const cfg = cs1ApiConfig();
   if (!cfg.configured) return { ok: false, error: cfg.message, notConfigured: true };
@@ -32,24 +36,33 @@ async function syncCustomers(user, { trigger = 'manual' } = {}) {
   // A run cut off by a restart never finished: close it so the page does not show it running.
   await pool.query("UPDATE cs1_sync_log SET status = 'failed', finished_at = NOW(), error = 'Stopped before it finished (the portal restarted).' WHERE status = 'running' AND started_at < NOW() - INTERVAL 15 MINUTE").catch(() => {});
   let logId = null;
+  // What was asked and seen, kept for the log even when the sync fails.
+  const seen = { endpoint: cfg.url, status: null, records: null, fields: [], samples: '' };
   try {
-    const [log] = await pool.query('INSERT INTO cs1_sync_log (trigger_type, status, user_id) VALUES (?, ?, ?)', [trigger, 'running', user ? user.id : null]);
+    const [log] = await pool.query('INSERT INTO cs1_sync_log (trigger_type, status, user_id, endpoint) VALUES (?, ?, ?, ?)', [trigger, 'running', user ? user.id : null, cfg.url]);
     logId = log.insertId;
-    const records = await listCustomers();
-    const fields = fieldNames(records);
-    console.log(`Call Switch One sync: ${records.length} records, fields: ${fields.join(', ')}`);
+    const reply = await listCustomers();
+    const { records } = reply;
+    Object.assign(seen, { endpoint: reply.endpoint, status: reply.status, records: records.length, fields: fieldNames(records) });
+    const mapped = records.map(mapCustomer);
+    seen.samples = samplesOf(mapped);
+    // Endpoint, status, count, field names and sample IDs; never values or credentials.
+    console.log(`Call Switch One sync: GET ${seen.endpoint} -> HTTP ${seen.status}, ${seen.records} records; fields: ${seen.fields.join(', ') || '(none)'}; sample IDs: ${seen.samples || '(none)'}`);
     const byId = new Map();
-    for (const r of records) {
-      const c = mapCustomer(r);
-      if (c.identifier) byId.set(c.identifier, c);
-    }
+    for (const c of mapped) if (c.identifier && !byId.has(c.identifier)) byId.set(c.identifier, c);
     // Never mark everyone removed because of an empty or unrecognised reply.
     if (!records.length) throw new Error('The CallSwitch One API returned no customers, so nothing was changed.');
-    if (!byId.size) throw new Error(`No CS1 IDs were found in the reply, so nothing was changed. Fields returned: ${fields.join(', ').slice(0, 600)}`);
+    if (!byId.size) throw new Error(`No CS1 IDs were found in the reply, so nothing was changed. Fields returned: ${seen.fields.join(', ').slice(0, 600)}. Set CS1_API_FIELDS (e.g. id=account_number) if the ID is in one of them.`);
 
     const counts = await transaction(async (conn) => {
       const [existing] = await conn.query('SELECT * FROM cs1_customers FOR UPDATE');
-      const known = new Map(existing.map((e) => [String(e.identifier).toUpperCase(), e]));
+      const unknownBefore = await unknownLines(conn);
+      // Existing customers by normalised CS1 ID (older rows may be "1234" or "cs1-1234").
+      const known = new Map();
+      for (const e of existing) {
+        const key = normaliseId(e.identifier);
+        if (!known.has(key)) known.set(key, e);
+      }
       let added = 0; let updated = 0; let removed = 0; let restored = 0;
       for (const [identifier, c] of byId) {
         const next = rowOf(c);
@@ -61,14 +74,21 @@ async function syncCustomers(user, { trigger = 'manual' } = {}) {
           added += 1;
           continue;
         }
-        // An empty company never wipes a name typed by hand.
-        if (!next.name) next.name = before.name || '';
+        // Company is the name; an empty company never wipes a name typed by hand.
+        if (!next.name) next.name = realName(before.name, before.identifier) || '';
         const changed = COLUMNS.filter((k) => !same(before[k] instanceof Date ? londonDate(before[k]) : before[k], next[k]));
         if (before.removed_at) restored += 1;
-        if (changed.length || before.removed_at || before.source !== 'api') {
-          await conn.query(`UPDATE cs1_customers SET name = ?, account_holder = ?, store = ?, email = ?, status = ?, registered_on = ?, users_count = ?, numbers_count = ?,
-            source = 'api', removed_at = NULL, synced_at = NOW() WHERE id = ?`,
-          [next.name, next.account_holder, next.store, next.email, next.status, next.registered_on, next.users_count, next.numbers_count, before.id]);
+        if (changed.length || before.removed_at || before.source !== 'api' || before.identifier !== identifier) {
+          const sql = `UPDATE cs1_customers SET identifier = ?, name = ?, account_holder = ?, store = ?, email = ?, status = ?, registered_on = ?, users_count = ?, numbers_count = ?,
+            source = 'api', removed_at = NULL, synced_at = NOW() WHERE id = ?`;
+          const values = [next.name, next.account_holder, next.store, next.email, next.status, next.registered_on, next.users_count, next.numbers_count, before.id];
+          try {
+            await conn.query(sql, [identifier, ...values]);
+          } catch (err) {
+            // Another old row already has the normalised ID: keep this one's ID as it was.
+            if (err.code !== 'ER_DUP_ENTRY') throw err;
+            await conn.query(sql, [before.identifier, ...values]);
+          }
           if (changed.length) updated += 1;
         } else {
           await conn.query('UPDATE cs1_customers SET synced_at = NOW() WHERE id = ?', [before.id]);
@@ -76,24 +96,34 @@ async function syncCustomers(user, { trigger = 'manual' } = {}) {
       }
       // Synced customers that are no longer returned: Removed (names typed by hand stay).
       for (const e of existing) {
-        if (e.source === 'api' && !e.removed_at && !byId.has(String(e.identifier).toUpperCase())) {
+        if (e.source === 'api' && !e.removed_at && !byId.has(normaliseId(e.identifier))) {
           await conn.query('UPDATE cs1_customers SET removed_at = NOW() WHERE id = ?', [e.id]);
           removed += 1;
         }
       }
-      const result = { total: byId.size, added, updated, removed, restored };
-      await conn.query(`UPDATE cs1_sync_log SET status = 'ok', finished_at = NOW(), total = ?, added = ?, updated = ?, removed = ?, fields = ? WHERE id = ?`,
-        [result.total, added, updated, removed, fields.join(', ').slice(0, 4000), logId]);
+      // Saved billing months pick up the new companies (sent months keep their snapshot).
+      const match = await rematchLines(conn, unknownBefore);
+      const result = { total: byId.size, added, updated, removed, restored, rematched: match.newlyMatched, months: match.months, unknown: match.unknown };
+      await conn.query(`UPDATE cs1_sync_log SET status = 'ok', finished_at = NOW(), total = ?, added = ?, updated = ?, removed = ?,
+        endpoint = ?, http_status = ?, records = ?, fields = ?, sample_ids = ?, rematched = ? WHERE id = ?`,
+      [result.total, added, updated, removed, String(seen.endpoint).slice(0, 500), seen.status, seen.records,
+        seen.fields.join(', ').slice(0, 4000), seen.samples.slice(0, 1000), match.newlyMatched, logId]);
       await logActivity(conn, user, {
         type: 'cs1', action: 'synced', subject: 'Call Switch One',
-        summary: `Synced Call Switch One customers (${trigger === 'schedule' ? 'daily' : 'Sync now'}): ${result.total} from CallSwitch One, ${added} added, ${updated} updated, ${removed} marked removed${restored ? `, ${restored} back again` : ''}`,
+        summary: `Synced Call Switch One customers (${trigger === 'schedule' ? 'daily' : 'Sync now'}): ${result.total} from CallSwitch One, ${added} added, ${updated} updated, ${removed} marked removed${restored ? `, ${restored} back again` : ''}; ${match.newlyMatched} billing line${match.newlyMatched === 1 ? '' : 's'} in ${match.months} month${match.months === 1 ? '' : 's'} now matched`,
       });
       return result;
     });
-    return { ok: true, ...counts, fields };
+    return { ok: true, ...counts, fields: seen.fields };
   } catch (err) {
     const message = String(err.message || err).slice(0, 2000);
-    if (logId) await pool.query("UPDATE cs1_sync_log SET status = 'failed', finished_at = NOW(), error = ? WHERE id = ?", [message, logId]).catch(() => {});
+    if (err.endpoint) seen.endpoint = err.endpoint;
+    if (err.status) seen.status = err.status;
+    console.error(`Call Switch One sync failed: GET ${seen.endpoint} -> ${seen.status ? `HTTP ${seen.status}` : 'no reply'}: ${message}`);
+    if (logId) {
+      await pool.query(`UPDATE cs1_sync_log SET status = 'failed', finished_at = NOW(), error = ?, endpoint = ?, http_status = ?, records = ?, fields = ?, sample_ids = ? WHERE id = ?`,
+        [message, String(seen.endpoint).slice(0, 500), seen.status, seen.records, seen.fields.join(', ').slice(0, 4000) || null, seen.samples.slice(0, 1000) || null, logId]).catch(() => {});
+    }
     await logActivity(null, user, { type: 'cs1', action: 'synced', subject: 'Call Switch One', summary: `Call Switch One customer sync failed: ${message.slice(0, 300)}` }).catch(() => {});
     await alertSyncFailure(message).catch((e) => console.error('CS1 sync alert failed:', e.message));
     return { ok: false, error: message };

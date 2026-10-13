@@ -67,10 +67,20 @@
     <% } else if (last.status === 'running') { %>
       <%- icon('refresh') %><span><strong>Sync running</strong> since <%= fmtTime(last.started_at) %>…</span>
     <% } else { %>
-      <%- icon('check') %><span><strong>Last sync</strong> <%= fmtDate(last.finished_at || last.started_at) %><%= last.trigger_type === 'schedule' ? ' (daily)' : last.user_name ? ` (${last.user_name})` : '' %>: <%= last.total %> customers from CallSwitch One, <%= last.added %> added, <%= last.updated %> updated, <%= last.removed %> marked removed. <span class="muted">Syncs daily at 06:30.</span></span>
+      <%- icon('check') %><span><strong>Last sync</strong> <%= fmtDate(last.finished_at || last.started_at) %><%= last.trigger_type === 'schedule' ? ' (daily)' : last.user_name ? ` (${last.user_name})` : '' %>: <%= last.total %> customers from CallSwitch One, <%= last.added %> added, <%= last.updated %> updated, <%= last.removed %> marked removed<%= last.rematched ? `, ${last.rematched} billing line${last.rematched === 1 ? '' : 's'} re-matched` : '' %>. <span class="muted">Syncs daily at 06:30.</span></span>
     <% } %>
-    <% if (last.fields) { %>
-      <details class="cs1-fields"><summary>Fields returned</summary><code><%= last.fields %></code></details>
+    <% if (last.endpoint || last.fields) { %>
+      <details class="cs1-fields">
+        <summary>Details of the last sync</summary>
+        <dl class="cs1-sync-details">
+          <dt>Endpoint</dt><dd><code>GET <%= last.endpoint || '—' %></code></dd>
+          <dt>HTTP status</dt><dd><%= last.http_status || '—' %></dd>
+          <dt>Records</dt><dd><%= last.records === null || last.records === undefined ? '—' : last.records %></dd>
+          <dt>Fields returned</dt><dd><code><%= last.fields || '—' %></code></dd>
+          <dt>Sample IDs</dt><dd><code><%= last.sample_ids || '—' %></code></dd>
+          <% if (last.status === 'ok') { %><dt>Billing re-matched</dt><dd><%= last.rematched || 0 %> line<%= last.rematched === 1 ? '' : 's' %> in saved months now have a company</dd><% } %>
+        </dl>
+      </details>
     <% } %>
   <% } else if (api.configured) { %>
     <%- icon('clock') %><span>Not synced yet. It runs every day at 06:30, or use <strong>Sync now</strong>.</span>

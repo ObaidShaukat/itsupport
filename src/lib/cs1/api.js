@@ -2,57 +2,57 @@
 // API docs (callswitchone.com/api-docs, Customer Management) these are the Sub Resellers:
 // GET /account/reseller lists them ({ result: [...], status_code, status_message }) and
 // GET /account/reseller/{uuid} gives one. The public docs only show uuid in the examples,
-// so the field names are logged on every sync (Customers page, "Fields returned"). Only GET requests are ever made,
-// and only to the host of CS1_API_URL: there is deliberately no helper for POST / PUT /
-// PATCH / DELETE.
+// so every sync logs the endpoint, HTTP status, record count, field names (never values)
+// and sample IDs (Customers page, "Details of the last sync").
+// Only GET requests are ever made, and only to https://CS1_API_HOST: there is deliberately
+// no helper for POST / PUT / PATCH / DELETE.
 //
-// .env:
-//   CS1_API_URL    full https URL of the customer list, e.g. https://<CS1 API host>/account/reseller
-//   CS1_API_TOKEN  the API key / token
-//   CS1_API_AUTH   how the token is sent: "bearer" (default, Authorization: Bearer <token>),
-//                  "basic" (token is "user:password") or a header name such as X-Api-Key
-//                  (the token is sent as that header's value).
+// .env (all four required):
+//   CS1_API_HOST   the API host, e.g. api.callswitchone.com
+//   CS1_RESELLER   sent as X-Auth-Reseller
+//   CS1_USER       sent as X-Auth-User
+//   CS1_PASSWORD   sent as X-Auth-Password (never logged or shown)
 //   CS1_API_FIELDS optional, when the automatic matching picks the wrong field:
 //                  "id=account_code,company=company_name,store=storefront.name" (keys: id,
 //                  company, holder, store, email, status, registered, users, numbers).
 //
 // The response shape is not assumed: the records are the array in the body (or under
-// data / items / results / customers / records / rows / content), paging follows a next
-// link (body or Link header) or page / last_page numbers, and fields are matched by name
-// (mapCustomer). fieldNames() lists the field names returned (never values) for the sync log.
+// result / data / items / ...), paging follows a next link (body or Link header) or page /
+// last_page numbers, and fields are matched by name (mapCustomer).
 const TIMEOUT_MS = 30 * 1000;
 const MAX_PAGES = 200;
-const ID_RE = /^CS1-\d+$/i;
+const MAX_DETAILS = 3000;
+const CUSTOMERS_PATH = '/account/reseller';
+const ENV_KEYS = ['CS1_API_HOST', 'CS1_RESELLER', 'CS1_USER', 'CS1_PASSWORD'];
 
 function cs1ApiConfig() {
-  const url = (process.env.CS1_API_URL || '').trim();
-  const token = (process.env.CS1_API_TOKEN || '').trim();
-  const auth = (process.env.CS1_API_AUTH || 'bearer').trim();
-  const missing = [['CS1_API_URL', url], ['CS1_API_TOKEN', token]].filter(([, v]) => !v).map(([k]) => k);
+  const env = Object.fromEntries(ENV_KEYS.map((k) => [k, String(process.env[k] || '').trim()]));
+  const missing = ENV_KEYS.filter((k) => !env[k]);
   if (missing.length) return { configured: false, message: `Call Switch One customer sync not configured: add ${missing.join(', ')} to .env and restart the portal.` };
-  let parsed;
-  try { parsed = new URL(url); } catch { return { configured: false, message: 'CS1_API_URL in .env is not a valid URL.' }; }
-  if (parsed.protocol !== 'https:') return { configured: false, message: 'CS1_API_URL in .env must start with https://.' };
-  return { configured: true, url: parsed.toString(), origin: parsed.origin, token, auth };
-}
-
-function authHeaders(cfg) {
-  const mode = cfg.auth.toLowerCase();
-  if (mode === 'bearer') return { Authorization: `Bearer ${cfg.token}` };
-  if (mode === 'basic') return { Authorization: `Basic ${Buffer.from(cfg.token).toString('base64')}` };
-  return { [cfg.auth]: cfg.token };
+  // "api.callswitchone.com", also accepted with https:// or a trailing slash.
+  const host = env.CS1_API_HOST.replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (!/^[a-z0-9.-]+(:\d+)?$/i.test(host)) return { configured: false, message: 'CS1_API_HOST in .env must be a host name such as api.callswitchone.com.' };
+  const origin = `https://${host}`;
+  return {
+    configured: true, host, origin, url: `${origin}${CUSTOMERS_PATH}`,
+    headers: { 'X-Auth-Reseller': env.CS1_RESELLER, 'X-Auth-User': env.CS1_USER, 'X-Auth-Password': env.CS1_PASSWORD },
+  };
 }
 
 function httpError(status, body) {
-  const detail = String((body && (body.message || body.error_description || body.error || body.title)) || '').slice(0, 200);
-  if (status === 401) return `CallSwitch One refused the API token (401). Check CS1_API_TOKEN / CS1_API_AUTH in .env.${detail ? ` ${detail}` : ''}`;
-  if (status === 403) return `The CallSwitch One API token is not allowed to read customers (403).${detail ? ` ${detail}` : ''}`;
-  if (status === 404) return 'CallSwitch One returned 404: check CS1_API_URL in .env (the customer list endpoint).';
+  const detail = String((body && (body.status_message || body.message || body.error_description || body.error || body.title)) || '').slice(0, 200);
+  const tail = detail ? ` ${detail}` : '';
+  if (status === 401) return `CallSwitch One refused the login (401). Check CS1_RESELLER, CS1_USER and CS1_PASSWORD in .env.${tail}`;
+  if (status === 403) return `The CallSwitch One API user is not allowed to read customers (403).${tail}`;
+  if (status === 404) return `CallSwitch One returned 404 for ${CUSTOMERS_PATH}: check CS1_API_HOST in .env.${tail}`;
   if (status === 429) return 'CallSwitch One is rate limiting requests (429). Try again later.';
   return `CallSwitch One API error ${status}${detail ? `: ${detail}` : ''}`;
 }
 
-// GET one URL on the CS1 API host. Returns { body, link } (link = Link header).
+// The URL as logged: host and path only (no credentials are ever in a URL).
+const shown = (url) => { try { const u = new URL(url); return `${u.origin}${u.pathname}${u.search}`; } catch { return String(url); } };
+
+// GET one URL on the CS1 API host. Returns { body, link, status } (link = Link header).
 async function cs1Get(url, cfg = cs1ApiConfig()) {
   if (!cfg.configured) throw new Error(cfg.message);
   let target;
@@ -60,20 +60,29 @@ async function cs1Get(url, cfg = cs1ApiConfig()) {
   if (target.origin !== cfg.origin) throw new Error('Refused a request outside the CallSwitch One API host.');
   let res;
   try {
-    res = await fetch(target, { method: 'GET', headers: { ...authHeaders(cfg), Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    res = await fetch(target, { method: 'GET', headers: { ...cfg.headers, Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT_MS) });
   } catch (err) {
-    throw new Error(`Could not reach the CallSwitch One API: ${err.name === 'TimeoutError' ? 'timed out' : err.message}`);
+    const e = new Error(`Could not reach the CallSwitch One API at ${cfg.host}: ${err.name === 'TimeoutError' ? 'timed out' : err.message}`);
+    e.endpoint = shown(target);
+    throw e;
   }
   const text = await res.text();
   let body = null;
   try { body = text ? JSON.parse(text) : null; } catch { body = null; }
-  if (!res.ok) throw new Error(httpError(res.status, body));
-  if (body === null) throw new Error('The CallSwitch One API did not return JSON: check CS1_API_URL in .env.');
-  return { body, link: res.headers.get('link') || '' };
+  if (!res.ok) {
+    const e = new Error(httpError(res.status, body));
+    Object.assign(e, { status: res.status, endpoint: shown(target) });
+    throw e;
+  }
+  if (body === null) {
+    const e = new Error(`The CallSwitch One API did not return JSON for ${shown(target)}.`);
+    Object.assign(e, { status: res.status, endpoint: shown(target) });
+    throw e;
+  }
+  return { body, link: res.headers.get('link') || '', status: res.status };
 }
 
 const LIST_KEYS = ['result', 'data', 'items', 'results', 'customers', 'resellers', 'records', 'rows', 'content', 'value'];
-const MAX_DETAILS = 3000;
 // One record from a detail reply: { result: { ... } } or the object itself.
 const detailOf = (body) => (body && body.result && typeof body.result === 'object' && !Array.isArray(body.result) ? body.result : body);
 function recordsOf(body) {
@@ -119,39 +128,64 @@ function nextUrl(body, link, current, cfg) {
   return null;
 }
 
-// Every customer record (all pages).
+// Every customer record (all pages, details per uuid when the list only has ids), with what
+// was asked: { records, endpoint, status, pages, details }.
 async function listCustomers() {
   const cfg = cs1ApiConfig();
   if (!cfg.configured) throw new Error(cfg.message);
   const records = [];
   const seen = new Set();
+  const info = { endpoint: shown(cfg.url), status: null, pages: 0, details: 0 };
   let url = cfg.url;
-  for (let page = 0; url && page < MAX_PAGES; page += 1) {
-    if (seen.has(url)) break;
-    seen.add(url);
-    const { body, link } = await cs1Get(url, cfg);
-    const list = recordsOf(body);
-    if (!list) {
-      const keys = body && typeof body === 'object' ? Object.keys(body).slice(0, 20).join(', ') : typeof body;
-      throw new Error(`The CallSwitch One API reply has no list of customers (top-level fields: ${keys || 'none'}). Check CS1_API_URL.`);
+  try {
+    for (let page = 0; url && page < MAX_PAGES; page += 1) {
+      if (seen.has(url)) break;
+      seen.add(url);
+      const { body, link, status } = await cs1Get(url, cfg);
+      if (info.status === null) info.status = status;
+      info.pages += 1;
+      const list = recordsOf(body);
+      if (!list) {
+        const keys = body && typeof body === 'object' ? Object.keys(body).slice(0, 20).join(', ') : typeof body;
+        throw Object.assign(new Error(`The CallSwitch One reply from ${shown(url)} has no list of customers (top-level fields: ${keys || 'none'}).`), { status });
+      }
+      records.push(...list.filter((r) => r && typeof r === 'object'));
+      if (!list.length) break;
+      url = nextUrl(body, link, url, cfg);
     }
-    records.push(...list.filter((r) => r && typeof r === 'object'));
-    if (!list.length) break;
-    url = nextUrl(body, link, url, cfg);
+    // A list of bare ids ({ uuid } only, as in the docs' example): read each one's details.
+    const bare = records.length && records.every((r) => r.uuid && !mapCustomer(r).company && Object.keys(r).length <= 3);
+    if (!bare) return { records, ...info };
+    if (records.length > MAX_DETAILS) throw new Error(`CallSwitch One returned ${records.length} customers: more than the ${MAX_DETAILS} the sync reads one by one.`);
+    const out = [];
+    for (const r of records) {
+      const { body } = await cs1Get(`${cfg.url}/${encodeURIComponent(String(r.uuid))}`, cfg);
+      info.details += 1;
+      const rec = detailOf(body);
+      if (rec && typeof rec === 'object') out.push({ ...r, ...rec });
+    }
+    return { records: out, ...info, endpoint: `${info.endpoint} (+ ${info.details} × ${CUSTOMERS_PATH}/{uuid})` };
+  } catch (err) {
+    // What was asked goes with the error, for the sync log.
+    err.endpoint = err.endpoint || info.endpoint;
+    if (err.status === undefined) err.status = info.status;
+    throw err;
   }
-  // A list of bare ids ({ uuid } only, as in the docs' example): read each one's details.
-  const bare = records.length && records.every((r) => r.uuid && !mapCustomer(r).company && Object.keys(r).length <= 3);
-  if (!bare) return records;
-  if (records.length > MAX_DETAILS) throw new Error(`CallSwitch One returned ${records.length} customers: more than the ${MAX_DETAILS} the sync reads one by one.`);
-  const base = cfg.url.split('?')[0].replace(/\/+$/, '');
-  const out = [];
-  for (const r of records) {
-    const { body } = await cs1Get(`${base}/${encodeURIComponent(String(r.uuid))}`, cfg);
-    const rec = detailOf(body);
-    if (rec && typeof rec === 'object') out.push({ ...r, ...rec });
-  }
-  return out;
 }
+
+// ---- CS1 IDs ----
+
+// The same customer can be written CS1-001234, cs1 1234, CS1_1234 or just 1234 (CDR files,
+// the API, typed by hand): numeric IDs become "CS1-" + the number (at least 6 digits, so
+// 1234 and CS1-001234 match). Anything else is trimmed and upper-cased.
+function normaliseId(value) {
+  const s = String(value === null || value === undefined ? '' : value).trim();
+  if (!s) return '';
+  const m = /^(?:CS1)?[\s_-]*0*(\d+)$/i.exec(s);
+  if (m) return `CS1-${m[1].padStart(6, '0')}`;
+  return s.toUpperCase().replace(/\s+/g, ' ').slice(0, 191);
+}
+const ID_RE = /^CS1[\s_-]*\d+$/i;
 
 // ---- Mapping by field name ----
 
@@ -177,7 +211,7 @@ function fieldNames(records) {
 }
 
 const FIELDS = {
-  id: ['cs1id', 'customerid', 'accountid', 'accountnumber', 'accountref', 'accountreference', 'customerreference', 'customeridentifier', 'identifier', 'reference', 'ref', 'code', 'id'],
+  id: ['cs1id', 'cs1number', 'customerid', 'customernumber', 'accountid', 'accountnumber', 'accountno', 'accountcode', 'resellerid', 'resellernumber', 'accountref', 'accountreference', 'customerreference', 'customeridentifier', 'identifier', 'reference', 'ref', 'code', 'id'],
   company: ['company', 'companyname', 'customername', 'businessname', 'organisation', 'organization', 'organisationname', 'organizationname', 'accountname', 'name'],
   holder: ['accountholder', 'accountholdername', 'holder', 'holdername', 'contactname', 'primarycontact', 'primarycontactname', 'ownername', 'owner', 'fullname'],
   store: ['store', 'storename', 'storefront', 'storefrontname', 'storefronttitle', 'storefront.name', 'store.name', 'reseller', 'resellername'],
@@ -261,7 +295,9 @@ function mapCustomer(rec) {
   const forced = overrides();
   let id = forced.id ? pick(flat, [forced.id], scalar) : null;
   if (!id) id = Object.values(flat).find((v) => typeof v === 'string' && ID_RE.test(v.trim()));
-  if (!id) id = pick(flat, FIELDS.id.filter((k) => k !== 'id' || !flat.uuid), (v) => typeof v === 'string' || typeof v === 'number');
+  if (!id) id = pick(flat, FIELDS.id.filter((k) => k !== 'id'), (v) => typeof v === 'string' || typeof v === 'number');
+  // Last: a numeric id (the dashboard shows it as CS1-xxxxxx), never the uuid.
+  if (!id && /^\d+$/.test(String(flat.id ?? ''))) id = flat.id;
   let holder = pick(flat, fieldsFor('holder'), scalar);
   if (holder === null) {
     const first = pick(flat, ['firstname', 'forename', 'contactfirstname'], scalar);
@@ -271,7 +307,8 @@ function mapCustomer(rec) {
   const storeValue = pick(flat, fieldsFor('store'));
   const store = storeValue && typeof storeValue === 'object' ? (storeValue.name || storeValue.title || '') : storeValue;
   return {
-    identifier: text(id, 191).toUpperCase(),
+    identifier: normaliseId(id),
+    rawId: text(id, 191),
     company: text(pick(flat, fieldsFor('company'), scalar), 200),
     holder: text(holder, 200),
     store: text(store, 200),
@@ -284,5 +321,5 @@ function mapCustomer(rec) {
 }
 
 module.exports = {
-  cs1ApiConfig, cs1Get, listCustomers, fieldNames, mapCustomer, recordsOf, dateOf, ID_RE,
+  cs1ApiConfig, cs1Get, listCustomers, fieldNames, mapCustomer, recordsOf, dateOf, normaliseId, ID_RE, CUSTOMERS_PATH, ENV_KEYS,
 };

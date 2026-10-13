@@ -53,6 +53,12 @@ const ADDED_COLUMNS = [
   ['cs1_customers', 'source', "VARCHAR(10) NOT NULL DEFAULT 'manual' AFTER numbers_count"],
   ['cs1_customers', 'synced_at', "DATETIME NULL AFTER source"],
   ['cs1_customers', 'removed_at', "DATETIME NULL AFTER synced_at"],
+  ['cs1_lines', 'customer_key', 'VARCHAR(191) NULL AFTER identifier'],
+  ['cs1_sync_log', 'endpoint', 'VARCHAR(500) NULL AFTER removed'],
+  ['cs1_sync_log', 'http_status', 'SMALLINT UNSIGNED NULL AFTER endpoint'],
+  ['cs1_sync_log', 'records', 'INT UNSIGNED NULL AFTER http_status'],
+  ['cs1_sync_log', 'sample_ids', 'VARCHAR(1000) NULL AFTER fields'],
+  ['cs1_sync_log', 'rematched', 'INT UNSIGNED NULL AFTER sample_ids'],
 ];
 
 // The old inventory (people, assets, stock, access, shared accounts, offboarding, custom
@@ -120,6 +126,23 @@ const ONE_TIME_STEPS = [
   ['cs1_clear_id_names', async (conn) => {
     await conn.query("UPDATE cs1_customers SET name = '' WHERE TRIM(name) = identifier OR TRIM(name) REGEXP '^CS1-[0-9]+$'");
     await conn.query("UPDATE cs1_lines SET name_snapshot = NULL WHERE TRIM(name_snapshot) = identifier OR TRIM(name_snapshot) REGEXP '^CS1-[0-9]+$'");
+  }],
+  // Call Switch One: CS1 IDs in one form (CS1-001234 for 1234 / cs1 1234), and every saved
+  // month's lines matched to customers by that form (cs1_lines.customer_key).
+  ['cs1_normalise_ids_v1', async (conn) => {
+    const { normaliseId } = require('../src/lib/cs1/api'); // eslint-disable-line global-require
+    const [customers] = await conn.query('SELECT id, identifier FROM cs1_customers ORDER BY id');
+    const taken = new Set(customers.map((c) => c.identifier.toUpperCase()));
+    for (const c of customers) {
+      const id = normaliseId(c.identifier);
+      if (!id || id === c.identifier || taken.has(id.toUpperCase())) continue; // a duplicate keeps its old form
+      await conn.query('UPDATE cs1_customers SET identifier = ? WHERE id = ?', [id, c.id]);
+      taken.add(id.toUpperCase());
+    }
+    const [ids] = await conn.query('SELECT DISTINCT identifier FROM cs1_lines');
+    for (const row of ids) await conn.query('UPDATE cs1_lines SET customer_key = ? WHERE identifier = ?', [normaliseId(row.identifier) || null, row.identifier]);
+    const [[idx]] = await conn.query("SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs1_lines' AND INDEX_NAME = 'idx_cs1_lines_customer_key'");
+    if (!Number(idx.n)) await conn.query('ALTER TABLE cs1_lines ADD KEY idx_cs1_lines_customer_key (customer_key)');
   }],
 ];
 

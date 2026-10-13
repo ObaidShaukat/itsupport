@@ -15,10 +15,10 @@ const { originalName } = require('../lib/uploads');
 const { parseCdr, penniesOf, money, pounds, unitsToDecimal } = require('../lib/cs1/parse');
 const {
   getSettings, saveSetting, monthStart, monthLabel, monthChoices, logCs1, saveRun, recalculate, getRun, reviewLines,
-  excelBuffer, emailBody, defaultSubject, defaultIntro, realName,
+  excelBuffer, emailBody, defaultSubject, defaultIntro, realName, rematchLines,
 } = require('../lib/cs1/billing');
 const { syncCustomers, lastSync } = require('../lib/cs1/sync');
-const { cs1ApiConfig } = require('../lib/cs1/api');
+const { cs1ApiConfig, normaliseId } = require('../lib/cs1/api');
 
 const router = express.Router();
 const BASE = '/call-switch-one/billing';
@@ -137,7 +137,7 @@ router.post('/billing/runs/:id/lines/:lid', async (req, res) => {
   }
   if (changes.length) {
     await pool.query('UPDATE cs1_lines SET override_charge = ?, include_override = ? WHERE id = ?', [override, include, line.id]);
-    const [[c]] = await pool.query('SELECT name FROM cs1_customers WHERE identifier = ?', [line.identifier]);
+    const [[c]] = await pool.query('SELECT name FROM cs1_customers WHERE identifier = ?', [line.customer_key || line.identifier]);
     await logCs1(null, req.user, { id: run.id, action: 'updated', summary: `${monthLabel(run.billing_month)}, ${c ? c.name : line.identifier}: ${changes.join(', ')}` });
     flash(req, 'saved', 'Saved.');
   }
@@ -278,9 +278,10 @@ router.get('/customers', async (req, res) => {
   `);
   // CS1 IDs seen in uploads that are not customers yet.
   const [unknown] = await pool.query(`
-    SELECT l.identifier, MAX(r.billing_month) AS last_month, COUNT(*) AS months
-    FROM cs1_lines l JOIN cs1_runs r ON r.id = l.run_id LEFT JOIN cs1_customers c ON c.identifier = l.identifier
-    WHERE c.id IS NULL GROUP BY l.identifier ORDER BY l.identifier
+    SELECT COALESCE(l.customer_key, l.identifier) AS identifier, MAX(r.billing_month) AS last_month, COUNT(DISTINCT r.id) AS months
+    FROM cs1_lines l JOIN cs1_runs r ON r.id = l.run_id
+    LEFT JOIN cs1_customers c ON c.identifier = COALESCE(l.customer_key, l.identifier)
+    WHERE c.id IS NULL GROUP BY COALESCE(l.customer_key, l.identifier) ORDER BY identifier
   `);
   const [clients] = await pool.query('SELECT id, name FROM clients ORDER BY name');
   for (const c of all) {
@@ -317,7 +318,7 @@ router.get('/customers', async (req, res) => {
 router.post('/customers/sync', async (req, res) => {
   const result = await syncCustomers(req.user, { trigger: 'manual' });
   if (result.ok) {
-    flash(req, 'saved', `Synced: ${result.total} customers from CallSwitch One, ${result.added} added, ${result.updated} updated, ${result.removed} marked removed.`);
+    flash(req, 'saved', `Synced: ${result.total} customers from CallSwitch One, ${result.added} added, ${result.updated} updated, ${result.removed} marked removed${result.rematched ? `; ${result.rematched} billing line${result.rematched === 1 ? '' : 's'} in ${result.months} month${result.months === 1 ? '' : 's'} now matched` : ''}.`);
   } else flash(req, 'error', result.error);
   res.redirect(CUSTOMERS);
 });
@@ -326,7 +327,7 @@ router.post('/customers/sync', async (req, res) => {
 // CS1 ID). The daily sync takes over the row when CallSwitch One returns that ID.
 router.post('/customers', async (req, res) => {
   const back = backPath(req, CUSTOMERS);
-  const identifier = str(req.body.identifier, 191).toUpperCase();
+  const identifier = normaliseId(str(req.body.identifier, 191));
   const name = str(req.body.name, 200);
   const clientId = toId(req.body.client_id);
   if (!identifier || !name) { flash(req, 'error', 'Enter the CS1 ID and the company name.'); return res.redirect(back); }
@@ -338,6 +339,7 @@ router.post('/customers', async (req, res) => {
   if (before) await pool.query('UPDATE cs1_customers SET name = ?, client_id = ?, updated_by = ? WHERE id = ?', [name, keepClient, req.user.id, before.id]);
   else await pool.query('INSERT INTO cs1_customers (identifier, name, client_id, source, created_by, updated_by) VALUES (?, ?, ?, \'manual\', ?, ?)', [identifier, name, keepClient, req.user.id, req.user.id]);
   await logActivity2(req, before ? `Changed the Call Switch One customer ${identifier}: "${before.name}" → "${name}"${client ? ` (client ${client.name})` : ''}` : `Added the Call Switch One customer ${identifier} "${name}"${client ? ` (client ${client.name})` : ''}`, client);
+  await rematchLines(pool);
   flash(req, 'saved', `Saved. ${identifier} is "${name}".`);
   res.redirect(back);
 });
@@ -350,7 +352,7 @@ router.post('/customers/:id', async (req, res) => {
   const [[before]] = await pool.query('SELECT * FROM cs1_customers WHERE id = ?', [id]);
   if (!before) { flash(req, 'error', 'That customer no longer exists.'); return res.redirect(back); }
   const synced = before.source === 'api';
-  const identifier = synced ? before.identifier : (str(req.body.identifier, 191).toUpperCase() || before.identifier);
+  const identifier = synced ? before.identifier : (normaliseId(str(req.body.identifier, 191)) || before.identifier);
   const canName = !synced || !realName(before.name, before.identifier);
   const name = canName && 'name' in req.body ? str(req.body.name, 200) : before.name;
   if (canName && 'name' in req.body && !realName(name, identifier)) { flash(req, 'error', 'Enter the company name, not the CS1 ID.'); return res.redirect(back); }
@@ -369,6 +371,7 @@ router.post('/customers/:id', async (req, res) => {
   if (name !== before.name) changes.push(`company "${before.name}" → "${name}"`);
   if ((client ? client.id : null) !== (before.client_id || null)) changes.push(client ? `linked to the client ${client.name}` : 'no longer linked to a client');
   if (changes.length) await logActivity2(req, `Changed the Call Switch One customer ${before.identifier}: ${changes.join(', ')}`, client);
+  if (changes.length) await rematchLines(pool);
   flash(req, 'saved', 'Saved.');
   res.redirect(back);
 });

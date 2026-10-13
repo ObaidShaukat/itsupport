@@ -7,6 +7,7 @@ const { logActivity } = require('../activity');
 const {
   toUnits, unitsToDecimal, chargePennies, penniesOf, money, pounds,
 } = require('./parse');
+const { normaliseId } = require('./api');
 
 const DEFAULTS = { margin: '30', minimum: '1.00', email_to: '', email_cc: '' };
 
@@ -48,11 +49,43 @@ async function saveRun(conn, user, { month, fileName, parsed, settings, replaceI
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [month, fileName, parsed.rows, unitsToDecimal(parsed.rawTotal + parsed.blankTotal), parsed.blankRows, unitsToDecimal(parsed.blankTotal),
     settings.margin, settings.minimum, user.id]);
-  const lines = [...parsed.totals].map(([identifier, units]) => [r.insertId, identifier.slice(0, 191), unitsToDecimal(units), money(chargePennies(units, settings.margin))]);
+  const lines = [...parsed.totals].map(([identifier, units]) => [r.insertId, identifier.slice(0, 191), normaliseId(identifier) || null, unitsToDecimal(units), money(chargePennies(units, settings.margin))]);
   for (let i = 0; i < lines.length; i += 500) {
-    await conn.query('INSERT INTO cs1_lines (run_id, identifier, cost, charge) VALUES ?', [lines.slice(i, i + 500)]);
+    await conn.query('INSERT INTO cs1_lines (run_id, identifier, customer_key, cost, charge) VALUES ?', [lines.slice(i, i + 500)]);
   }
   return r.insertId;
+}
+
+// Re-matches the lines of every saved month to customers: customer_key = the normalised
+// CS1 ID (normaliseId), so CS1-001234, 1234 and cs1 1234 all find the same customer. Run after
+// each sync, each customer change and once by migrate. Unsent months then show the new
+// companies; sent months keep the names they were sent with (name_snapshot).
+// Returns { keys, newlyMatched, months, unknown } (months = months with a line that gained a
+// company; unknown = lines still without one).
+const UNKNOWN_LINES_SQL = `
+  SELECT l.id, l.run_id FROM cs1_lines l
+  LEFT JOIN cs1_customers c ON c.identifier = COALESCE(l.customer_key, l.identifier) AND TRIM(c.name) <> ''
+  WHERE c.id IS NULL`;
+
+// before: unknownLines() taken earlier (e.g. at the start of a sync), so lines matched by
+// customer changes made since then count too.
+const unknownLines = async (conn) => (await conn.query(UNKNOWN_LINES_SQL))[0];
+
+async function rematchLines(conn, before = null) {
+  if (!before) before = await unknownLines(conn);
+  const [ids] = await conn.query('SELECT DISTINCT identifier, customer_key FROM cs1_lines');
+  let keys = 0;
+  for (const row of ids) {
+    const key = normaliseId(row.identifier) || null;
+    if (key !== row.customer_key) {
+      await conn.query('UPDATE cs1_lines SET customer_key = ? WHERE identifier = ?', [key, row.identifier]);
+      keys += 1;
+    }
+  }
+  const [after] = await conn.query(UNKNOWN_LINES_SQL);
+  const stillUnknown = new Set(after.map((l) => l.id));
+  const gained = before.filter((l) => !stillUnknown.has(l.id));
+  return { keys, newlyMatched: gained.length, months: new Set(gained.map((l) => l.run_id)).size, unknown: after.length };
 }
 
 // Recalculates every line's charge with the current margin (overrides are kept).
@@ -86,7 +119,7 @@ async function reviewLines(db, run) {
   const [rows] = await db.query(`
     SELECT l.*, c.id AS customer_id, c.name AS customer_name, c.removed_at AS customer_removed_at, c.client_id, cl.name AS client_name
     FROM cs1_lines l
-    LEFT JOIN cs1_customers c ON c.identifier = l.identifier
+    LEFT JOIN cs1_customers c ON c.identifier = COALESCE(l.customer_key, l.identifier)
     LEFT JOIN clients cl ON cl.id = c.client_id
     WHERE l.run_id = ?
   `, [run.id]);
@@ -165,6 +198,6 @@ ${included.map((l) => `<tr><td style="${font} ${cell}">${escapeHtml(l.label)}</t
 }
 
 module.exports = {
-  DEFAULTS, getSettings, saveSetting, monthStart, monthLabel, monthChoices, logCs1, saveRun, recalculate, getRun, reviewLines,
+  DEFAULTS, getSettings, saveSetting, monthStart, monthLabel, monthChoices, logCs1, saveRun, recalculate, getRun, reviewLines, rematchLines, unknownLines,
   excelBuffer, emailBody, defaultSubject, defaultIntro, unknownLabel, realName,
 };

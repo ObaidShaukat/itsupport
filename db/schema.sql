@@ -720,7 +720,12 @@ CREATE TABLE IF NOT EXISTS cs1_sync_log (
   added INT UNSIGNED NULL,
   updated INT UNSIGNED NULL,
   removed INT UNSIGNED NULL,
+  endpoint VARCHAR(500) NULL,
+  http_status SMALLINT UNSIGNED NULL,
+  records INT UNSIGNED NULL,
   fields TEXT NULL,
+  sample_ids VARCHAR(1000) NULL,
+  rematched INT UNSIGNED NULL,
   error TEXT NULL,
   user_id INT UNSIGNED NULL,
   PRIMARY KEY (id),
@@ -762,6 +767,7 @@ CREATE TABLE IF NOT EXISTS cs1_lines (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   run_id INT UNSIGNED NOT NULL,
   identifier VARCHAR(191) NOT NULL,
+  customer_key VARCHAR(191) NULL,
   cost DECIMAL(20,8) NOT NULL,
   charge DECIMAL(14,2) NOT NULL,
   override_charge DECIMAL(14,2) NULL,
@@ -769,6 +775,7 @@ CREATE TABLE IF NOT EXISTS cs1_lines (
   name_snapshot VARCHAR(200) NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uq_cs1_lines_run_identifier (run_id, identifier),
+  KEY idx_cs1_lines_customer_key (customer_key),
   CONSTRAINT fk_cs1_lines_run FOREIGN KEY (run_id) REFERENCES cs1_runs (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
