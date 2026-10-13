@@ -33,12 +33,12 @@ async function main() {
   const { records } = await listCustomers();
   console.log(`\n${records.length} records in the list.`);
   const want = company.trim().toLowerCase();
-  let matches = records.filter((r) => String(r.name || '').trim().toLowerCase() === want);
+  let matches = records.filter((r) => [r.contact_name, r.name].some((v) => String(v || '').trim().toLowerCase() === want));
   if (!matches.length) matches = records.filter((r) => JSON.stringify(r).toLowerCase().includes(want));
   if (!matches.length) console.log(`No record has the name "${company}".`);
 
   for (const rec of matches) {
-    console.log(`\nRecord "${rec.name || '(no name)'}"`);
+    console.log(`\nRecord "${rec.contact_name || rec.name || '(no name)'}"`);
     console.log(`  uuid   = ${JSON.stringify(getPath(rec, 'uuid'))}`);
     console.log(`  crm_id = ${JSON.stringify(getPath(rec, 'crm_id'))}`);
     if (rec._key !== undefined) console.log(`  record key (_key) = ${JSON.stringify(rec._key)}`);

@@ -17,7 +17,10 @@ const {
   getSettings, saveSetting, monthStart, monthLabel, monthChoices, logCs1, saveRun, recalculate, getRun, reviewLines,
   excelBuffer, emailBody, defaultSubject, defaultIntro, realName, rematchLines,
 } = require('../lib/cs1/billing');
-const { syncCustomers, lastSync } = require('../lib/cs1/sync');
+const {
+  syncCustomers, lastSync, importIds, linkId,
+} = require('../lib/cs1/sync');
+const { readSheet } = require('../lib/inventory/import-files');
 const { cs1ApiConfig, normaliseId } = require('../lib/cs1/api');
 
 const router = express.Router();
@@ -255,7 +258,7 @@ const regDate = (d) => {
   return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1].slice(2)}` : '';
 };
 const statusOfRow = (c) => (c.removed_at ? 'Removed' : (c.status || (c.source === 'api' ? 'Unknown' : 'Added by hand')));
-const statusTone = (s) => (/^active$/i.test(s) ? 'ok' : /removed|suspend|cancel|closed|terminat|disabled|blocked|deleted/i.test(s) ? 'bad' : 'muted');
+const statusTone = (s) => (/^active$/i.test(s) ? 'ok' : /removed|ceased|locked|suspend|cancel|closed|terminat|disabled|blocked|deleted/i.test(s) ? 'bad' : 'muted');
 
 // Sortable columns (sorting happens in JavaScript on the fetched rows; never SQL from input).
 const SORTS = {
@@ -264,7 +267,7 @@ const SORTS = {
   company: (c) => (realName(c.name, c.identifier) || '').toLowerCase() || '￿',
   holder: (c) => (c.account_holder || '').toLowerCase() || '￿',
   store: (c) => (c.store || '').toLowerCase() || '￿',
-  id: (c) => c.identifier.toLowerCase(),
+  id: (c) => (c.identifier || '').toLowerCase() || '￿',
   email: (c) => (c.email || '').toLowerCase() || '￿',
   users: (c) => (c.users_count === null ? -1 : Number(c.users_count)),
   numbers: (c) => (c.numbers_count === null ? -1 : Number(c.numbers_count)),
@@ -294,9 +297,12 @@ router.get('/customers', async (req, res) => {
   const store = str(req.query.store, 200);
   const sort = SORTS[req.query.sort] ? req.query.sort : 'company';
   const dir = req.query.dir === 'desc' ? 'desc' : 'asc';
+  const needsId = all.filter((c) => !c.identifier && !c.removed_at).length;
   const statuses = [...new Set(all.map((c) => c.statusText))].sort((a, b) => (a === 'Active' ? -1 : b === 'Active' ? 1 : a.localeCompare(b)));
+  if (needsId) statuses.push('Needs CS1 ID');
   const stores = [...new Set(all.map((c) => c.store).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  let customers = all.filter((c) => (!status || c.statusText === status) && (!store || (store === '-' ? !c.store : c.store === store)));
+  const statusOk = (c) => !status || (status === 'Needs CS1 ID' ? !c.identifier && !c.removed_at : c.statusText === status);
+  let customers = all.filter((c) => statusOk(c) && (!store || (store === '-' ? !c.store : c.store === store)));
   if (q) {
     customers = customers.filter((c) => [c.company, c.identifier, c.account_holder, c.store, c.email, c.client_name, c.statusText]
       .some((v) => v && String(v).toLowerCase().includes(q)));
@@ -304,21 +310,21 @@ router.get('/customers', async (req, res) => {
   const key = SORTS[sort];
   customers.sort((a, b) => {
     const x = key(a); const y = key(b);
-    const r = x < y ? -1 : x > y ? 1 : a.identifier.localeCompare(b.identifier);
+    const r = x < y ? -1 : x > y ? 1 : String(a.identifier || '').localeCompare(String(b.identifier || '')) || a.id - b.id;
     return dir === 'desc' ? -r : r;
   });
   const sync = await lastSync();
   res.render('cs1/customers', {
     title: 'Call Switch One customers', nav: 'cs1', customers, total: all.length, unknown, clients, monthLabel, regDate,
     filters: { q: str(req.query.q, 100), status, store, sort, dir }, statuses, stores, sync, api: cs1ApiConfig(),
-    unnamed: all.filter((c) => !c.company && !c.removed_at).length,
+    unnamed: all.filter((c) => !c.company && !c.removed_at).length, needsId,
   });
 });
 
 router.post('/customers/sync', async (req, res) => {
   const result = await syncCustomers(req.user, { trigger: 'manual' });
   if (result.ok) {
-    flash(req, 'saved', `Synced: ${result.total} customers from CallSwitch One, ${result.added} added, ${result.updated} updated, ${result.removed} marked removed${result.rematched ? `; ${result.rematched} billing line${result.rematched === 1 ? '' : 's'} in ${result.months} month${result.months === 1 ? '' : 's'} now matched` : ''}.`);
+    flash(req, 'saved', `Synced: ${result.total} customers from CallSwitch One, ${result.added} added, ${result.updated} updated, ${result.removed} marked removed${result.needsId ? `, ${result.needsId} need a CS1 ID` : ''}${result.source === 'official' ? ' (dashboard list unavailable: CS1 IDs linked by uuid)' : ''}${result.rematched ? `; ${result.rematched} billing line${result.rematched === 1 ? '' : 's'} in ${result.months} month${result.months === 1 ? '' : 's'} now matched` : ''}.`);
   } else flash(req, 'error', result.error);
   res.redirect(CUSTOMERS);
 });
@@ -346,12 +352,62 @@ router.post('/customers', async (req, res) => {
 
 // Edit: the portal client link; the company only for customers added by hand or when
 // CallSwitch One has none (synced fields are overwritten by the next sync anyway).
+// Import CS1 IDs: the CS1 dashboard Customers export (.xlsx / .csv with ID and Company and /
+// or Email). Each row is matched to a synced customer (company, then email) and its CS1 ID
+// saved (CS1 ID <-> uuid); the file is deleted straight after reading.
+router.post('/customers/import', async (req, res) => {
+  const file = req.files && req.files.file && req.files.file[0];
+  try {
+    if (req.uploadError) { flash(req, 'error', req.uploadError); return res.redirect(CUSTOMERS); }
+    if (!file) { flash(req, 'error', 'Choose the CS1 dashboard Customers export (.xlsx or .csv).'); return res.redirect(CUSTOMERS); }
+    const sheet = await readSheet({ ...file, originalname: originalName(file) });
+    if (sheet.error) { flash(req, 'error', sheet.error); return res.redirect(CUSTOMERS); }
+    const out = await transaction(async (conn) => {
+      const r = await importIds(conn, sheet);
+      if (r.error) return r;
+      const match = await rematchLines(conn);
+      r.rematched = match.newlyMatched;
+      await logCs1(conn, req.user, {
+        action: 'uploaded',
+        summary: `Imported CS1 IDs from ${originalName(file)}: ${r.rows} rows, ${r.linked.length + r.merged.length} linked, ${r.already} already linked, ${r.unmatched.length} not matched, ${r.conflicts.length} conflicts; ${r.rematched} billing lines now matched${r.linked.length + r.merged.length ? ` (${[...r.linked, ...r.merged].slice(0, 20).join(', ')})` : ''}`,
+      });
+      return r;
+    });
+    if (out.error) { flash(req, 'error', out.error); return res.redirect(CUSTOMERS); }
+    const parts = [`${out.linked.length + out.merged.length} CS1 ID${out.linked.length + out.merged.length === 1 ? '' : 's'} saved`, `${out.already} already linked`];
+    if (out.rematched) parts.push(`${out.rematched} billing line${out.rematched === 1 ? '' : 's'} now named`);
+    if (out.unmatched.length) parts.push(`not matched: ${out.unmatched.slice(0, 15).join('; ')}${out.unmatched.length > 15 ? ` and ${out.unmatched.length - 15} more` : ''}`);
+    if (out.conflicts.length) parts.push(`skipped: ${out.conflicts.slice(0, 10).join('; ')}`);
+    flash(req, out.unmatched.length || out.conflicts.length ? 'info' : 'saved', `Import CS1 IDs: ${parts.join(', ')}.`);
+    return res.redirect(CUSTOMERS);
+  } finally {
+    if (file) fs.promises.unlink(file.path).catch(() => {});
+  }
+});
+
 router.post('/customers/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const back = backPath(req, CUSTOMERS);
   const [[before]] = await pool.query('SELECT * FROM cs1_customers WHERE id = ?', [id]);
   if (!before) { flash(req, 'error', 'That customer no longer exists.'); return res.redirect(back); }
   const synced = before.source === 'api';
+  // A synced customer still waiting for its CS1 ID gets it here (merged with a row that
+  // already has that ID, e.g. one added by hand or seen in a CDR file).
+  if (synced && !before.identifier && str(req.body.identifier, 191)) {
+    const result = await transaction(async (conn) => {
+      const r = await linkId(conn, before, str(req.body.identifier, 191));
+      if (r.result === 'linked' || r.result === 'merged') {
+        await logCs1(conn, req.user, { action: 'updated', summary: `Added the CS1 ID to the Call Switch One customer "${realName(before.name, before.identifier) || before.uuid}": ${r.message}` });
+        await rematchLines(conn);
+      }
+      return r;
+    });
+    flash(req, result.result === 'conflict' ? 'error' : 'saved', result.message);
+    if (result.result === 'conflict') return res.redirect(back);
+  }
+  const [[current]] = await pool.query('SELECT * FROM cs1_customers WHERE id = ?', [id]);
+  if (!current) return res.redirect(back); // merged into the row that had the CS1 ID
+  Object.assign(before, current);
   const identifier = synced ? before.identifier : (normaliseId(str(req.body.identifier, 191)) || before.identifier);
   const canName = !synced || !realName(before.name, before.identifier);
   const name = canName && 'name' in req.body ? str(req.body.name, 200) : before.name;
@@ -370,9 +426,9 @@ router.post('/customers/:id', async (req, res) => {
   if (identifier !== before.identifier) changes.push(`CS1 ID ${before.identifier} → ${identifier}`);
   if (name !== before.name) changes.push(`company "${before.name}" → "${name}"`);
   if ((client ? client.id : null) !== (before.client_id || null)) changes.push(client ? `linked to the client ${client.name}` : 'no longer linked to a client');
-  if (changes.length) await logActivity2(req, `Changed the Call Switch One customer ${before.identifier}: ${changes.join(', ')}`, client);
+  if (changes.length) await logActivity2(req, `Changed the Call Switch One customer ${before.identifier || realName(before.name, before.identifier) || before.uuid}: ${changes.join(', ')}`, client);
   if (changes.length) await rematchLines(pool);
-  flash(req, 'saved', 'Saved.');
+  if (!req.session.flash) flash(req, 'saved', 'Saved.');
   res.redirect(back);
 });
 
@@ -381,7 +437,7 @@ router.post('/customers/:id/delete', async (req, res) => {
   const back = backPath(req, CUSTOMERS);
   const [[before]] = await pool.query('SELECT * FROM cs1_customers WHERE id = ?', [id]);
   if (before && before.source === 'api' && !before.removed_at) {
-    flash(req, 'error', `${before.identifier} comes from CallSwitch One, so it cannot be deleted here. It is marked Removed when CallSwitch One no longer lists it.`);
+    flash(req, 'error', `${realName(before.name, before.identifier) || before.identifier} comes from CallSwitch One, so it cannot be deleted here. It is marked Removed when CallSwitch One no longer lists it.`);
     return res.redirect(back);
   }
   if (before) {

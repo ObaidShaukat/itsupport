@@ -686,7 +686,7 @@ CREATE TABLE IF NOT EXISTS gdap_settings (
 -- (cost, full precision), the charge with the margin and the per-line overrides.
 CREATE TABLE IF NOT EXISTS cs1_customers (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  identifier VARCHAR(191) NOT NULL,
+  identifier VARCHAR(191) NULL,
   name VARCHAR(200) NOT NULL,
   account_holder VARCHAR(200) NULL,
   store VARCHAR(200) NULL,
@@ -698,6 +698,9 @@ CREATE TABLE IF NOT EXISTS cs1_customers (
   source VARCHAR(10) NOT NULL DEFAULT 'manual',
   synced_at DATETIME NULL,
   removed_at DATETIME NULL,
+  uuid VARCHAR(64) NULL,
+  account_id VARCHAR(64) NULL,
+  id_alerted_at DATETIME NULL,
   client_id INT UNSIGNED NULL,
   created_by INT UNSIGNED NULL,
   updated_by INT UNSIGNED NULL,
@@ -705,6 +708,7 @@ CREATE TABLE IF NOT EXISTS cs1_customers (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_cs1_customers_identifier (identifier),
+  KEY idx_cs1_customers_uuid (uuid),
   CONSTRAINT fk_cs1_customers_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -720,6 +724,8 @@ CREATE TABLE IF NOT EXISTS cs1_sync_log (
   added INT UNSIGNED NULL,
   updated INT UNSIGNED NULL,
   removed INT UNSIGNED NULL,
+  source VARCHAR(20) NULL,
+  probe VARCHAR(500) NULL,
   endpoint VARCHAR(500) NULL,
   http_status SMALLINT UNSIGNED NULL,
   records INT UNSIGNED NULL,

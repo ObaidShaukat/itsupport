@@ -59,6 +59,11 @@ const ADDED_COLUMNS = [
   ['cs1_sync_log', 'records', 'INT UNSIGNED NULL AFTER http_status'],
   ['cs1_sync_log', 'sample_ids', 'VARCHAR(1000) NULL AFTER fields'],
   ['cs1_sync_log', 'rematched', 'INT UNSIGNED NULL AFTER sample_ids'],
+  ['cs1_customers', 'uuid', 'VARCHAR(64) NULL AFTER removed_at'],
+  ['cs1_customers', 'account_id', 'VARCHAR(64) NULL AFTER uuid'],
+  ['cs1_customers', 'id_alerted_at', 'DATETIME NULL AFTER account_id'],
+  ['cs1_sync_log', 'source', 'VARCHAR(20) NULL AFTER removed'],
+  ['cs1_sync_log', 'probe', 'VARCHAR(500) NULL AFTER source'],
 ];
 
 // The old inventory (people, assets, stock, access, shared accounts, offboarding, custom
@@ -143,6 +148,13 @@ const ONE_TIME_STEPS = [
     for (const row of ids) await conn.query('UPDATE cs1_lines SET customer_key = ? WHERE identifier = ?', [normaliseId(row.identifier) || null, row.identifier]);
     const [[idx]] = await conn.query("SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs1_lines' AND INDEX_NAME = 'idx_cs1_lines_customer_key'");
     if (!Number(idx.n)) await conn.query('ALTER TABLE cs1_lines ADD KEY idx_cs1_lines_customer_key (customer_key)');
+  }],
+  // Call Switch One: synced customers can wait for their CS1 ID (identifier NULL = "Needs
+  // CS1 ID"), found by uuid.
+  ['cs1_uuid_v1', async (conn) => {
+    await conn.query('ALTER TABLE cs1_customers MODIFY identifier VARCHAR(191) NULL');
+    const [[idx]] = await conn.query("SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cs1_customers' AND INDEX_NAME = 'idx_cs1_customers_uuid'");
+    if (!Number(idx.n)) await conn.query('ALTER TABLE cs1_customers ADD KEY idx_cs1_customers_uuid (uuid)');
   }],
 ];
 

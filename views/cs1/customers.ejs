@@ -49,9 +49,26 @@
         <datalist id="cs1-unknown-ids"><% for (const u of unknown) { %><option value="<%= u.identifier %>"></option><% } %></datalist>
       </div>
     </details>
+    <details class="edit edit-right">
+      <summary class="btn btn-small btn-ghost"><%- icon('upload') %><span>Import CS1 IDs</span></summary>
+      <div class="edit-panel">
+        <form method="post" action="/call-switch-one/customers/import" enctype="multipart/form-data" class="form">
+          <%- csrfField %>
+          <label class="field">
+            <span>CS1 dashboard Customers export</span>
+            <input type="file" name="file" accept=".xlsx,.csv" required>
+            <small class="muted">An .xlsx or .csv with the ID column (CS1-512319) and Company and / or Email. Each row is matched to a synced customer and its CS1 ID saved. The file is not kept.</small>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary"><%- icon('upload') %><span>Import</span></button>
+            <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </details>
     <form method="post" action="/call-switch-one/customers/sync" class="inline">
       <%- csrfField %>
-      <button type="submit" class="btn btn-small btn-primary" <%= api.configured ? '' : 'disabled' %> title="<%= api.configured ? 'Read the customer list from CallSwitch One now' : api.message %>"><%- icon('refresh') %><span>Sync now</span></button>
+      <button type="submit" class="btn btn-small btn-primary" <%= api.configured ? '' : 'disabled' %> title="<%= api.configured ? 'Read the customer list from CallSwitch One now (at most once every 5 minutes)' : api.message %>"><%- icon('refresh') %><span>Sync now</span></button>
     </form>
   </div>
 </header>
@@ -67,12 +84,14 @@
     <% } else if (last.status === 'running') { %>
       <%- icon('refresh') %><span><strong>Sync running</strong> since <%= fmtTime(last.started_at) %>…</span>
     <% } else { %>
-      <%- icon('check') %><span><strong>Last sync</strong> <%= fmtDate(last.finished_at || last.started_at) %><%= last.trigger_type === 'schedule' ? ' (daily)' : last.user_name ? ` (${last.user_name})` : '' %>: <%= last.total %> customers from CallSwitch One, <%= last.added %> added, <%= last.updated %> updated, <%= last.removed %> marked removed<%= last.rematched ? `, ${last.rematched} billing line${last.rematched === 1 ? '' : 's'} re-matched` : '' %>. <span class="muted">Syncs daily at 06:30.</span></span>
+      <%- icon('check') %><span><strong>Last sync</strong> <%= fmtDate(last.finished_at || last.started_at) %><%= last.trigger_type === 'schedule' ? ' (daily)' : last.user_name ? ` (${last.user_name})` : '' %>: <%= last.total %> customers from CallSwitch One, <%= last.added %> added, <%= last.updated %> updated, <%= last.removed %> marked removed<%= last.source ? ` (from the ${last.source === 'service' ? 'dashboard list' : 'API, CS1 IDs by uuid'})` : '' %><%= last.rematched ? `, ${last.rematched} billing line${last.rematched === 1 ? '' : 's'} re-matched` : '' %>. <span class="muted">Syncs daily at 06:30.</span></span>
     <% } %>
     <% if (last.endpoint || last.fields) { %>
       <details class="cs1-fields">
         <summary>Details of the last sync</summary>
         <dl class="cs1-sync-details">
+          <% if (last.probe) { %><dt>Dashboard list</dt><dd><code><%= last.probe %></code></dd><% } %>
+          <% if (last.source) { %><dt>Used</dt><dd><%= last.source === 'service' ? 'Dashboard list (customer_id)' : 'Official API (CS1 IDs linked by uuid)' %></dd><% } %>
           <dt>Endpoint</dt><dd><code>GET <%= last.endpoint || '—' %></code></dd>
           <dt>HTTP status</dt><dd><%= last.http_status || '—' %></dd>
           <dt>Records</dt><dd><%= last.records === null || last.records === undefined ? '—' : last.records %></dd>
@@ -103,7 +122,7 @@
     </select>
     <button type="submit" class="btn btn-small">Search</button>
     <% if (filtered) { %><a href="<%= qs({ q: '', status: '', store: '' }) %>" class="btn btn-small btn-ghost">Clear</a><% } %>
-    <span class="muted small cs1-count"><%= customers.length %><%= filtered ? ` of ${total}` : '' %> customer<%= customers.length === 1 ? '' : 's' %><% if (unnamed) { %> · <span class="cs1-unknown-note"><%- icon('flag') %> <%= unnamed %> without a company</span><% } %></span>
+    <span class="muted small cs1-count"><%= customers.length %><%= filtered ? ` of ${total}` : '' %> customer<%= customers.length === 1 ? '' : 's' %><% if (unnamed) { %> · <span class="cs1-unknown-note"><%- icon('flag') %> <%= unnamed %> without a company</span><% } %><% if (needsId) { %> · <a href="<%= qs({ status: 'Needs CS1 ID' }) %>" class="cs1-unknown-note"><%- icon('flag') %> <%= needsId %> need a CS1 ID</a><% } %></span>
   </form>
   <div class="table-wrap">
     <table class="table cs1-customers">
@@ -117,22 +136,25 @@
           <tr class="<%= c.removed_at ? 'is-removed' : '' %> <%= c.company ? '' : 'is-unknown' %>">
             <td><%= regDate(c.registered_on) || '—' %></td>
             <td><span class="status-pill is-<%= c.tone %>"><%= c.statusText %></span></td>
-            <td title="<%= c.company || `Unknown (${c.identifier})` %>"><% if (c.company) { %><strong><%= c.company %></strong><% } else { %><span class="cs1-unknown-note"><%- icon('flag') %> Unknown (<%= c.identifier %>)</span><% } %></td>
+            <td title="<%= c.company || `Unknown (${c.identifier || 'no CS1 ID'})` %>"><% if (c.company) { %><strong><%= c.company %></strong><% } else { %><span class="cs1-unknown-note"><%- icon('flag') %> Unknown (<%= c.identifier || 'no CS1 ID' %>)</span><% } %></td>
             <td><%= c.account_holder || '' %></td>
             <td><%= c.store || '' %></td>
-            <td><code><%= c.identifier %></code></td>
+            <td><% if (c.identifier) { %><code><%= c.identifier %></code><% } else { %><span class="cs1-unknown-note" title="Add it with Import CS1 IDs or Edit"><%- icon('flag') %> Needs CS1 ID</span><% } %></td>
             <td><% if (c.email) { %><a href="mailto:<%= c.email %>"><%= c.email %></a><% } %></td>
             <td class="num"><%= c.users_count === null ? '' : c.users_count %></td>
             <td class="num"><%= c.numbers_count === null ? '' : c.numbers_count %></td>
             <td><% if (c.client_id) { %><a href="/clients/<%= c.client_id %>"><%= c.client_name %></a><% } else { %><span class="muted">—</span><% } %></td>
             <td class="cs1-row-actions">
               <details class="edit edit-right">
-                <summary class="icon-btn" title="Edit" aria-label="Edit <%= c.identifier %>"><%- icon('edit') %></summary>
+                <summary class="icon-btn" title="Edit" aria-label="Edit <%= c.company || c.identifier || 'customer' %>"><%- icon('edit') %></summary>
                 <div class="edit-panel">
                   <form method="post" action="/call-switch-one/customers/<%= c.id %>" class="form">
                     <%- csrfField %>
                     <input type="hidden" name="back" value="<%= qs({}) %>">
-                    <% if (synced) { %>
+                    <% if (synced && !c.identifier) { %>
+                      <p class="muted small"><strong><%= c.company || 'This customer' %></strong> is synced from CallSwitch One but has no CS1 ID yet (the API does not return it).</p>
+                      <label class="field"><span>CS1 ID</span><input type="text" name="identifier" value="" placeholder="CS1-123456" maxlength="40" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
+                    <% } else if (synced) { %>
                       <p class="muted small"><strong><%= c.identifier %></strong> is synced from CallSwitch One<%= c.synced_at ? ` (last ${fmtShort(c.synced_at)})` : '' %>: change its details there.</p>
                     <% } else { %>
                       <label class="field"><span>CS1 ID</span><input type="text" name="identifier" value="<%= c.identifier %>" required maxlength="191" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
@@ -154,7 +176,7 @@
                 </div>
               </details>
               <% if (!synced || c.removed_at) { %>
-                <%- include('../partials/delete', { action: `/call-switch-one/customers/${c.id}/delete`, confirm: `Delete ${c.company || c.identifier}? Months already sent keep the name they used.`, label: `Delete ${c.identifier}` }) %>
+                <%- include('../partials/delete', { action: `/call-switch-one/customers/${c.id}/delete`, confirm: `Delete ${c.company || c.identifier || 'this customer'}? Months already sent keep the name they used.`, label: `Delete ${c.company || c.identifier || 'customer'}` }) %>
               <% } %>
             </td>
           </tr>
