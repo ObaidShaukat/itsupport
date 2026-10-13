@@ -2659,12 +2659,11 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 
 /* ==== Call Switch One billing ==== */
 .cs1-tabs { margin-bottom: var(--sp-4); overflow-y: hidden; }
-.cs1-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
+.cs1-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); margin-bottom: var(--sp-4); }
 .cs1-card { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--border); border-left: 4px solid var(--c, var(--indigo)); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); min-width: 0; }
 .cs1-card-value { font-family: var(--font-head); font-size: 1.45rem; font-weight: 700; line-height: 1.15; color: var(--c, var(--indigo)); font-variant-numeric: tabular-nums; }
 .cs1-card-label { font-size: var(--fs-table); color: var(--text); font-weight: 600; }
 .cs1-card .small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cs1-card-included { --c: var(--green); }
 .cs1-card-excluded { --c: var(--grey); }
 .cs1-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-2); margin-bottom: var(--sp-3); }
 .cs1-toolbar-right { display: flex; align-items: center; gap: var(--sp-2); margin-left: auto; }
@@ -2698,7 +2697,6 @@ details.brands-cat[open] > .bd-cat-head { border-bottom: 1px solid var(--border)
 .cs1-preview-table th, .cs1-preview-table td { padding: 4px 10px; border: 1px solid #D9D9D9; background: #FFFFFF; }
 .cs1-preview-table th { background: #F2F2F2; text-align: left; }
 .cs1-preview-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.cs1-preview-total td { font-weight: 700; }
 .cs1-danger { display: flex; justify-content: flex-end; padding: 10px 14px; }
 .cs1-history .cs1-history-actions { width: 112px; text-align: right; white-space: nowrap; }
 .cs1-history-actions .icon-btn { width: 30px; height: 30px; }

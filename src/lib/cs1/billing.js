@@ -105,25 +105,22 @@ async function reviewLines(db, run) {
   };
 }
 
-// ---- Excel (Customer, Identifier, Cost, Charge) ----
+// ---- Excel (Customer name, CS1 ID, Cost, Charge ex VAT; one row per customer, no total row) ----
 
 async function excelBuffer(run, lines) {
   const book = new ExcelJS.Workbook();
   book.creator = 'Cleartwo IT Support';
   const sheet = book.addWorksheet(`Call charges ${monthLabel(run.billing_month)}`.slice(0, 31));
   sheet.columns = [
-    { header: 'Customer', key: 'customer', width: 36 },
-    { header: 'Identifier', key: 'identifier', width: 22 },
+    { header: 'Customer name', key: 'customer', width: 36 },
+    { header: 'CS1 ID', key: 'identifier', width: 22 },
     { header: 'Cost', key: 'cost', width: 14, style: { numFmt: '£#,##0.0000' } },
-    { header: `Charge (+${Number(run.margin)}%)`, key: 'charge', width: 16, style: { numFmt: '£#,##0.00' } },
+    { header: 'Charge ex VAT', key: 'charge', width: 16, style: { numFmt: '£#,##0.00' } },
   ];
   sheet.getRow(1).font = { bold: true };
-  const included = lines.filter((l) => l.included);
-  for (const l of included) sheet.addRow({ customer: l.name || l.identifier, identifier: l.identifier, cost: Number(l.cost), charge: Number(money(l.effective)) });
-  const totalRow = sheet.addRow({
-    customer: 'Total', cost: Number(unitsToDecimal(included.reduce((n, l) => n + l.costUnits, 0n))), charge: Number(money(included.reduce((n, l) => n + l.effective, 0n))),
-  });
-  totalRow.font = { bold: true };
+  for (const l of lines.filter((x) => x.included)) {
+    sheet.addRow({ customer: l.name || l.identifier, identifier: l.identifier, cost: Number(l.cost), charge: Number(money(l.effective)) });
+  }
   sheet.views = [{ state: 'frozen', ySplit: 1 }];
   return Buffer.from(await book.xlsx.writeBuffer());
 }
@@ -134,7 +131,8 @@ const escapeHtml = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').repl
 const defaultSubject = (run) => `CallSwitch One call charges: ${monthLabel(run.billing_month)}`;
 const defaultIntro = (run) => `Hi,\n\nBelow are the CallSwitch One call charges for ${monthLabel(run.billing_month)}, with the ${Number(run.margin)}% margin added. All prices are ex VAT.`;
 
-// HTML and text of the email: the intro (as typed, escaped), the table, the signature.
+// HTML and text of the email: the intro (as typed, escaped), the table (Customer name | CS1 ID |
+// Charge ex VAT, one row per customer, no total row), the signature. total is only stored on the run.
 function emailBody({ intro, lines, signatureHtml, signatureText }) {
   const font = "font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #000000;";
   const included = lines.filter((l) => l.included);
@@ -142,15 +140,16 @@ function emailBody({ intro, lines, signatureHtml, signatureText }) {
   const paras = String(intro || '').replace(/\r/g, '').split(/\n{2,}/).map((p) => `<p style="${font} margin: 0 0 11pt;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('');
   const cell = 'padding: 4px 10px; border: 1px solid #D9D9D9;';
   const table = `<table cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 14pt; ${font}">
-<tr><th align="left" style="${font} ${cell} background: #F2F2F2;">Customer</th><th align="right" style="${font} ${cell} background: #F2F2F2;">Charge ex VAT</th></tr>
-${included.map((l) => `<tr><td style="${font} ${cell}">${escapeHtml(l.name || l.identifier)}</td><td align="right" style="${font} ${cell}">${pounds(l.effective)}</td></tr>`).join('\n')}
-<tr><td style="${font} ${cell} font-weight: bold;">Total</td><td align="right" style="${font} ${cell} font-weight: bold;">${pounds(total)}</td></tr>
+<tr><th align="left" style="${font} ${cell} background: #F2F2F2;">Customer name</th><th align="left" style="${font} ${cell} background: #F2F2F2;">CS1 ID</th><th align="right" style="${font} ${cell} background: #F2F2F2;">Charge ex VAT</th></tr>
+${included.map((l) => `<tr><td style="${font} ${cell}">${escapeHtml(l.name || l.identifier)}</td><td style="${font} ${cell}">${escapeHtml(l.identifier)}</td><td align="right" style="${font} ${cell}">${pounds(l.effective)}</td></tr>`).join('\n')}
 </table>`;
   const html = `<!doctype html><html><body style="${font}">${paras}${table}${signatureHtml ? `<div>${signatureHtml}</div>` : ''}</body></html>`;
-  const width = Math.max(8, ...included.map((l) => String(l.name || l.identifier).length));
+  const width = Math.max(13, ...included.map((l) => String(l.name || l.identifier).length));
+  const idWidth = Math.max(6, ...included.map((l) => String(l.identifier).length));
   const text = [String(intro || '').replace(/\r/g, ''), '',
-    ...included.map((l) => `${String(l.name || l.identifier).padEnd(width)}  ${pounds(l.effective)}`),
-    `${'Total'.padEnd(width)}  ${pounds(total)}`, '', signatureText || ''].join('\n').trim();
+    `${'Customer name'.padEnd(width)}  ${'CS1 ID'.padEnd(idWidth)}  Charge ex VAT`,
+    ...included.map((l) => `${String(l.name || l.identifier).padEnd(width)}  ${String(l.identifier).padEnd(idWidth)}  ${pounds(l.effective)}`),
+    '', signatureText || ''].join('\n').trim();
   return { html, text, total };
 }
 

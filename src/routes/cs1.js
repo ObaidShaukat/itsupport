@@ -218,7 +218,7 @@ router.post('/billing/runs/:id/send', async (req, res) => {
     await saveSetting(conn, `copy:${req.user.id}`, copy ? '1' : '0');
     await logCs1(conn, req.user, {
       id: run.id, action: 'sent',
-      summary: `Sent the Call Switch One call charges for ${monthLabel(run.billing_month)} (${pounds(body.total)}, ${lines.filter((l) => l.included).length} customers) to ${toList.emails.join(', ')}${cc.length ? ` (CC ${cc.join(', ')})` : ''}${bcc.length ? ', with a copy to you' : ''}`,
+      summary: `Sent the Call Switch One call charges for ${monthLabel(run.billing_month)} (${lines.filter((l) => l.included).length} customers) to ${toList.emails.join(', ')}${cc.length ? ` (CC ${cc.join(', ')})` : ''}${bcc.length ? ', with a copy to you' : ''}`,
     });
   });
   flash(req, 'saved', `Sent to ${toList.emails.join(', ')}.`);

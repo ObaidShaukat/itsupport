@@ -5,7 +5,6 @@
 <div class="cs1-cards">
   <div class="cs1-card"><span class="cs1-card-value"><%= pounds(penniesOf(run.raw_total)) %></span><span class="cs1-card-label" title="Every Salesprice in the file: compare with the Cost on the CallSwitch dashboard">Raw total (all Salesprice)</span><span class="muted small">£<%= unitsToDecimal(totals.rawUnits) %></span></div>
   <div class="cs1-card"><span class="cs1-card-value"><%= totals.lines %></span><span class="cs1-card-label">Customer identifiers</span><span class="muted small"><%= run.ignored_rows ? `${run.ignored_rows} blank-identifier lines ignored (${pounds(penniesOf(run.ignored_total))})` : 'no blank identifiers' %></span></div>
-  <div class="cs1-card cs1-card-included"><span class="cs1-card-value"><%= pounds(totals.includedPennies) %></span><span class="cs1-card-label">Included total (with margin)</span><span class="muted small"><%= totals.included %> customers · cost £<%= unitsToDecimal(totals.includedCostUnits).replace(/(\.\d{2})\d+$/, '$1') %></span></div>
   <div class="cs1-card cs1-card-excluded"><span class="cs1-card-value"><%= totals.excluded %></span><span class="cs1-card-label">Excluded</span><span class="muted small">under £<%= run.minimum %> or left out by hand</span></div>
 </div>
 
@@ -24,7 +23,7 @@
   </div>
   <div class="table-wrap">
     <table class="table cs1-table">
-      <thead><tr><th>Customer name</th><th class="w-15">Identifier</th><th class="num cs1-money">Cost (sum)</th><th class="num cs1-money">Charge (+<%= Number(run.margin) %>%)</th><th class="cs1-incl">Included</th></tr></thead>
+      <thead><tr><th>Customer name</th><th class="w-15">CS1 ID</th><th class="num cs1-money">Cost (sum)</th><th class="num cs1-money" title="Cost + <%= Number(run.margin) %>% margin">Charge ex VAT</th><th class="cs1-incl">Included</th></tr></thead>
       <tbody>
         <% for (const l of shown) { %>
           <tr class="<%= l.included ? '' : 'is-excluded' %> <%= l.known ? '' : 'is-unknown' %>">
@@ -79,10 +78,6 @@
         <% } %>
         <% if (!shown.length) { %><tr><td colspan="5" class="empty">No customers are included<%= showExcluded ? '' : ': show the excluded ones to include some by hand' %>.</td></tr><% } %>
       </tbody>
-      <tfoot>
-        <tr><td colspan="2"><strong>Included total</strong> <span class="muted small">(<%= totals.included %> customers)</span></td><td class="num">£<%= unitsToDecimal(totals.includedCostUnits).replace(/(\.\d{4})\d+$/, '$1') %></td><td class="num"><strong><%= pounds(totals.includedPennies) %></strong></td><td></td></tr>
-        <tr class="muted"><td colspan="2">Raw total (all Salesprice in the file)</td><td class="num">£<%= unitsToDecimal(totals.rawUnits).replace(/(\.\d{4})\d+$/, '$1') %></td><td></td><td></td></tr>
-      </tfoot>
     </table>
   </div>
 </section>
@@ -97,7 +92,7 @@
   <% } else if (!email.sender) { %>
     <div class="flash flash-error" role="alert">Your username is not an email address, so the email cannot be sent from you.</div>
   <% } %>
-  <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/send" class="form cs1-send" data-confirm="Send the <%= month %> call charges (<%= pounds(totals.includedPennies) %>, <%= totals.included %> customers) now?" data-confirm-ok="Send">
+  <form method="post" action="/call-switch-one/billing/runs/<%= run.id %>/send" class="form cs1-send" data-confirm="Send the <%= month %> call charges (<%= totals.included %> customers) now?" data-confirm-ok="Send">
     <%- csrfField %>
     <div class="form-row">
       <label class="field"><span>To</span><input type="text" name="to_emails" value="<%= email.to %>" required placeholder="accounts@cleartwo.co.uk" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
@@ -111,10 +106,9 @@
     </label>
     <div class="cs1-preview" aria-label="Preview of the table">
       <table class="cs1-preview-table">
-        <thead><tr><th>Customer</th><th class="num">Charge ex VAT</th></tr></thead>
+        <thead><tr><th>Customer name</th><th>CS1 ID</th><th class="num">Charge ex VAT</th></tr></thead>
         <tbody>
-          <% for (const l of lines.filter((x) => x.included)) { %><tr><td><%= l.name || l.identifier %></td><td class="num"><%= pounds(l.effective) %></td></tr><% } %>
-          <tr class="cs1-preview-total"><td>Total</td><td class="num"><%= pounds(totals.includedPennies) %></td></tr>
+          <% for (const l of lines.filter((x) => x.included)) { %><tr><td><%= l.name || l.identifier %></td><td><%= l.identifier %></td><td class="num"><%= pounds(l.effective) %></td></tr><% } %>
         </tbody>
       </table>
     </div>
