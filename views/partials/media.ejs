@@ -1,6 +1,7 @@
 <%
   // items: rows with kind, file_name, original_name, size_bytes, uploaded_by, created_at
-  // (tutorials also have title and description). mode: 'tutorial' | 'attachment' | 'view'.
+  // (tutorials also have title and description). mode: 'tutorial' | 'attachment' | 'view' |
+  // 'inline' (article page: rename + delete on hover, back = the page to return to).
   const images = items.filter((i) => i.kind === 'image');
   const videos = items.filter((i) => i.kind === 'video');
   const documents = items.filter((i) => i.kind === 'pdf' || i.kind === 'file');
@@ -15,7 +16,7 @@
           <img src="/files/<%= item.file_name %>" alt="<%= label(item) %>" loading="lazy">
         </a>
         <figcaption>
-          <%- include('media-caption', { item, mode }) %>
+          <%- include('media-caption', { item, mode, back: locals.back }) %>
         </figcaption>
       </figure>
     <% } %>
@@ -29,7 +30,7 @@
       <figure class="media-card">
         <video controls preload="metadata" src="/files/<%= item.file_name %>"></video>
         <figcaption>
-          <%- include('media-caption', { item, mode }) %>
+          <%- include('media-caption', { item, mode, back: locals.back }) %>
         </figcaption>
       </figure>
     <% } %>
@@ -43,7 +44,7 @@
       <li class="file-row">
         <span class="file-icon"><%- icon('file') %></span>
         <div class="row-main">
-          <%- include('media-caption', { item, mode }) %>
+          <%- include('media-caption', { item, mode, back: locals.back }) %>
         </div>
         <div class="file-links">
           <% if (item.kind === 'pdf') { %>

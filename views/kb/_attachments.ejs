@@ -1,0 +1,7 @@
+<%# The article's attachments, grouped (Images, Videos, Files), with rename / delete on hover.
+    Re-rendered after every upload, rename and delete on the article page. %>
+<% if (!attachments.length) { %>
+  <p class="empty small" data-kb-files-empty>No attachments yet. Drop files here, paste a screenshot (Ctrl+V) or use + Add files.</p>
+<% } else { %>
+  <%- include('../partials/media', { items: attachments, mode: 'inline', back: `/articles/${article.id}#attachments` }) %>
+<% } %>

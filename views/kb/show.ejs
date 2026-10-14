@@ -1,16 +1,40 @@
 <%- include('../partials/head') %>
+<%#
+  An article, edited in place ("Articles inline editing" in app.js): the title (click; Enter
+  saves, Esc cancels), the category (click the badge), the Issue and Solution cards (click the
+  text or the pencil: Markdown editor with Save / Cancel, Ctrl+Enter / Esc) and the attachments
+  (+ Add files, drop on the card, paste screenshots; rename / delete on hover). Each change is
+  saved on its own (POST /articles/:id/field, /attachments) and refreshes "Last updated",
+  History and Attachments. Without JavaScript the Edit page does all of it.
+%>
+<div class="kb-page" data-kb-page="<%= article.id %>">
 <header class="page-head">
-  <div>
-    <p class="crumbs"><a href="/articles">Articles</a> / <a href="/articles?category=<%= encodeURIComponent(article.category) %>"><%= article.category %></a></p>
-    <h1><%= article.title %></h1>
+  <div class="kb-head">
+    <p class="crumbs"><a href="/articles">Articles</a> / <a href="/articles?category=<%= encodeURIComponent(article.category) %>" data-kb-crumb><%= article.category %></a></p>
+    <div class="kb-title-wrap">
+      <h1 class="kb-title" data-kb-title tabindex="0" title="Click to edit the title"><%= article.title %></h1>
+      <input type="text" class="kb-title-input" data-kb-title-input value="<%= article.title %>" maxlength="255" aria-label="Title" autocomplete="off" data-1p-ignore data-lpignore="true" hidden>
+    </div>
+    <p class="field-error small" data-kb-title-error role="alert" hidden></p>
     <div class="kb-meta">
-      <span class="chip chip-category"><%= article.category %></span>
+      <div class="kb-category" data-kb-category>
+        <button type="button" class="chip chip-category kb-category-btn" data-kb-category-btn aria-haspopup="true" aria-expanded="false" title="Change the category"><span data-kb-category-name><%= article.category %></span><span class="kb-caret" aria-hidden="true">▾</span></button>
+        <div class="kb-category-menu card" data-kb-category-menu hidden>
+          <ul class="kb-category-list" role="listbox" aria-label="Categories" data-kb-category-list>
+            <% for (const c of categories) { %><li><button type="button" role="option" data-kb-category-pick="<%= c %>" aria-selected="<%= c === article.category ? 'true' : 'false' %>" class="<%= c === article.category ? 'is-current' : '' %>"><%= c %></button></li><% } %>
+          </ul>
+          <form class="kb-category-new" data-kb-category-new>
+            <input type="text" maxlength="100" placeholder="New category" aria-label="New category" autocomplete="off" data-1p-ignore data-lpignore="true">
+            <button type="submit" class="btn btn-small btn-primary">Use</button>
+          </form>
+        </div>
+      </div>
       <% for (const t of tags) { %><span class="chip"><%- icon('tag') %><%= t %></span><% } %>
     </div>
-    <%- include('../partials/record-meta', { meta }) %>
+    <div data-kb-meta><%- include('../partials/record-meta', { meta }) %></div>
   </div>
   <div class="actions">
-    <a href="/articles/<%= article.id %>/edit" class="btn"><%- icon('edit') %><span>Edit</span></a>
+    <a href="/articles/<%= article.id %>/edit" class="btn"><%- icon('edit') %><span>Edit page</span></a>
     <%- include('../partials/delete', {
       action: `/articles/${article.id}/delete`,
       confirm: `Delete "${article.title}" and its attachments?`,
@@ -21,27 +45,54 @@
 
 <div class="grid-2 grid-wide-left">
   <div>
-    <section class="card">
-      <h2>Issue</h2>
-      <% if (issueHtml) { %><div class="prose"><%- issueHtml %></div><% } else { %><p class="empty">No issue description.</p><% } %>
-    </section>
-    <section class="card card-solution">
-      <h2>Solution</h2>
-      <% if (solutionHtml) { %><div class="prose"><%- solutionHtml %></div><% } else { %><p class="empty">No solution written yet.</p><% } %>
-    </section>
+    <% for (const [field, heading, html, raw, placeholder, cardClass] of [
+      ['issue', 'Issue', issueHtml, article.issue, 'Click to add the issue', ''],
+      ['solution', 'Solution', solutionHtml, article.solution, 'Click to add the solution', 'card-solution'],
+    ]) { %>
+      <section class="card kb-section <%= cardClass %>" data-kb-section="<%= field %>">
+        <div class="kb-section-head">
+          <h2><%= heading %></h2>
+          <button type="button" class="icon-btn kb-pencil" data-kb-edit title="Edit the <%= heading.toLowerCase() %>" aria-label="Edit the <%= heading.toLowerCase() %>"><%- icon('pen') %></button>
+        </div>
+        <div class="kb-view" data-kb-view title="Click to edit">
+          <% if (html) { %><div class="prose"><%- html %></div><% } else { %><p class="empty kb-placeholder"><%= placeholder %></p><% } %>
+        </div>
+        <form class="kb-editor" data-kb-editor hidden>
+          <div class="md-toolbar" role="toolbar" aria-label="Formatting">
+            <button type="button" data-md="bold" title="Bold (Ctrl+B)"><strong>B</strong></button>
+            <button type="button" data-md="italic" title="Italic (Ctrl+I)"><em>I</em></button>
+            <button type="button" data-md="heading" title="Heading">H</button>
+            <button type="button" data-md="ul" title="Bulleted list">• List</button>
+            <button type="button" data-md="ol" title="Numbered steps">1. Steps</button>
+            <button type="button" data-md="code" title="Code">&lt;/&gt;</button>
+            <button type="button" data-md="link" title="Link">Link</button>
+          </div>
+          <textarea name="value" rows="8" maxlength="200000" data-kb-text aria-label="<%= heading %>"><%= raw || '' %></textarea>
+          <small class="muted">Markdown: <code>**bold**</code>, <code>*italic*</code>, <code>- list</code>, <code>1. steps</code>, <code>`code`</code>, <code>[link](https://…)</code>, <code>## heading</code>. Ctrl+Enter saves, Esc cancels.</small>
+          <p class="field-error small" data-kb-error role="alert" hidden></p>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+            <button type="button" class="btn btn-ghost" data-kb-cancel>Cancel</button>
+          </div>
+        </form>
+      </section>
+    <% } %>
   </div>
   <div>
-    <section class="card">
-      <h2>Attachments</h2>
-      <% if (!attachments.length) { %>
-        <p class="empty">No attachments.</p>
-      <% } else { %>
-        <%- include('../partials/media', { items: attachments, mode: 'view' }) %>
-      <% } %>
+    <section class="card kb-attachments" id="attachments" data-kb-attachments>
+      <div class="kb-section-head">
+        <h2>Attachments <span class="muted small" data-kb-file-count>(<%= attachments.length %>)</span></h2>
+        <button type="button" class="btn btn-small kb-add-files" data-kb-add-files hidden><%- icon('plus') %><span>Add files</span></button>
+        <input type="file" multiple data-kb-file-input hidden>
+      </div>
+      <ul class="kb-uploads" data-kb-uploads></ul>
+      <div data-kb-files><%- include('_attachments', { article, attachments }) %></div>
+      <div class="kb-drop-hint" aria-hidden="true"><%- icon('upload') %><span>Drop files to attach</span></div>
     </section>
-    <section class="card">
+    <section class="card" data-kb-history>
       <%- include('../partials/history', { entries: activity.slice().reverse() }) %>
     </section>
   </div>
+</div>
 </div>
 <%- include('../partials/foot') %>

@@ -29,7 +29,8 @@ if (confirmDialog) {
       const form = pendingForm;
       pendingForm = null;
       confirmDialog.close();
-      form.submit(); // submit() does not fire the submit event again.
+      // A page can take over the confirmed submit (e.g. delete with fetch) by cancelling this event.
+      if (form.dispatchEvent(new CustomEvent('confirmed-submit', { bubbles: true, cancelable: true }))) form.submit(); // submit() does not fire the submit event again.
     } else if (event.target === confirmDialog || event.target.closest('[data-confirm-cancel]')) {
       confirmDialog.close();
     }
@@ -3153,4 +3154,412 @@ document.querySelectorAll('form[data-cs1-upload]').forEach((form) => {
   document.querySelectorAll('[data-cs1-refresh-open]').forEach((link) => link.addEventListener('click', show));
   document.querySelectorAll('[data-cs1-refresh-panel]').forEach((link) => link.addEventListener('click', (e) => { e.preventDefault(); show(); }));
   if (window.location.hash === '#refresh') show();
+})();
+
+// ---- Markdown toolbars ([data-md] buttons in a .md-toolbar) ----
+// Act on the textarea after the toolbar (inline editors) or the one named by data-md-target
+// (the Edit page). Bold / italic / code wrap the selection; heading / lists prefix the lines.
+function mdApply(area, kind) {
+  const { selectionStart: start, selectionEnd: end, value } = area;
+  const picked = value.slice(start, end);
+  const wrap = (before, after, empty) => {
+    const text = picked || empty;
+    area.setRangeText(`${before}${text}${after}`, start, end, 'end');
+    if (!picked) area.setSelectionRange(start + before.length, start + before.length + text.length);
+  };
+  const lines = (fn) => {
+    const from = value.lastIndexOf('\n', start - 1) + 1;
+    const toNl = value.indexOf('\n', end);
+    const to = toNl === -1 ? value.length : toNl;
+    const block = value.slice(from, to).split('\n').map(fn).join('\n');
+    area.setRangeText(block, from, to, 'end');
+  };
+  if (kind === 'bold') wrap('**', '**', 'bold text');
+  else if (kind === 'italic') wrap('*', '*', 'italic text');
+  else if (kind === 'code') wrap(picked.includes('\n') ? '```\n' : '`', picked.includes('\n') ? '\n```' : '`', 'code');
+  else if (kind === 'link') {
+    const text = picked || 'link text';
+    area.setRangeText(`[${text}](https://)`, start, end, 'end');
+    const urlAt = start + text.length + 3;
+    area.setSelectionRange(urlAt, urlAt + 8);
+  } else if (kind === 'heading') lines((l) => (l.startsWith('## ') ? l.slice(3) : `## ${l.replace(/^#+\s*/, '')}`));
+  else if (kind === 'ul') lines((l) => (/^\s*[-*] /.test(l) ? l.replace(/^(\s*)[-*] /, '$1') : `- ${l}`));
+  else if (kind === 'ol') { let n = 0; lines((l) => (/^\s*\d+\. /.test(l) ? l.replace(/^(\s*)\d+\. /, '$1') : `${(n += 1)}. ${l}`)); }
+  area.focus();
+  area.dispatchEvent(new Event('input', { bubbles: true }));
+}
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.md-toolbar [data-md]');
+  if (!btn) return;
+  const bar = btn.closest('.md-toolbar');
+  const area = bar.dataset.mdTarget ? bar.closest('form')?.querySelector(`textarea[name="${bar.dataset.mdTarget}"]`) : bar.parentElement.querySelector('textarea');
+  if (area) mdApply(area, btn.dataset.md);
+});
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || !e.target.matches?.('textarea')) return;
+  const hasBar = e.target.closest('.kb-editor') || e.target.form?.querySelector(`.md-toolbar[data-md-target="${e.target.name}"]`);
+  if (!hasBar) return;
+  if (e.key === 'b' || e.key === 'B') { e.preventDefault(); mdApply(e.target, 'bold'); }
+  if (e.key === 'i' || e.key === 'I') { e.preventDefault(); mdApply(e.target, 'italic'); }
+});
+
+// ---- Articles inline editing (article page, [data-kb-page]) ----
+// Title, category, Issue / Solution and attachments are changed in place and saved one at a
+// time (fetch, JSON). Only one text editor is open at a time; leaving the page or opening
+// another one with unsaved changes asks first. Each reply carries the new "Last updated",
+// History and Attachments, swapped in straight away.
+(() => {
+  const page = document.querySelector('[data-kb-page]');
+  if (!page) return;
+  const articleId = page.dataset.kbPage;
+  const base = `/articles/${articleId}`;
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const MAX_FILE = 500 * 1024 * 1024;
+  page.classList.add('kb-inline-on');
+  page.querySelectorAll('[data-kb-add-files]').forEach((b) => { b.hidden = false; });
+
+  const toast = (message, kind = 'saved') => {
+    const box = document.querySelector('[data-toasts]');
+    if (!box) return;
+    const el = document.createElement('div');
+    el.className = `toast toast-${kind}`;
+    el.setAttribute('role', 'status');
+    el.innerHTML = `<span class="toast-icon">${kind === 'saved' ? '✓' : '!'}</span>`;
+    const text = document.createElement('span');
+    text.textContent = message;
+    el.appendChild(text);
+    box.appendChild(el);
+    setTimeout(() => { el.classList.add('is-leaving'); setTimeout(() => el.remove(), 300); }, kind === 'saved' ? 2500 : 6000);
+  };
+
+  async function send(url, data) {
+    const body = data instanceof FormData ? data : new URLSearchParams(data);
+    body.set('_csrf', csrfToken);
+    try {
+      const res = await fetch(url, { method: 'POST', body, headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const json = await res.json().catch(() => null);
+      if (!json) return { ok: false, error: res.status === 403 ? 'Your session expired. Reload the page and try again.' : 'That could not be saved. Reload the page and try again.' };
+      return json;
+    } catch {
+      return { ok: false, error: 'No connection. Your change was not saved.' };
+    }
+  }
+
+  // Swap in the refreshed parts of the page.
+  function applyParts(j) {
+    if (j.metaHtml !== undefined) page.querySelector('[data-kb-meta]').innerHTML = j.metaHtml;
+    if (j.historyHtml !== undefined) {
+      const box = page.querySelector('[data-kb-history]');
+      const wasOpen = box.querySelector('details')?.open;
+      box.innerHTML = j.historyHtml;
+      if (wasOpen) box.querySelector('details').open = true;
+    }
+    if (j.attachmentsHtml !== undefined) {
+      page.querySelector('[data-kb-files]').innerHTML = j.attachmentsHtml;
+      page.querySelector('[data-kb-file-count]').textContent = `(${j.attachmentCount})`;
+    }
+    if (j.title) {
+      page.querySelector('[data-kb-title]').textContent = j.title;
+      document.title = document.title.replace(/^.*?( · Cleartwo IT Support)$/, `${j.title}$1`);
+    }
+    if (j.category) {
+      page.querySelector('[data-kb-category-name]').textContent = j.category;
+      const crumb = page.querySelector('[data-kb-crumb]');
+      crumb.textContent = j.category;
+      crumb.href = `/articles?category=${encodeURIComponent(j.category)}`;
+    }
+  }
+
+  // ---- The one open editor ----
+  let open = null; // { isDirty(), close() }
+  const guard = () => {
+    if (!open) return true;
+    if (open.isDirty() && !window.confirm('You have unsaved changes. Discard them?')) return false;
+    open.close();
+    return true;
+  };
+  window.addEventListener('beforeunload', (e) => {
+    if (open && open.isDirty()) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  // ---- Title ----
+  const h1 = page.querySelector('[data-kb-title]');
+  const titleInput = page.querySelector('[data-kb-title-input]');
+  const titleError = page.querySelector('[data-kb-title-error]');
+  const titleEditor = {
+    isDirty: () => titleInput.value.trim() !== h1.textContent.trim(),
+    close() {
+      titleInput.hidden = true;
+      h1.hidden = false;
+      titleError.hidden = true;
+      if (open === titleEditor) open = null;
+    },
+  };
+  function editTitle() {
+    if (open === titleEditor || !guard()) return;
+    titleInput.value = h1.textContent.trim();
+    h1.hidden = true;
+    titleInput.hidden = false;
+    titleInput.focus();
+    titleInput.select();
+    open = titleEditor;
+  }
+  async function saveTitle() {
+    const value = titleInput.value.trim();
+    if (!value) { titleError.textContent = 'Title is required.'; titleError.hidden = false; return; }
+    if (!titleEditor.isDirty()) { titleEditor.close(); return; }
+    titleInput.disabled = true;
+    const j = await send(`${base}/field`, { field: 'title', value });
+    titleInput.disabled = false;
+    if (!j.ok) { titleError.textContent = j.error; titleError.hidden = false; titleInput.focus(); return; }
+    applyParts(j);
+    titleEditor.close();
+    toast('Title saved.');
+  }
+  h1.addEventListener('click', editTitle);
+  h1.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); editTitle(); } });
+  titleInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); saveTitle(); }
+    if (e.key === 'Escape') { e.preventDefault(); titleEditor.close(); h1.focus(); }
+  });
+
+  // ---- Category ----
+  const catBox = page.querySelector('[data-kb-category]');
+  const catBtn = catBox.querySelector('[data-kb-category-btn]');
+  const catMenu = catBox.querySelector('[data-kb-category-menu]');
+  const catList = catBox.querySelector('[data-kb-category-list]');
+  const showMenu = (show) => { catMenu.hidden = !show; catBtn.setAttribute('aria-expanded', show ? 'true' : 'false'); };
+  catBtn.addEventListener('click', () => {
+    showMenu(catMenu.hidden);
+    if (!catMenu.hidden) (catList.querySelector('.is-current') || catList.querySelector('button'))?.focus();
+  });
+  document.addEventListener('click', (e) => { if (!catMenu.hidden && !catBox.contains(e.target)) showMenu(false); });
+  catBox.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !catMenu.hidden) { e.preventDefault(); showMenu(false); catBtn.focus(); }
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && e.target.matches('[data-kb-category-pick]')) {
+      e.preventDefault();
+      const items = [...catList.querySelectorAll('button')];
+      const i = items.indexOf(e.target) + (e.key === 'ArrowDown' ? 1 : -1);
+      items[Math.max(0, Math.min(items.length - 1, i))]?.focus();
+    }
+  });
+  async function setCategory(value) {
+    showMenu(false);
+    if (!value || value === catBox.querySelector('[data-kb-category-name]').textContent) return;
+    const j = await send(`${base}/field`, { field: 'category', value });
+    if (!j.ok) { toast(j.error, 'error'); return; }
+    applyParts(j);
+    catList.replaceChildren(...(j.categories || []).map((c) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'option');
+      b.dataset.kbCategoryPick = c;
+      b.textContent = c;
+      if (c === j.category) { b.classList.add('is-current'); b.setAttribute('aria-selected', 'true'); }
+      li.appendChild(b);
+      return li;
+    }));
+    toast(`Category: ${j.category}.`);
+  }
+  catList.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-kb-category-pick]');
+    if (b) setCategory(b.dataset.kbCategoryPick);
+  });
+  catBox.querySelector('[data-kb-category-new]').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = e.target.querySelector('input');
+    setCategory(input.value.trim());
+    input.value = '';
+  });
+
+  // ---- Issue / Solution ----
+  const grow = (area) => { area.style.height = 'auto'; area.style.height = `${Math.min(area.scrollHeight + 2, window.innerHeight * 0.7)}px`; };
+  page.querySelectorAll('[data-kb-section]').forEach((section) => {
+    const field = section.dataset.kbSection;
+    const view = section.querySelector('[data-kb-view]');
+    const form = section.querySelector('[data-kb-editor]');
+    const area = form.querySelector('[data-kb-text]');
+    const error = form.querySelector('[data-kb-error]');
+    let saved = area.value;
+    const editor = {
+      isDirty: () => area.value !== saved,
+      close() {
+        area.value = saved;
+        form.hidden = true;
+        view.hidden = false;
+        section.classList.remove('is-editing');
+        error.hidden = true;
+        if (open === editor) open = null;
+      },
+    };
+    function edit() {
+      if (open === editor || !guard()) return;
+      saved = area.value;
+      view.hidden = true;
+      form.hidden = false;
+      section.classList.add('is-editing');
+      grow(area);
+      area.focus();
+      open = editor;
+    }
+    section.querySelector('[data-kb-edit]').addEventListener('click', edit);
+    view.addEventListener('click', (e) => {
+      // Links, media and selected text keep working as normal.
+      if (e.target.closest('a, video, audio, button') || String(window.getSelection?.() || '').trim()) return;
+      edit();
+    });
+    area.addEventListener('input', () => grow(area));
+    async function save() {
+      const submit = form.querySelector('button[type="submit"]');
+      submit.disabled = true;
+      const j = await send(`${base}/field`, { field, value: area.value });
+      submit.disabled = false;
+      if (!j.ok) { error.textContent = j.error; error.hidden = false; return; }
+      saved = j.value || '';
+      area.value = saved;
+      view.innerHTML = j.html ? `<div class="prose">${j.html}</div>` : `<p class="empty kb-placeholder">Click to add the ${field}</p>`;
+      applyParts(j);
+      editor.close();
+      toast(j.changed ? `${field === 'issue' ? 'Issue' : 'Solution'} saved.` : 'No changes.');
+    }
+    form.addEventListener('submit', (e) => { e.preventDefault(); save(); });
+    form.querySelector('[data-kb-cancel]').addEventListener('click', () => { editor.close(); section.querySelector('[data-kb-edit]').focus(); });
+    area.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        if (!editor.isDirty() || window.confirm('Discard your changes?')) editor.close();
+      }
+    });
+  });
+
+  // ---- Attachments: + Add files, drop on the card, paste screenshots; one request per file ----
+  const card = page.querySelector('[data-kb-attachments]');
+  const input = card.querySelector('[data-kb-file-input]');
+  const list = card.querySelector('[data-kb-uploads]');
+  const queue = [];
+  let running = 0;
+  const sizeLabel = (n) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
+  // Screenshots arrive as "image.png": named like the ticket composer does (UK time).
+  const shotName = (type) => screenshotName(type);
+
+  function row(file) {
+    const li = document.createElement('li');
+    li.className = 'kb-upload';
+    const name = document.createElement('span');
+    name.className = 'kb-upload-name';
+    name.textContent = file.name;
+    name.title = file.name;
+    const size = document.createElement('span');
+    size.className = 'muted small';
+    size.textContent = sizeLabel(file.size);
+    const bar = document.createElement('progress');
+    bar.max = 100;
+    bar.value = 0;
+    const status = document.createElement('span');
+    status.className = 'kb-upload-status small';
+    li.append(name, size, bar, status);
+    list.appendChild(li);
+    return { li, bar, status };
+  }
+
+  function next() {
+    while (running < 2 && queue.length) {
+      const job = queue.shift();
+      running += 1;
+      const data = new FormData();
+      data.set('_csrf', csrfToken);
+      data.append('files', job.file, job.file.name);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${base}/attachments`);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.upload.addEventListener('progress', (e) => {
+        if (e.lengthComputable) {
+          job.ui.bar.value = Math.round((e.loaded / e.total) * 100);
+          job.ui.status.textContent = `${job.ui.bar.value}%`;
+        }
+      });
+      const done = (ok, message) => {
+        running -= 1;
+        job.ui.li.classList.add(ok ? 'is-done' : 'is-failed');
+        job.ui.status.textContent = message;
+        if (ok) setTimeout(() => job.ui.li.remove(), 1500);
+        next();
+      };
+      xhr.addEventListener('load', () => {
+        let j = null;
+        try { j = JSON.parse(xhr.responseText); } catch { /* not JSON */ }
+        if (xhr.status >= 200 && xhr.status < 300 && j && j.ok) {
+          job.ui.bar.value = 100;
+          applyParts(j);
+          done(true, 'Added');
+        } else done(false, (j && j.error) || (xhr.status === 403 ? 'Session expired: reload the page.' : 'Upload failed.'));
+      });
+      xhr.addEventListener('error', () => done(false, 'Upload failed (no connection).'));
+      xhr.send(data);
+    }
+  }
+
+  function upload(files) {
+    for (const file of files) {
+      if (!file) continue;
+      const ui = row(file);
+      if (file.size > MAX_FILE) {
+        ui.li.classList.add('is-failed');
+        ui.status.textContent = 'Over 500 MB, not uploaded.';
+        continue;
+      }
+      queue.push({ file, ui });
+    }
+    next();
+  }
+
+  card.querySelector('[data-kb-add-files]').addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { upload([...input.files]); input.value = ''; });
+  let depth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  card.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth += 1; card.classList.add('is-dragging'); });
+  card.addEventListener('dragover', (e) => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  card.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) card.classList.remove('is-dragging'); });
+  card.addEventListener('drop', (e) => {
+    if (!e.dataTransfer?.files?.length) return;
+    e.preventDefault();
+    depth = 0;
+    card.classList.remove('is-dragging');
+    upload([...e.dataTransfer.files]);
+  });
+  // Ctrl+V with files on the clipboard (e.g. a screenshot) adds them; pasted text is left alone.
+  document.addEventListener('paste', (e) => {
+    const items = [...(e.clipboardData?.items || [])].filter((it) => it.kind === 'file');
+    if (!items.length) return;
+    e.preventDefault();
+    upload(items.map((it) => {
+      const f = it.getAsFile();
+      return f && f.type.startsWith('image/') && (!f.name || /^image\.\w+$/i.test(f.name)) ? new File([f], shotName(f.type), { type: f.type }) : f;
+    }).filter(Boolean));
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+
+  // Rename (popover) and delete (after the confirm popup) without leaving the page.
+  async function fileForm(form) {
+    const owner = ownerOf(form);
+    if (owner) owner.open = false;
+    const data = new URLSearchParams(new FormData(form));
+    const j = await send(form.action, data);
+    if (!j.ok) { toast(j.error || 'That did not work.', 'error'); return; }
+    applyParts(j);
+    toast(/\/delete$/.test(form.action) ? 'Attachment deleted.' : 'Attachment renamed.');
+  }
+  document.addEventListener('submit', (e) => {
+    const form = e.target;
+    if (!form.matches?.('[data-kb-file-form]') || form.dataset.confirm) return; // deletes wait for the confirm popup
+    e.preventDefault();
+    fileForm(form);
+  });
+  document.addEventListener('confirmed-submit', (e) => {
+    if (!e.target.matches?.('[data-kb-file-form]')) return;
+    e.preventDefault();
+    fileForm(e.target);
+  });
 })();

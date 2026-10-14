@@ -39,5 +39,27 @@
     <div class="row-actions">
       <%- include('delete', { action: `/articles/attachments/${item.id}/delete`, confirm: `Remove "${item.original_name}"?` }) %>
     </div>
+  <% } else if (mode === 'inline') { %>
+    <div class="row-actions kb-file-actions">
+      <details class="edit edit-right">
+        <summary class="icon-btn" title="Rename" aria-label="Rename <%= item.original_name %>"><%- icon('pen') %></summary>
+        <div class="edit-panel">
+          <form method="post" action="/articles/attachments/<%= item.id %>/rename" class="form" data-kb-file-form>
+            <%- csrfField %>
+            <input type="hidden" name="back" value="<%= locals.back || '' %>">
+            <label class="field"><span>File name</span><input type="text" name="name" value="<%= item.original_name %>" required maxlength="200" autocomplete="off" data-1p-ignore data-lpignore="true"></label>
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+            </div>
+          </form>
+        </div>
+      </details>
+      <form method="post" action="/articles/attachments/<%= item.id %>/delete" class="inline" data-confirm="Delete &quot;<%= item.original_name %>&quot;? This cannot be undone." data-kb-file-form>
+        <%- csrfField %>
+        <input type="hidden" name="back" value="<%= locals.back || '' %>">
+        <button type="submit" class="icon-btn icon-btn-danger" title="Delete" aria-label="Delete <%= item.original_name %>"><%- icon('trash') %></button>
+      </form>
+    </div>
   <% } %>
 </div>

@@ -155,6 +155,14 @@ Type `@` in a ticket's comment box to pick a portal user (avatar and name; type 
 
 **Articles** (formerly "General IT Support", the knowledge base) are known issues and how to fix them, at `/articles` (old `/kb` links redirect). Each has a category, tags, the issue and the solution in Markdown, and attachments. Creating or editing one goes on the Daily Report ("Documented a solution for '{title}' in Articles." / "Updated the article '{title}'.").
 
+Articles are edited straight on the article page (the **Edit page** button still opens the full form):
+
+- **Title:** click it, type, Enter saves, Esc cancels.
+- **Category:** click the badge and pick another category, or type a new one.
+- **Issue / Solution:** click the text (or the pencil on hover) to edit the Markdown in place, with the same formatting buttons as the Edit page (bold, italic, heading, lists, code, link). Save / Cancel under the editor, Ctrl+Enter saves, Esc cancels. Empty sections say "Click to add the issue / solution". Only one is open at a time, and leaving the page with unsaved changes asks first.
+- **Attachments:** **+ Add files**, drag and drop onto the card, or paste a screenshot with Ctrl+V (same limits as before: 500 MB a file). Each file has its own progress bar and appears straight away under Images, Videos or Files. Hover a file to rename or delete it (with a confirmation).
+- Every change is saved on its own and straight away updates "Last updated by … on …" and the History, and is logged (one "Updated the article '{title}'." line on the Daily Report per article and day).
+
 ## Microsoft Partner (GDAP expiry monitoring)
 
 The **Microsoft Partner** page (`/microsoft-partner`; old `/gdap` links redirect) lists Cleartwo's granular delegated admin (GDAP) relationships with customers, read from Microsoft Graph. It is **read only**: the portal only ever reads `tenantRelationships/delegatedAdminRelationships` and never changes anything at Microsoft.
