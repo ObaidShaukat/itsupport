@@ -109,10 +109,17 @@
                         <div class="edit-panel edit-panel-wide">
                           <form method="post" action="<%= page %>/comments/<%= c.id %>" class="form">
                             <%- csrfField %>
-                            <label class="field">
+                            <input type="hidden" name="mention_ids" value="">
+                            <div class="field">
                               <span>Comment</span>
-                              <textarea name="body" rows="4" maxlength="10000" data-autogrow><%= c.body %></textarea>
-                            </label>
+                              <div class="mention-box" data-mention-box>
+                                <div class="mention-backdrop" aria-hidden="true"></div>
+                                <textarea name="body" rows="4" maxlength="10000" data-autogrow aria-label="Comment" placeholder="Type @ to mention someone"><%= c.body %></textarea>
+                              </div>
+                            </div>
+                            <template data-mention-users>
+                              <% for (const u of mentionable) { %><li role="option" data-id="<%= u.id %>" data-name="<%= u.name %>"><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %></span></li><% } %>
+                            </template>
                             <div class="form-actions">
                               <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
                               <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
@@ -137,6 +144,7 @@
 
       <form method="post" action="<%= page %>/comments" enctype="multipart/form-data" class="tk-composer" id="composer" data-composer data-dropzone data-paste-files>
         <%- csrfField %>
+        <input type="hidden" name="mention_ids" value="">
         <span class="tk-comment-avatar"><%- avatar({ id: currentUser.id, name: currentUser.name }, 'sm') %></span>
         <div class="tk-composer-box">
           <label for="tk-comment" class="visually-hidden">Add a comment</label>
@@ -155,7 +163,7 @@
         </div>
         <template data-mention-users>
           <% for (const u of mentionable) { %>
-            <li role="option" data-name="<%= u.name %>"><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %></span></li>
+            <li role="option" data-id="<%= u.id %>" data-name="<%= u.name %>"><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %></span></li>
           <% } %>
         </template>
       </form>

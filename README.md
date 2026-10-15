@@ -148,7 +148,9 @@ Cleartwo's own staff, accounts and kit, not linked to clients. Rebuilt in Octobe
 
 Type `@` in a ticket's comment box to pick a portal user (avatar and name; type to filter, arrow keys and Enter to choose, Esc to close). The mention is highlighted in the box and in the posted comment.
 
-- When the comment is posted, each person mentioned (except the author) gets a bell notification and an email from `MAIL_FROM_NAME <MAIL_FROM_EMAIL>`, subject "{Author} mentioned you on #{ticket} {title}", with the client, ticket title, the comment and an Open ticket button (needs `APP_URL`). The email goes to their username when it is an email address; every attempt is in `email_log`.
+- Only people picked from the list are mentioned (the picker sends their ids); an "@" typed by hand or inside an email address is never a mention.
+- **Comment emails:** when a comment is posted, every admin (all portal users) except the author gets one email from `MAIL_FROM_NAME <MAIL_FROM_EMAIL>`, subject "New comment on #{ticket} {title} ({client})", with the author, time (UK), the comment, its attachments, the ticket status and priority and an Open ticket button (needs `APP_URL`). Someone @mentioned in the comment gets ONE email instead (never both), subject "{Author} mentioned you on #{ticket} {title}", with the mention highlighted at the top. Editing a comment only emails the people newly mentioned in it. Emails always go, one per person, to their username when it is an email address; every attempt (including skipped ones) is in `email_log` (kind `comment` or `mention`).
+- The bell notification and desktop notification for a mention follow each person's Notifications setting (Popup / Desktop); the email is always sent.
 - Mentions are stored in `comment_mentions` (created by `npm run migrate`) and logged in the ticket's History, never on the Daily Report.
 
 ## Articles

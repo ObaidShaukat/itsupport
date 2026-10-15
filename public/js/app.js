@@ -2217,13 +2217,17 @@ document.querySelectorAll('[data-password-toggle]').forEach((box) => {
 // Typing "@" in the comment box opens a list of portal users (from the page's
 // <template data-mention-users>), filtered as you type; arrows + Enter (or Tab) pick,
 // Esc closes. The picked name is inserted as "@Name " and highlighted by a backdrop
-// layer behind the textarea. The server finds the mentions again when the comment is saved.
+// layer behind the textarea. The picked user ids go in the form's hidden mention_ids field: only
+// picked people (whose @Name is still in the text) are mentioned when the comment is saved.
 document.querySelectorAll('[data-mention-box]').forEach((box) => {
   const area = box.querySelector('textarea');
   const backdrop = box.querySelector('.mention-backdrop');
   const source = box.closest('form')?.querySelector('template[data-mention-users]');
   if (!area || !backdrop || !source) return;
-  const people = [...source.content.querySelectorAll('li')].map((li) => ({ name: li.dataset.name, node: li }));
+  const people = [...source.content.querySelectorAll('li')].map((li) => ({ id: li.dataset.id, name: li.dataset.name, node: li }));
+  const idsField = box.closest('form').querySelector('input[name="mention_ids"]');
+  const picked = new Set();
+  box.closest('form').addEventListener('reset', () => { picked.clear(); if (idsField) idsField.value = ''; });
   const names = people.map((p) => p.name).sort((a, b) => b.length - a.length);
   const escapeRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const pattern = names.length ? new RegExp(`@(?:${names.map(escapeRe).join('|')})(?![\\p{L}\\p{N}_])`, 'giu') : null;
@@ -2285,6 +2289,10 @@ document.querySelectorAll('[data-mention-box]').forEach((box) => {
   function pick(person) {
     const caret = area.selectionStart;
     const insert = `@${person.name} `;
+    if (idsField && person.id) {
+      picked.add(person.id);
+      idsField.value = [...picked].join(',');
+    }
     area.value = area.value.slice(0, start) + insert + area.value.slice(caret);
     const pos = start + insert.length;
     area.setSelectionRange(pos, pos);
