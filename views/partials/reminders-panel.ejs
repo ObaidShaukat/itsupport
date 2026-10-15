@@ -9,7 +9,7 @@
   <h2><%- icon('bell') %> Reminders <span class="muted small">(<%= reminders.pending.length %> pending)</span></h2>
 </div>
 
-<details class="report-toggle reminder-add" <%= reminders.pending.length ? '' : 'open' %>>
+<details class="report-toggle reminder-add" <%= reminders.pending.length && !locals.remindOpen ? '' : 'open' %>>
   <summary><%- icon('plus') %> Add reminder</summary>
   <form method="post" action="/reminders" class="form" data-reminder-form>
     <%- csrfField %>

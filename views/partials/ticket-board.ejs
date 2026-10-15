@@ -1,0 +1,40 @@
+<%#
+  Ticket board: columns (from boardColumns() in src/lib/dashboard.js) with a count chip and
+  cards. A card shows the priority LED, title, #number, client, date, comment and attachment
+  counts and the assignee's avatar; urgent cards are inverted (black). draggable: cards can be
+  dragged to another column to change the status ([data-board] in app.js posts
+  /tickets/:id/status and logs it like any status change). moreHref: link for columns that
+  were cut short.
+%>
+<div class="board <%= locals.draggable ? 'is-draggable' : '' %>" <%- locals.draggable ? 'data-board' : '' %>>
+  <% for (const col of columns) { %>
+    <section class="board-col" data-board-col="<%= col.status %>" aria-label="<%= col.label %>">
+      <header class="board-col-head">
+        <h2><%= col.label %></h2>
+        <span class="count-chip" data-board-count><%= col.count %></span>
+      </header>
+      <div class="board-cards" data-board-cards>
+        <% for (const t of col.tickets) { %>
+          <article class="tcard <%= t.priority === 'urgent' ? 'is-inverted' : '' %>" data-ticket-id="<%= t.id %>" <%- locals.draggable ? 'draggable="true"' : '' %>>
+            <div class="tcard-top">
+              <%- include('priority', { priority: t.priority, dotOnly: true }) %>
+              <span class="tcard-no">#<%= t.id %></span>
+              <span class="tcard-date" title="Opened <%= fmtDate(t.created_at) %>"><%= fmtShort(t.created_at).split(',')[0] %></span>
+            </div>
+            <h3 class="tcard-title"><a href="/tickets/<%= t.id %>" class="tcard-link"><%= t.title %></a></h3>
+            <p class="tcard-client"><%= t.client_name %></p>
+            <div class="tcard-foot">
+              <span class="tcard-meta" title="<%= Number(t.comment_count) %> comment<%= Number(t.comment_count) === 1 ? '' : 's' %>"><%- icon('message') %><%= Number(t.comment_count) %></span>
+              <span class="tcard-meta" title="<%= Number(t.attachment_count) %> attachment<%= Number(t.attachment_count) === 1 ? '' : 's' %>"><%- icon('paperclip') %><%= Number(t.attachment_count) %></span>
+              <span class="tcard-who" title="<%= t.assigned_to ? `Assigned to ${t.assigned_to}` : 'Not assigned' %>">
+                <% if (t.assigned_to) { %><%- avatar({ id: t.assigned_to_id, name: t.assigned_to }, 'sm') %><% } else { %><span class="avatar avatar-sm avatar-empty" aria-label="Not assigned">–</span><% } %>
+              </span>
+            </div>
+          </article>
+        <% } %>
+        <% if (!col.tickets.length) { %><p class="board-empty">No tickets</p><% } %>
+        <% if (col.more && locals.moreHref) { %><a href="<%= moreHref(col.status) %>" class="board-more">+ <%= col.more %> more in the list</a><% } %>
+      </div>
+    </section>
+  <% } %>
+</div>

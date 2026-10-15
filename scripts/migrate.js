@@ -68,6 +68,9 @@ const ADDED_COLUMNS = [
   ['cs1_customers', 'ceased_on', 'DATE NULL AFTER status'],
   ['cs1_customers', 'is_demo', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER id_alerted_at'],
   ['cs1_customers', 'refreshed_at', 'DATETIME NULL AFTER is_demo'],
+  ['tickets', 'assigned_to', 'INT UNSIGNED NULL AFTER updated_by'],
+  ['service_steps', 'stage', 'VARCHAR(100) NULL AFTER title'],
+  ['client_service_steps', 'stage', 'VARCHAR(100) NULL AFTER title'],
 ];
 
 // The old inventory (people, assets, stock, access, shared accounts, offboarding, custom
@@ -167,6 +170,12 @@ const ONE_TIME_STEPS = [
     await conn.query("UPDATE cs1_customers SET store = NULL WHERE store REGEXP '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'");
     await conn.query("UPDATE cs1_customers SET status = NULL WHERE status REGEXP '^Status [0-9]+$'");
     await conn.query("UPDATE cs1_customers SET users_count = NULL, numbers_count = NULL WHERE source = 'api' AND refreshed_at IS NULL");
+  }],
+  // Ticket assignment: every existing ticket is assigned to whoever opened it.
+  ['ticket_assigned_to_v1', async (conn) => {
+    await conn.query('UPDATE tickets SET assigned_to = created_by WHERE assigned_to IS NULL AND created_by IS NOT NULL');
+    const [[idx]] = await conn.query("SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tickets' AND INDEX_NAME = 'idx_tickets_assigned'");
+    if (!Number(idx.n)) await conn.query('ALTER TABLE tickets ADD KEY idx_tickets_assigned (assigned_to, status)');
   }],
 ];
 

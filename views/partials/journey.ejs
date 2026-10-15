@@ -1,0 +1,67 @@
+<%#
+  A service as a journey (src/lib/journey.js): stage cards left to right, joined by connector
+  lines (solid between finished stages, dashed to unfinished ones, small dots at both ends).
+  journey.progress (a client's assigned service): step rows show who ticked them and when, a
+  double tick when done, the current step inverted with a spinning ring and the steps after it
+  dashed; the last stage ends with a "Done" tile. toggleUrl(step) + back: optional, each step
+  row is then the button of its tick form (the client service page). Without progress (the
+  Services page) the steps are just listed in their stages.
+%>
+<% if (!journey.total) { %>
+  <p class="empty">No steps yet.</p>
+<% } else { %>
+<ol class="journey <%= journey.progress ? 'has-progress' : 'is-template' %> <%= journey.complete ? 'is-complete' : '' %>" aria-label="Steps by stage">
+  <% journey.groups.forEach((g, gi) => {
+    const last = gi === journey.groups.length - 1;
+    const nextDone = journey.progress && g.done; %>
+    <li class="stage <%= g.done ? 'is-done' : '' %> <%= g.current ? 'is-current' : '' %>" style="--d: <%= gi * 120 %>ms">
+      <div class="stage-card">
+        <header class="stage-head">
+          <span class="stage-name"><%= g.label %></span>
+          <% if (journey.progress) { %><span class="stage-count"><%= g.doneCount %>/<%= g.steps.length %></span><% } else { %><span class="stage-count"><%= g.steps.length %> step<%= g.steps.length === 1 ? '' : 's' %></span><% } %>
+        </header>
+        <ul class="stage-steps">
+          <% g.steps.forEach((s, si) => { %>
+            <li class="jstep is-<%= s.state %>" style="--d: <%= gi * 120 + si * 60 %>ms">
+              <% const inner = () => { %>
+                  <span class="jstep-mark" aria-hidden="true">
+                    <% if (s.state === 'done') { %><%- avatar({ id: s.done_by_id, name: s.done_by }, 'sm') %><% } else if (s.state === 'current') { %><span class="spin-ring"></span><% } else { %><span class="jstep-dot"></span><% } %>
+                  </span>
+                  <span class="jstep-text">
+                    <span class="jstep-title"><%= s.title %></span>
+                    <% if (s.state === 'done') { %><span class="jstep-meta"><%= s.done_by || 'Unknown user' %> · <%= fmtShort(s.done_at) %></span><% } %>
+                    <% if (s.state === 'current') { %><span class="jstep-meta">Next step</span><% } %>
+                  </span>
+                  <% if (s.state === 'done') { %><span class="jstep-tick" aria-label="Done"><%- icon('check') %><%- icon('check') %></span><% } %>
+              <% }; %>
+              <% if (journey.progress && locals.toggleUrl) { %>
+                <form method="post" action="<%= toggleUrl(s) %>" class="jstep-form">
+                  <%- csrfField %>
+                  <% if (locals.back) { %><input type="hidden" name="back" value="<%= back %>"><% } %>
+                  <button type="submit" class="jstep-row" aria-pressed="<%= s.done ? 'true' : 'false' %>" title="<%= s.done ? 'Done: click to untick' : 'Click to mark as done' %>"><% inner(); %></button>
+                </form>
+              <% } else { %>
+                <div class="jstep-row"><% inner(); %></div>
+              <% } %>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+      <% if (!last) { %>
+        <span class="connector <%= nextDone ? 'is-solid' : 'is-dashed' %>" aria-hidden="true"><span class="cdot"></span><span class="cline"></span><span class="cdot"></span></span>
+      <% } else if (journey.progress) { %>
+        <span class="connector <%= journey.complete ? 'is-solid' : 'is-dashed' %>" aria-hidden="true"><span class="cdot"></span><span class="cline"></span><span class="cdot"></span></span>
+      <% } %>
+    </li>
+  <% }) %>
+  <% if (journey.progress) { %>
+    <li class="stage stage-finish <%= journey.complete ? 'is-done' : '' %>" style="--d: <%= journey.groups.length * 120 %>ms">
+      <div class="finish-tile">
+        <span class="finish-icon" aria-hidden="true"><%- icon(journey.complete ? 'check-circle' : 'flag') %></span>
+        <strong>Done</strong>
+        <span class="small"><%= journey.complete ? 'All steps finished' : `${journey.total - journey.done} to go` %></span>
+      </div>
+    </li>
+  <% } %>
+</ol>
+<% } %>

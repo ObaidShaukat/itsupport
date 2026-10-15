@@ -2,7 +2,10 @@ const express = require('express');
 const { attachmentNames, removeTicketFiles } = require('../lib/ticket-files');
 const { listRelationships: gdapRelationships } = require('../lib/gdap/data');
 const { pool, transaction } = require('../db');
-const { str, requireId, toId, flash, notFound } = require('../lib/http');
+const {
+  str, requireId, toId, flash, notFound, backPath,
+} = require('../lib/http');
+const { journey } = require('../lib/journey');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
 const { logActivity, historyFor, clientHistory, recordMeta } = require('../lib/activity');
 
@@ -42,6 +45,9 @@ async function csContext(db, csId, lock = false) {
   if (!cs) throw notFound();
   return cs;
 }
+
+// Back to the assigned service's journey page (or the page the form came from).
+const csBack = (req, csId, hash = '') => backPath(req, `/client-services/${csId}${hash}`);
 
 const csEntry = (cs, type, action, summary) => ({
   type, id: cs.id, action, summary, clientId: cs.client_id, clientName: cs.client_name, subject: cs.service_name,
@@ -95,7 +101,8 @@ router.get('/clients/:id', async (req, res) => {
     ORDER BY cs.status = 'closed', cs.created_at DESC
   `, [id]);
   const [steps] = await pool.query(`
-    SELECT css.id, css.client_service_id, css.title, css.done, css.done_at, COALESCE(NULLIF(u.display_name, ''), u.username) AS done_by
+    SELECT css.id, css.client_service_id, css.title, css.stage, css.done, css.done_at, css.done_by AS done_by_id,
+           COALESCE(NULLIF(u.display_name, ''), u.username) AS done_by
     FROM client_service_steps css
     JOIN client_services cs ON cs.id = css.client_service_id
     LEFT JOIN users u ON u.id = css.done_by
@@ -119,6 +126,7 @@ router.get('/clients/:id', async (req, res) => {
     cs.notes = notes.filter((n) => n.client_service_id === cs.id);
     cs.history = csHistory.filter((e) => e.entity_id === cs.id);
     cs.meta = recordMeta(cs.history, 'client_service', { createdBy: cs.assigned_by, createdAt: cs.created_at });
+    cs.journey = journey(cs.steps, { progress: true });
   }
   const clientMeta = recordMeta(await historyFor(['client'], [id]), 'client', { createdAt: client.created_at });
   const activity = await clientHistory(id);
@@ -220,13 +228,13 @@ router.post('/clients/:id/services', async (req, res) => {
     );
     const csId = inserted.insertId;
     const [steps] = await conn.query(
-      'SELECT title FROM service_steps WHERE service_id = ? ORDER BY position, id',
+      'SELECT title, stage FROM service_steps WHERE service_id = ? ORDER BY position, id',
       [service.id]
     );
     if (steps.length) {
       await conn.query(
-        'INSERT INTO client_service_steps (client_service_id, title, position) VALUES ?',
-        [steps.map((s, i) => [csId, s.title, i])]
+        'INSERT INTO client_service_steps (client_service_id, title, stage, position) VALUES ?',
+        [steps.map((s, i) => [csId, s.title, s.stage || null, i])]
       );
     }
     await logActivity(conn, req.user, {
@@ -241,7 +249,7 @@ router.post('/clients/:id/services', async (req, res) => {
     return res.redirect(`/clients/${clientId}#services`);
   }
   flash(req, 'success', `"${result.name}" assigned.`);
-  res.redirect(`/clients/${clientId}#cs-${result.csId}`);
+  res.redirect(`/client-services/${result.csId}`);
 });
 
 // Ticks or unticks a step. Ticking the last step closes the service;
@@ -287,7 +295,7 @@ router.post('/client-services/:id/steps/:stepId/toggle', async (req, res) => {
 
   if (outcome.change === 'closed') flash(req, 'success', 'All steps done. Service closed.');
   if (outcome.change === 'reopened') flash(req, 'info', 'Step unticked. Service reopened.');
-  res.redirect(`/clients/${outcome.clientId}#cs-${csId}`);
+  res.redirect(csBack(req, csId));
 });
 
 async function setClientServiceStatus(req, res, status) {
@@ -301,11 +309,52 @@ async function setClientServiceStatus(req, res, status) {
     if (result.affectedRows) await logActivity(null, req.user, csEntry(cs, 'client_service', 'reopened', 'Reopened'));
   }
   flash(req, 'success', status === 'closed' ? 'Service closed.' : 'Service reopened.');
-  res.redirect(`/clients/${cs.client_id}#cs-${csId}`);
+  res.redirect(csBack(req, csId));
 }
 
 router.post('/client-services/:id/reopen', (req, res) => setClientServiceStatus(req, res, 'open'));
 router.post('/client-services/:id/close', (req, res) => setClientServiceStatus(req, res, 'closed'));
+
+// The assigned service as a journey: stages of steps, notes, History and the client's
+// other services.
+router.get('/client-services/:id', async (req, res) => {
+  const csId = requireId(req.params.id);
+  const [[cs]] = await pool.query(`
+    SELECT cs.id, cs.client_id, cs.service_id, cs.service_name, cs.status, cs.created_at, cs.closed_at, c.name AS client_name,
+           COALESCE(NULLIF(u.display_name, ''), u.username) AS assigned_by
+    FROM client_services cs JOIN clients c ON c.id = cs.client_id LEFT JOIN users u ON u.id = cs.assigned_by
+    WHERE cs.id = ?
+  `, [csId]);
+  if (!cs) throw notFound();
+  const [steps] = await pool.query(`
+    SELECT css.id, css.title, css.stage, css.done, css.done_at, css.done_by AS done_by_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS done_by
+    FROM client_service_steps css LEFT JOIN users u ON u.id = css.done_by
+    WHERE css.client_service_id = ? ORDER BY css.position, css.id
+  `, [csId]);
+  const [notes] = await pool.query(`
+    SELECT n.id, n.body, n.created_at, n.updated_at, n.user_id,
+           COALESCE(NULLIF(u.display_name, ''), u.username) AS author, COALESCE(NULLIF(e.display_name, ''), e.username) AS editor
+    FROM client_service_notes n LEFT JOIN users u ON u.id = n.user_id LEFT JOIN users e ON e.id = n.updated_by
+    WHERE n.client_service_id = ? ORDER BY n.created_at DESC, n.id DESC
+  `, [csId]);
+  const [others] = await pool.query(`
+    SELECT cs.id, cs.service_name, cs.status, COUNT(css.id) AS step_count, COALESCE(SUM(css.done), 0) AS done_count
+    FROM client_services cs LEFT JOIN client_service_steps css ON css.client_service_id = cs.id
+    WHERE cs.client_id = ? AND cs.id <> ?
+    GROUP BY cs.id, cs.service_name, cs.status
+    ORDER BY cs.status = 'closed', cs.service_name
+  `, [cs.client_id, csId]);
+  const history = await historyFor(['client_service', 'step', 'note'], [csId]);
+  res.render('clients/service', {
+    title: `${cs.service_name} · ${cs.client_name}`,
+    cs,
+    journey: journey(steps, { progress: true }),
+    notes,
+    others: others.map((o) => ({ ...o, step_count: Number(o.step_count), done_count: Number(o.done_count) })),
+    history,
+    meta: recordMeta(history, 'client_service', { createdBy: cs.assigned_by, createdAt: cs.created_at }),
+  });
+});
 
 // ---- Notes on assigned services ----
 
@@ -322,7 +371,7 @@ router.post('/client-services/:id/notes', async (req, res) => {
     );
     await logActivity(null, req.user, csEntry(cs, 'note', 'created', body));
   }
-  res.redirect(`/clients/${cs.client_id}#cs-${csId}`);
+  res.redirect(csBack(req, csId, '#notes'));
 });
 
 async function noteContext(noteId) {
@@ -350,7 +399,7 @@ router.post('/client-service-notes/:id', async (req, res) => {
     await logActivity(null, req.user, csEntry({ ...note, id: note.client_service_id }, 'note', 'updated', body));
     flash(req, 'success', 'Note updated.');
   }
-  res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);
+  res.redirect(csBack(req, note.client_service_id, '#notes'));
 });
 
 router.post('/client-service-notes/:id/delete', async (req, res) => {
@@ -358,7 +407,7 @@ router.post('/client-service-notes/:id/delete', async (req, res) => {
   await pool.query('DELETE FROM client_service_notes WHERE id = ?', [note.id]);
   await logActivity(null, req.user, csEntry({ ...note, id: note.client_service_id }, 'note', 'deleted', 'Deleted a note'));
   flash(req, 'success', 'Note deleted.');
-  res.redirect(`/clients/${note.client_id}#cs-${note.client_service_id}`);
+  res.redirect(csBack(req, note.client_service_id, '#notes'));
 });
 
 router.post('/client-services/:id/delete', async (req, res) => {

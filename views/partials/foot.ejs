@@ -30,6 +30,26 @@
     </div>
   </form>
 </dialog>
+<%# Quick-action rail "Add reminder": pick an open ticket, then its Reminders panel opens. %>
+<dialog class="dialog" id="quick-reminder-dialog" aria-labelledby="quick-reminder-title">
+  <form method="get" action="/tickets/remind" class="form">
+    <div class="dialog-head">
+      <h2 id="quick-reminder-title">Add reminder</h2>
+      <button type="button" class="icon-btn" data-dialog-close aria-label="Close"><%- icon('x') %></button>
+    </div>
+    <label class="field">
+      <span>Which ticket?</span>
+      <select name="ticket" required data-combobox>
+        <option value="">Choose a ticket…</option>
+        <% for (const t of (locals.quickTickets || [])) { %><option value="<%= t.id %>">#<%= t.id %> <%= t.title %> · <%= t.client_name %></option><% } %>
+      </select>
+    </label>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary"><%- icon('bell') %><span>Add reminder</span></button>
+      <button type="button" class="btn btn-ghost" data-dialog-close>Cancel</button>
+    </div>
+  </form>
+</dialog>
 <%- include('crop-dialog') %>
 <% } %>
 <div class="toasts" data-toasts aria-live="polite"><% if (locals.flash && flash.type === 'saved') { %><div class="toast toast-saved" role="status" data-autohide><span class="toast-icon"><%- icon('check-circle') %></span><span><%= flash.message %></span></div><% } %></div>

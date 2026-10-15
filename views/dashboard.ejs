@@ -1,88 +1,89 @@
 <%- include('partials/head') %>
-<header class="page-head">
+<%#
+  Dashboard (src/lib/dashboard.js): greeting, "Open per person" avatar stack, the summary
+  panel (this week's tickets chart, closed-within-24h gauge, Open tickets and Reminders today
+  tiles) and the ticket board (Open, Customer waiting, Closed this week).
+%>
+<%
+  const shownPeople = people.slice(0, 6);
+  // Semicircle tick gauge: 24 ticks from the left (0%) to the right (100%).
+  const TICKS = 24;
+  const filled = chart.fast === null ? 0 : Math.round((chart.fast / 100) * TICKS);
+  const tick = (i) => {
+    const a = Math.PI - (i / (TICKS - 1)) * Math.PI;
+    const r1 = 74; const r2 = 92; const cx = 100; const cy = 100;
+    return { x1: (cx + r1 * Math.cos(a)).toFixed(1), y1: (cy - r1 * Math.sin(a)).toFixed(1), x2: (cx + r2 * Math.cos(a)).toFixed(1), y2: (cy - r2 * Math.sin(a)).toFixed(1) };
+  };
+%>
+<header class="page-head dash-head reveal">
   <div>
-    <h1>Dashboard</h1>
-    <p class="muted">Welcome back, <%= currentUser.name || currentUser.username %>.</p>
+    <p class="dash-date"><%= week.longDay %></p>
+    <h1><%= hello %>, <%= firstName(currentUser.name || currentUser.username) %></h1>
   </div>
-  <div class="actions">
-    <a href="/tickets/new" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
+  <div class="dash-people" aria-label="Open tickets per person">
+    <span class="dash-people-label">Open per person</span>
+    <div class="avatar-stack">
+      <% for (const p of shownPeople) { %>
+        <a href="/tickets?person=<%= p.id %>" class="stack-item" title="<%= p.name %>: <%= p.count %> open">
+          <%- avatar({ id: p.id, name: p.name }, 'md') %><span class="stack-count"><%= p.count %></span>
+        </a>
+      <% } %>
+      <% if (people.length > shownPeople.length) { %><span class="stack-item stack-more" title="<%= people.length - shownPeople.length %> more">+<%= people.length - shownPeople.length %></span><% } %>
+      <% if (unassigned) { %><a href="/tickets?person=none" class="stack-item stack-more" title="<%= unassigned %> open, not assigned">?<span class="stack-count"><%= unassigned %></span></a><% } %>
+      <% if (!people.length && !unassigned) { %><span class="muted small">Nothing open</span><% } %>
+    </div>
   </div>
 </header>
 
-<section class="stats">
-  <a href="/tickets?status=open" class="card stat">
-    <span class="stat-icon"><%- icon('message') %></span>
-    <span class="stat-value"><%= counts.openTickets %></span>
-    <span class="stat-label">Open tickets</span>
+<section class="panel summary reveal" aria-label="This week">
+  <div class="summary-chart">
+    <div class="summary-head">
+      <h2>Tickets this week</h2>
+      <div class="chart-legend"><span class="legend-key key-opened"></span>Opened <strong><%= chart.totals.opened %></strong><span class="legend-key key-closed"></span>Closed <strong><%= chart.totals.closed %></strong></div>
+    </div>
+    <div class="bars" role="img" aria-label="Tickets opened and closed each day this week: <%= chart.bars.map((b) => `${b.label} ${b.opened} opened, ${b.closed} closed`).join('; ') %>">
+      <% chart.bars.forEach((b, i) => { %>
+        <div class="bar-day <%= b.isToday ? 'is-today' : '' %>">
+          <div class="bar-pair">
+            <span class="bar bar-opened" style="--h: <%= Math.round((b.opened / chart.max) * 100) %>%; --d: <%= i * 80 %>ms" title="<%= b.opened %> opened"><span class="bar-num"><%= b.opened || '' %></span></span>
+            <span class="bar bar-closed" style="--h: <%= Math.round((b.closed / chart.max) * 100) %>%; --d: <%= i * 80 + 40 %>ms" title="<%= b.closed %> closed"><span class="bar-num"><%= b.closed || '' %></span></span>
+          </div>
+          <span class="bar-label"><%= b.label %></span>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+
+  <div class="summary-gauge">
+    <h2>Closed within 24 hours</h2>
+    <div class="gauge" role="img" aria-label="<%= chart.fast === null ? 'No tickets closed this week' : `${chart.fast}% of the tickets closed this week were closed within 24 hours` %>">
+      <svg viewBox="0 0 200 110" aria-hidden="true">
+        <% for (let i = 0; i < TICKS; i += 1) { const t = tick(i); %>
+          <line x1="<%= t.x1 %>" y1="<%= t.y1 %>" x2="<%= t.x2 %>" y2="<%= t.y2 %>" class="gauge-tick <%= i < filled ? 'is-on' : '' %>" style="--d: <%= i * 40 %>ms"></line>
+        <% } %>
+      </svg>
+      <div class="gauge-value"><span class="big-num"><%= chart.fast === null ? '—' : `${chart.fast}%` %></span><span class="muted small"><%= chart.closedCount ? `${chart.fastCount} of ${chart.closedCount} closed this week` : 'Nothing closed yet this week' %></span></div>
+    </div>
+  </div>
+
+  <a href="/tickets?status=open&view=list" class="tile">
+    <span class="tile-label">Open tickets</span>
+    <span class="big-num"><%= openTickets %></span>
+    <span class="tile-foot"><span class="muted small"><%= waitingTickets %> customer waiting</span><span class="tile-arrow" aria-hidden="true"><%- icon('arrow-right') %></span></span>
   </a>
-  <a href="/tickets?status=customer_waiting" class="card stat">
-    <span class="stat-icon"><%- icon('clock') %></span>
-    <span class="stat-value"><%= counts.waitingTickets %></span>
-    <span class="stat-label">Customer waiting</span>
-  </a>
-  <a href="/clients" class="card stat">
-    <span class="stat-icon"><%- icon('layers') %></span>
-    <span class="stat-value"><%= counts.openServices %></span>
-    <span class="stat-label">Open client services</span>
-  </a>
+
+  <button type="button" class="tile tile-dark" data-bell-open aria-label="Reminders today: <%= remindersToday %>. Open the reminders list">
+    <span class="tile-label">Reminders today</span>
+    <span class="big-num"><%= remindersToday %></span>
+    <span class="tile-foot"><span class="small">Due today for you</span><span class="tile-arrow" aria-hidden="true"><%- icon('arrow-right') %></span></span>
+  </button>
 </section>
 
-<div class="grid-2">
-  <section class="card">
-    <div class="card-head">
-      <h2>Active tickets</h2>
-      <a href="/tickets" class="link-more">All tickets <%- icon('arrow-right') %></a>
-    </div>
-    <% if (!recentTickets.length) { %>
-      <p class="empty">No open or waiting tickets.</p>
-    <% } else { %>
-      <ul class="list">
-        <% for (const t of recentTickets) { %>
-          <li>
-            <div>
-              <a href="/tickets/<%= t.id %>"><%= t.title %></a>
-              <div class="muted small"><%= t.client_name %> · created by <span class="person"><%- avatar({ name: t.created_by }, 'xs') %><%= t.created_by || 'Deleted user' %></span> · updated <%= fmtDate(t.updated_at) %></div>
-            </div>
-            <div class="list-badges">
-              <%- include('partials/priority', { priority: t.priority }) %>
-              <%- include('partials/status', { status: t.status }) %>
-            </div>
-          </li>
-        <% } %>
-      </ul>
-    <% } %>
-  </section>
-
-  <section class="card">
-    <div class="card-head">
-      <h2>Open client services</h2>
-      <a href="/clients" class="link-more">All clients <%- icon('arrow-right') %></a>
-    </div>
-    <% if (!openServices.length) { %>
-      <p class="empty">No open client services.</p>
-    <% } else { %>
-      <ul class="list">
-        <% for (const cs of openServices) { %>
-          <% const total = Number(cs.step_count), done = Number(cs.done_count); %>
-          <li>
-            <div>
-              <a href="/clients/<%= cs.client_id %>#cs-<%= cs.id %>"><%= cs.service_name %></a>
-              <div class="muted small"><%= cs.client_name %> · started by <span class="person"><%- avatar({ name: cs.assigned_by }, 'xs') %><%= cs.assigned_by || 'Deleted user' %></span> on <%= fmtDate(cs.created_at) %></div>
-            </div>
-            <% if (total) { %>
-              <div class="mini-progress" title="<%= done %> of <%= total %> steps done">
-                <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="<%= total %>" aria-valuenow="<%= done %>">
-                  <span style="width: <%= Math.round((done / total) * 100) %>%"></span>
-                </div>
-                <span class="progress-text"><%= done %>/<%= total %></span>
-              </div>
-            <% } else { %>
-              <span class="chip">No checklist</span>
-            <% } %>
-          </li>
-        <% } %>
-      </ul>
-    <% } %>
-  </section>
-</div>
+<section class="board-wrap reveal" aria-label="Ticket board">
+  <div class="section-head">
+    <h2>Ticket board</h2>
+    <a href="/tickets" class="btn btn-secondary btn-small">All tickets <%- icon('arrow-right') %></a>
+  </div>
+  <%- include('partials/ticket-board', { columns: board, draggable: false }) %>
+</section>
 <%- include('partials/foot') %>

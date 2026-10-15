@@ -1,15 +1,73 @@
 <%- include('../partials/head') %>
-<header class="page-head">
+<%#
+  Tickets: Board (default; drag a card to another column to change its status) or List (the
+  table). One filter row: priority pills, client, person (assigned to) and search, kept in
+  the links (controls.href).
+%>
+<% const filtered = Boolean(state.status || state.priority || state.client || state.person || state.q); %>
+<header class="page-head reveal">
   <div>
     <h1>Tickets</h1>
+    <p class="muted"><%= tickets.length %> ticket<%= tickets.length === 1 ? '' : 's' %><%= filtered ? ' match the filters' : '' %></p>
   </div>
   <div class="actions">
+    <nav class="segmented" aria-label="View">
+      <a href="<%= controls.href({ view: 'board' }) %>" class="<%= state.view === 'board' ? 'is-active' : '' %>" <%- state.view === 'board' ? 'aria-current="page"' : '' %>><%- icon('layers') %><span>Board</span></a>
+      <a href="<%= controls.href({ view: 'list' }) %>" class="<%= state.view === 'list' ? 'is-active' : '' %>" <%- state.view === 'list' ? 'aria-current="page"' : '' %>><%- icon('menu') %><span>List</span></a>
+    </nav>
     <a href="/tickets/new" class="btn btn-primary"><%- icon('plus') %><span>New ticket</span></a>
   </div>
 </header>
 
-<section class="card" id="ticket-list">
-  <%- include('../partials/ticket-filters', { controls, search: { target: '#ticket-list', placeholder: 'Search tickets' } }) %>
-  <%- include('../partials/ticket-table', { tickets, controls, filtered: Boolean(state.status || state.priority) }) %>
+<section class="panel reveal" id="ticket-list">
+  <form method="get" action="/tickets" class="filter-row" data-filter-form>
+    <% if (state.view === 'list') { %><input type="hidden" name="view" value="list"><% } %>
+    <% if (state.status) { %><input type="hidden" name="status" value="<%= state.status %>"><% } %>
+    <% if (state.sort) { %><input type="hidden" name="sort" value="<%= state.sort %>"><input type="hidden" name="dir" value="<%= state.dir %>"><% } %>
+    <nav class="filters filters-priority" aria-label="Filter by priority">
+      <% for (const f of controls.priorityFilters) { %>
+        <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %>" <%= f.key ? '' : 'title="Any priority"' %>>
+          <% if (f.key) { %><span class="led led-<%= f.key %>" aria-hidden="true"></span><% } %><%= f.label %> <span class="count"><%= f.count %></span>
+        </a>
+      <% } %>
+    </nav>
+    <label class="filter-field">
+      <span class="visually-hidden">Client</span>
+      <select name="client" data-autosubmit data-combobox>
+        <option value="">All clients</option>
+        <% for (const c of clients) { %><option value="<%= c.id %>" <%= Number(state.client) === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+      </select>
+    </label>
+    <label class="filter-field">
+      <span class="visually-hidden">Assigned to</span>
+      <select name="person" data-autosubmit>
+        <option value="">Anyone</option>
+        <option value="none" <%= state.person === 'none' ? 'selected' : '' %>>Not assigned</option>
+        <% for (const p of people) { %><option value="<%= p.id %>" <%= Number(state.person) === p.id ? 'selected' : '' %>><%= p.name %></option><% } %>
+      </select>
+    </label>
+    <label class="search-field filter-search">
+      <%- icon('search') %>
+      <span class="visually-hidden">Search tickets</span>
+      <input type="search" name="q" value="<%= state.q %>" placeholder="Search title, client or #number" autocomplete="off" data-1p-ignore data-lpignore="true">
+    </label>
+    <button type="submit" class="btn btn-secondary btn-small">Search</button>
+    <% if (filtered) { %><a href="<%= state.view === 'list' ? '/tickets?view=list' : '/tickets' %>" class="btn btn-ghost btn-small">Clear</a><% } %>
+  </form>
+
+  <% if (state.view === 'board') { %>
+    <% if (state.status) { %><p class="muted small">The board shows every status; the <strong><%= ticketStatuses[state.status] %></strong> filter applies to the List.</p><% } %>
+    <%- include('../partials/ticket-board', {
+      columns: board, draggable: true,
+      moreHref: (status) => controls.href({ view: 'list', status }),
+    }) %>
+  <% } else { %>
+    <nav class="filters" aria-label="Filter by status">
+      <% for (const f of controls.statusFilters) { %>
+        <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %>"><%= f.label %> <span class="count"><%= f.count %></span></a>
+      <% } %>
+    </nav>
+    <%- include('../partials/ticket-table', { tickets, controls, filtered }) %>
+  <% } %>
 </section>
 <%- include('../partials/foot') %>

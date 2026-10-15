@@ -185,6 +185,8 @@ router.post('/:id/delete', async (req, res) => {
 
   const [[user]] = await pool.query('SELECT username, avatar_file FROM users WHERE id = ?', [id]);
   const [result] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
+  // Their tickets become unassigned (assigned_to has no foreign key).
+  if (result.affectedRows) await pool.query('UPDATE tickets SET assigned_to = NULL WHERE assigned_to = ?', [id]);
   if (result.affectedRows) {
     await removeAvatar(user.avatar_file);
     await logUser(req, id, 'deleted', user.username, `Deleted user ${user.username}`);

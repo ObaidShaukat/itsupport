@@ -177,6 +177,19 @@
         <dt>Client</dt><dd><a href="/clients/<%= ticket.client_id %>"><%= ticket.client_name %></a></dd>
         <dt>Status</dt><dd><%- include('../partials/status', { status: ticket.status }) %></dd>
         <dt>Priority</dt><dd><%- include('../partials/priority', { priority: ticket.priority }) %></dd>
+        <dt>Assigned to</dt>
+        <dd>
+          <form method="post" action="<%= page %>/assign" class="tk-inline tk-assign" data-autosubmit>
+            <%- csrfField %>
+            <label class="visually-hidden" for="tk-assigned">Assigned to</label>
+            <span class="tk-assign-avatar"><% if (ticket.assigned_to_name) { %><%- avatar({ id: ticket.assigned_to, name: ticket.assigned_to_name }, 'xs') %><% } %></span>
+            <select id="tk-assigned" name="assigned_to" class="pill-select">
+              <option value="" <%= ticket.assigned_to ? '' : 'selected' %>>Not assigned</option>
+              <% for (const p of people) { %><option value="<%= p.id %>" <%= ticket.assigned_to === p.id ? 'selected' : '' %>><%= p.name %></option><% } %>
+            </select>
+            <noscript><button type="submit" class="btn btn-small">Save</button></noscript>
+          </form>
+        </dd>
         <dt>Created by</dt><dd><span class="person"><%- avatar({ id: ticket.created_by, name: ticket.created_by_name }, 'xs') %><%= ticket.created_by_name || 'Deleted user' %></span></dd>
         <dt>Created</dt><dd title="<%= fmtDate(ticket.created_at) %>"><%= fmtShort(ticket.created_at) %></dd>
         <dt>Updated by</dt><dd><% if (ticket.updated_by_name) { %><span class="person"><%- avatar({ id: ticket.updated_by, name: ticket.updated_by_name }, 'xs') %><%= ticket.updated_by_name %></span><% } else { %>–<% } %></dd>
@@ -184,11 +197,11 @@
       </dl>
     </section>
 
-    <section class="card tk-card" id="reminders">
+    <section class="card tk-card tk-reminders is-inverted <%= reminderToday ? 'is-ringing' : '' %>" id="reminders">
       <%- include('../partials/reminders-panel', { reminders, ticket, users }) %>
     </section>
 
-    <section class="card tk-card" id="attachments">
+    <section class="card tk-card tk-attachments" id="attachments">
       <div class="card-head">
         <h2 class="tk-section-title"><%- icon('paperclip') %> Attachments <span class="muted small">(<%= files.length %>)</span></h2>
       </div>

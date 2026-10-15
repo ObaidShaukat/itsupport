@@ -1,5 +1,5 @@
 // Small progressive enhancements. Everything works without JavaScript except
-// the delete confirmations and the flowchart.
+// the delete confirmations and dragging (steps, board cards).
 
 // Ask before submitting forms marked with data-confirm (deletes), in a popup with
 // Cancel and Delete. Falls back to the browser's confirm() without <dialog> support.
@@ -254,49 +254,12 @@ document.querySelectorAll('input[data-filter]').forEach((input) => {
   if (input.value) apply();
 });
 
-// Render Mermaid flowcharts (the library is only loaded on service pages).
-let chartCount = 0;
-
-async function renderFlowchart(container, definition) {
-  try {
-    const { svg } = await window.mermaid.render(`flowchart-${++chartCount}`, definition);
-    container.innerHTML = svg;
-  } catch (err) {
-    container.innerHTML = '<p class="is-error small">The flowchart could not be drawn. Refresh the page to try again.</p>';
-  }
-}
-
-if (window.mermaid) {
-  window.mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: 'base',
-    themeVariables: {
-      fontFamily: getComputedStyle(document.body).fontFamily,
-      fontSize: '14px',
-      primaryColor: '#FFFFFF',
-      primaryBorderColor: '#6741C3',
-      primaryTextColor: '#000000',
-      lineColor: '#0390D7',
-    },
-    flowchart: {
-      curve: 'basis',
-      useMaxWidth: true,
-      nodeSpacing: 40,
-      rankSpacing: 38,
-      padding: 18,
-      diagramPadding: 12,
-    },
-  });
-  window.mermaid.run({ querySelector: 'pre.mermaid' });
-}
-
 // Drag-and-drop step reordering (SortableJS is only loaded on service pages).
-// Each drop is saved straight away and the flowchart is redrawn from the reply.
+// Each drop is saved straight away and the journey is redrawn from the reply.
 const stepList = document.querySelector('[data-sortable-steps]');
 if (stepList && window.Sortable) {
   const status = document.querySelector('[data-reorder-status]');
-  const chart = document.querySelector('[data-flowchart]');
+  const journeyBox = document.querySelector('[data-journey]');
   const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
 
   const showStatus = (message, isError) => {
@@ -332,7 +295,7 @@ if (stepList && window.Sortable) {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok) throw new Error(data.error || 'The new order could not be saved.');
-        if (chart && window.mermaid) await renderFlowchart(chart, data.flowchart);
+        if (journeyBox && typeof data.journeyHtml === 'string') journeyBox.innerHTML = data.journeyHtml;
         showStatus('Order saved.');
         setTimeout(() => showStatus(''), 2000);
       } catch (err) {
@@ -1843,21 +1806,6 @@ if (cropDialog && typeof cropDialog.showModal === 'function') {
 
 // ---- Compact layout helpers ----
 
-// Sidebar: collapse to icons only. The choice is kept in a cookie so the server renders
-// the page already collapsed (no flash on the next page).
-const shell = document.querySelector('[data-shell]');
-const navCollapse = document.querySelector('[data-nav-collapse]');
-if (shell && navCollapse) {
-  navCollapse.addEventListener('click', () => {
-    const collapsed = shell.classList.toggle('nav-collapsed');
-    document.cookie = `itsupport_nav=${collapsed ? 'collapsed' : 'open'}; path=/; max-age=31536000; SameSite=Lax`;
-    const label = collapsed ? 'Expand menu' : 'Collapse menu';
-    navCollapse.setAttribute('aria-pressed', String(collapsed));
-    navCollapse.title = label;
-    navCollapse.setAttribute('aria-label', label);
-  });
-}
-
 // Table cells are one line, cut with "…": show the full text as a tooltip when a cell
 // is actually cut off and has no tooltip of its own.
 document.addEventListener('mouseover', (event) => {
@@ -3093,37 +3041,207 @@ document.querySelectorAll('form[data-rename-form]').forEach((form) => {
   sync();
 });
 
-// ---- Sidebar groups (Inventory, Call Switch One) ----
-// The group name or the chevron opens / closes it. Each group's state is remembered in
-// this browser (localStorage); the group of the current page is always open.
+// ---- Top bar menus (Inventory, Call Switch One, search, account) ----
+// [data-menu] holds a [data-menu-toggle] button and a [data-menu-panel]. One menu is open at
+// a time; Esc, a click outside or opening another one closes it. The search menu focuses its box.
 (() => {
-  const KEY = 'itsupport-nav-groups';
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (err) { saved = {}; }
-  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(saved)); } catch (err) { /* private mode: not remembered */ } };
-  document.querySelectorAll('[data-nav-group]').forEach((group) => {
-    const key = group.dataset.navGroup;
-    const head = group.querySelector('[data-nav-group-toggle]');
-    const set = (open) => {
-      group.classList.toggle('is-open', open);
-      head.setAttribute('aria-expanded', String(open));
-    };
-    if (!group.classList.contains('is-current') && saved[key] === true) set(true);
-    head.addEventListener('click', () => {
-      // Icons-only sidebar: the sub-items are a hover flyout, so a click opens the first one.
-      const shell = document.querySelector('[data-shell]');
-      if (shell && shell.classList.contains('nav-collapsed') && window.matchMedia('(min-width: 861px)').matches) {
-        const first = group.querySelector('.nav-sub a');
-        if (first) window.location.href = first.href;
-        return;
+  const menus = [...document.querySelectorAll('[data-menu]')];
+  if (!menus.length) return;
+  const close = (menu, focus) => {
+    const btn = menu.querySelector('[data-menu-toggle]');
+    const panel = menu.querySelector('[data-menu-panel]');
+    if (!panel || panel.hidden) return;
+    panel.hidden = true;
+    menu.classList.remove('is-open');
+    btn.setAttribute('aria-expanded', 'false');
+    if (focus) btn.focus();
+  };
+  const closeAll = (except) => menus.forEach((m) => { if (m !== except) close(m); });
+  menus.forEach((menu) => {
+    const btn = menu.querySelector('[data-menu-toggle]');
+    const panel = menu.querySelector('[data-menu-panel]');
+    if (!btn || !panel) return;
+    btn.addEventListener('click', () => {
+      const open = panel.hidden;
+      closeAll(menu);
+      if (!open) { close(menu); return; }
+      // The notifications panel is its own popup: close it too.
+      const bellPanel = document.querySelector('[data-bell-panel]');
+      if (bellPanel && !bellPanel.hidden) document.querySelector('[data-bell-toggle]')?.click();
+      panel.hidden = false;
+      menu.classList.add('is-open');
+      btn.setAttribute('aria-expanded', 'true');
+      // Nav dropdowns sit in the scrolling pill track, which would clip them: place them
+      // fixed under their button (kept inside the window).
+      if (menu.closest('.pillnav-track')) {
+        const r = btn.getBoundingClientRect();
+        panel.style.position = 'fixed';
+        panel.style.top = `${Math.round(r.bottom + 8)}px`;
+        panel.style.left = `${Math.round(Math.max(8, Math.min(r.left, window.innerWidth - panel.offsetWidth - 8)))}px`;
       }
-      const open = !group.classList.contains('is-open');
-      set(open);
-      saved[key] = open;
-      save();
+      const box = panel.querySelector('input[type="search"], input[type="text"]');
+      if (box) box.focus();
     });
   });
+  document.addEventListener('click', (e) => {
+    menus.forEach((m) => { if (!m.contains(e.target)) close(m); });
+  });
+  // A fixed nav dropdown would be left behind when the track scrolls or the window resizes.
+  const closeNav = () => menus.forEach((m) => { if (m.closest('.pillnav-track')) close(m); });
+  window.addEventListener('resize', closeNav);
+  document.querySelector('.pillnav-track')?.addEventListener('scroll', closeNav, { passive: true });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    menus.forEach((m) => { if (m.contains(document.activeElement) || !m.querySelector('[data-menu-panel]').hidden) close(m, m.contains(document.activeElement)); });
+  });
+  // The nav track scrolls sideways on narrow screens: keep the current page in view.
+  // (Only the track scrolls: scrollIntoView would also move the page.)
+  const track = document.querySelector('.pillnav-track');
+  const active = track && track.querySelector('.is-active');
+  if (active && track.scrollWidth > track.clientWidth) {
+    const item = active.closest('li') || active;
+    track.scrollLeft = Math.max(0, item.offsetLeft - (track.clientWidth - item.offsetWidth) / 2);
+  }
 })();
+
+// ---- Quick actions rail: "Add reminder" asks which ticket, then opens its Reminders panel ----
+(() => {
+  const dialog = document.getElementById('quick-reminder-dialog');
+  const open = document.querySelectorAll('[data-quick-reminder]');
+  if (!dialog || typeof dialog.showModal !== 'function' || !open.length) return;
+  open.forEach((btn) => btn.addEventListener('click', () => {
+    dialog.showModal();
+    const box = dialog.querySelector('.combobox-input, select');
+    if (box) box.focus();
+  }));
+  dialog.addEventListener('click', (e) => {
+    if (e.target === dialog || e.target.closest('[data-dialog-close]')) dialog.close();
+  });
+})();
+
+// The dashboard's "Reminders today" tile opens the notifications panel.
+document.querySelectorAll('[data-bell-open]').forEach((btn) => btn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = document.querySelector('[data-bell-panel]');
+  const toggle = document.querySelector('[data-bell-toggle]');
+  if (!toggle) return;
+  if (panel && panel.hidden) toggle.click();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toggle.focus();
+}));
+
+// Client service page: "Add note" jumps to the notes box and focuses it.
+document.querySelectorAll('[data-focus-note]').forEach((link) => link.addEventListener('click', (e) => {
+  const box = document.querySelector('#notes textarea[name="body"]');
+  if (!box) return;
+  e.preventDefault();
+  box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  box.focus({ preventScroll: true });
+}));
+
+// ---- Ticket board: drag a card to another column to change its status ----
+// Posts /tickets/:id/status (the same route as the status dropdown, so it is logged the same
+// way), moves the card and the count chips straight away and puts it back if saving fails.
+document.querySelectorAll('[data-board]').forEach((board) => {
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  let dragged = null;
+  let from = null;
+  const note = (text, isError) => {
+    const box = document.querySelector('[data-toasts]');
+    if (!box) return;
+    const t = document.createElement('div');
+    t.className = isError ? 'toast toast-error' : 'toast toast-saved';
+    t.setAttribute('role', isError ? 'alert' : 'status');
+    t.textContent = text;
+    box.append(t);
+    setTimeout(() => { t.classList.add('is-leaving'); setTimeout(() => t.remove(), 300); }, 3500);
+  };
+  const countOf = (col) => col.querySelector('[data-board-count]');
+  const bump = (col, by) => {
+    const chip = countOf(col);
+    if (chip) chip.textContent = String(Math.max(0, Number(chip.textContent || 0) + by));
+  };
+  const syncEmpty = (col) => {
+    const cards = col.querySelector('[data-board-cards]');
+    const has = cards.querySelector('.tcard');
+    let empty = cards.querySelector('.board-empty');
+    if (has && empty) empty.remove();
+    if (!has && !empty) {
+      empty = document.createElement('p');
+      empty.className = 'board-empty';
+      empty.textContent = 'No tickets';
+      cards.prepend(empty);
+    }
+  };
+  const place = (card, col) => {
+    const cards = col.querySelector('[data-board-cards]');
+    const more = cards.querySelector('.board-more');
+    const first = cards.querySelector('.tcard');
+    cards.insertBefore(card, first || more || null);
+  };
+  board.addEventListener('dragstart', (e) => {
+    const card = e.target.closest && e.target.closest('.tcard[data-ticket-id]');
+    if (!card) return;
+    dragged = card;
+    from = card.closest('[data-board-col]');
+    card.classList.add('is-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', card.dataset.ticketId);
+  });
+  board.addEventListener('dragend', () => {
+    if (dragged) dragged.classList.remove('is-dragging');
+    board.querySelectorAll('.is-over').forEach((c) => c.classList.remove('is-over'));
+    dragged = null;
+  });
+  board.addEventListener('dragover', (e) => {
+    const col = e.target.closest && e.target.closest('[data-board-col]');
+    if (!dragged || !col) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    board.querySelectorAll('.is-over').forEach((c) => { if (c !== col) c.classList.remove('is-over'); });
+    col.classList.add('is-over');
+  });
+  board.addEventListener('dragleave', (e) => {
+    const col = e.target.closest && e.target.closest('[data-board-col]');
+    if (col && !col.contains(e.relatedTarget)) col.classList.remove('is-over');
+  });
+  board.addEventListener('drop', async (e) => {
+    const col = e.target.closest && e.target.closest('[data-board-col]');
+    if (!dragged || !col) return;
+    e.preventDefault();
+    col.classList.remove('is-over');
+    const card = dragged;
+    const source = from;
+    if (col === source) return;
+    const status = col.dataset.boardCol;
+    place(card, col);
+    bump(source, -1);
+    bump(col, 1);
+    syncEmpty(source);
+    syncEmpty(col);
+    card.classList.add('is-saving');
+    try {
+      const res = await fetch(`/tickets/${card.dataset.ticketId}/status`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: token, status }),
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'The status could not be saved.');
+      note(`Saved. Status changed to ${data.label}.`);
+    } catch (err) {
+      place(card, source);
+      bump(col, -1);
+      bump(source, 1);
+      syncEmpty(source);
+      syncEmpty(col);
+      note(err.message, true);
+    } finally {
+      card.classList.remove('is-saving');
+    }
+  });
+});
 
 // ---- Call Switch One: "Replace" only for a month that is already calculated ----
 document.querySelectorAll('form[data-cs1-upload]').forEach((form) => {

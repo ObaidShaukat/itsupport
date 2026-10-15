@@ -56,104 +56,20 @@
     <p class="empty card">No services assigned yet.</p>
   <% } %>
   <div class="cs-grid">
-    <% for (const cs of clientServices) { %>
-      <article class="card cs-card <%= cs.status === 'closed' ? 'is-closed' : '' %>" id="cs-<%= cs.id %>">
+    <% for (const cs of clientServices) { const j = cs.journey; %>
+      <a href="/client-services/<%= cs.id %>" class="card cs-card <%= cs.status === 'closed' ? 'is-closed' : '' %>" id="cs-<%= cs.id %>">
         <div class="card-head">
-          <div>
-            <h3><%= cs.service_name %></h3>
-            <%- include('../partials/record-meta', { meta: cs.meta }) %>
-          </div>
+          <h3><%= cs.service_name %></h3>
           <%- include('../partials/status', { status: cs.status }) %>
         </div>
-
-        <% if (cs.steps.length) { %>
-          <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="<%= cs.steps.length %>" aria-valuenow="<%= cs.doneCount %>">
-            <span style="width: <%= Math.round((cs.doneCount / cs.steps.length) * 100) %>%"></span>
-          </div>
-          <p class="muted small"><%= cs.doneCount %> of <%= cs.steps.length %> steps done</p>
-          <ol class="checklist checklist-live">
-            <% for (const step of cs.steps) { %>
-              <li class="<%= step.done ? 'is-done' : '' %>">
-                <form method="post" action="/client-services/<%= cs.id %>/steps/<%= step.id %>/toggle">
-                  <%- csrfField %>
-                  <button type="submit" class="check-btn" aria-pressed="<%= step.done ? 'true' : 'false' %>">
-                    <span class="check-icon"><%- icon(step.done ? 'box-check' : 'box') %></span>
-                    <span class="check-text">
-                      <%= step.title %>
-                      <% if (step.done) { %><span class="muted small check-meta"><%= step.done_by || 'Unknown user' %> · <%= fmtDate(step.done_at) %></span><% } %>
-                    </span>
-                  </button>
-                </form>
-              </li>
-            <% } %>
-          </ol>
+        <% if (j.total) { %>
+          <div class="progress" role="progressbar" aria-label="<%= cs.service_name %> progress" aria-valuemin="0" aria-valuemax="<%= j.total %>" aria-valuenow="<%= j.done %>"><span style="--w: <%= j.percent %>%"></span></div>
+          <p class="muted small"><%= j.done %> of <%= j.total %> steps done · <%= j.groups.length %> stage<%= j.groups.length === 1 ? '' : 's' %></p>
         <% } else { %>
-          <p class="no-checklist"><span class="chip">No checklist</span> <span class="muted small">Mark it as closed when the work is done.</span></p>
+          <p class="muted small">No checklist</p>
         <% } %>
-
-        <div class="notes">
-          <h4>Notes <% if (cs.notes.length) { %><span class="muted small">(<%= cs.notes.length %>)</span><% } %></h4>
-          <form method="post" action="/client-services/<%= cs.id %>/notes" class="form note-form">
-            <%- csrfField %>
-            <label class="field">
-              <span class="visually-hidden">New note</span>
-              <textarea name="body" rows="2" required maxlength="10000" placeholder="e.g. Laptop for Kay, serial ABC123"></textarea>
-            </label>
-            <div><button type="submit" class="btn"><%- icon('plus') %><span>Add note</span></button></div>
-          </form>
-          <% if (cs.notes.length) { %>
-            <ul class="note-list">
-              <% for (const note of cs.notes) { %>
-                <li class="note">
-                  <div class="note-head">
-                    <div class="muted small">
-                      <strong class="note-author"><%= note.author || 'Deleted user' %></strong> · <%= fmtDate(note.created_at) %>
-                      <% if (note.updated_at) { %><span class="note-edited">· edited <%= fmtDate(note.updated_at) %><% if (note.editor) { %> by <%= note.editor %><% } %></span><% } %>
-                    </div>
-                    <div class="row-actions">
-                      <details class="edit">
-                        <summary class="icon-btn" title="Edit note" aria-label="Edit note"><%- icon('edit') %></summary>
-                        <div class="edit-panel">
-                          <form method="post" action="/client-service-notes/<%= note.id %>" class="form">
-                            <%- csrfField %>
-                            <label class="field">
-                              <span>Note</span>
-                              <textarea name="body" rows="4" required maxlength="10000"><%= note.body %></textarea>
-                            </label>
-                            <div class="form-actions">
-                              <button type="submit" class="btn btn-primary">Save</button>
-                              <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
-                            </div>
-                          </form>
-                        </div>
-                      </details>
-                      <%- include('../partials/delete', { action: `/client-service-notes/${note.id}/delete`, confirm: 'Delete this note?' }) %>
-                    </div>
-                  </div>
-                  <p class="pre-line"><%= note.body %></p>
-                </li>
-              <% } %>
-            </ul>
-          <% } %>
-        </div>
-
-        <%- include('../partials/history', { entries: cs.history.slice().reverse() }) %>
-
-        <div class="card-foot">
-          <% if (cs.status === 'closed') { %>
-            <form method="post" action="/client-services/<%= cs.id %>/reopen" class="inline">
-              <%- csrfField %>
-              <button type="submit" class="btn">Reopen</button>
-            </form>
-          <% } else { %>
-            <form method="post" action="/client-services/<%= cs.id %>/close" class="inline">
-              <%- csrfField %>
-              <button type="submit" class="btn <%= cs.steps.length ? 'btn-ghost' : 'btn-primary' %>"><%- icon('check') %><span>Mark as closed</span></button>
-            </form>
-          <% } %>
-          <%- include('../partials/delete', { action: `/client-services/${cs.id}/delete`, confirm: `Remove "${cs.service_name}" and its checklist from this client?` }) %>
-        </div>
-      </article>
+        <p class="cs-card-foot small"><span class="muted">Assigned by <%= cs.assigned_by || 'Deleted user' %> · <%= fmtShort(cs.created_at) %><%= cs.notes.length ? ` · ${cs.notes.length} note${cs.notes.length === 1 ? '' : 's'}` : '' %></span><span class="tile-arrow" aria-hidden="true"><%- icon('arrow-right') %></span></p>
+      </a>
     <% } %>
   </div>
 </section>

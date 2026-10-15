@@ -47,7 +47,7 @@ app.use(helmet({
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", 'https://cdn.jsdelivr.net'],
-      // Mermaid writes inline styles into the SVGs it renders.
+      // Inline style attributes carry CSS variables (bar heights, progress widths).
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       // https: so email signature images (linked by URL) show in the signature preview.
@@ -62,6 +62,8 @@ app.use(helmet({
 
 const fonts = detectFonts();
 const LOGO_PATH = path.join(__dirname, 'public', 'logo.png');
+// The top bar shows public/logo.png when it is there, otherwise the round mark (public/logo.jpg).
+const LOGO_JPG = path.join(__dirname, 'public', 'logo.jpg');
 
 app.locals.fonts = fonts;
 app.locals.ticketStatuses = TICKET_STATUSES;
@@ -69,16 +71,16 @@ app.locals.ticketPriorities = TICKET_PRIORITIES;
 app.locals.activityLabels = ACTION_LABELS;
 app.locals.stockStatuses = STOCK_STATUSES;
 app.locals.invFieldTypes = FIELD_TYPES;
+// The pill navigation in the top bar, in this order. Groups (group: true) open a dropdown of
+// their sub-items (children; Inventory's are its tabs, loaded per page as navInvTabs). Add more
+// Call Switch One tools (Devices, Numbers...) as children here. Users is in the avatar menu.
 app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },
-  { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
   { key: 'tickets', href: '/tickets', label: 'Tickets', icon: 'message' },
+  { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
   { key: 'kb', href: '/articles', label: 'Articles', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
-  // Groups open and close in the sidebar; their sub-items come from children (Inventory:
-  // its tabs, loaded per page as navInvTabs). Add more Call Switch One tools (Devices,
-  // Numbers...) as children here.
   { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard', group: true },
   { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield' },
   {
@@ -88,7 +90,6 @@ app.locals.navItems = [
       { href: '/call-switch-one/billing', label: 'Billing', match: '/call-switch-one/billing' },
     ],
   },
-  { key: 'users', href: '/users', label: 'Users', icon: 'users' },
 ];
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 // Default date formatting ("7 Oct 2026, 15:00", UK time). Signed-in requests get the
@@ -157,6 +158,7 @@ app.use((req, res, next) => {
   res.locals.flash = req.session.flash || null;
   delete req.session.flash;
   res.locals.hasLogo = fs.existsSync(LOGO_PATH);
+  res.locals.logoMark = fs.existsSync(LOGO_JPG) ? '/logo.jpg' : '/favicon.svg';
   next();
 });
 
@@ -176,8 +178,7 @@ const NAV_PREFIXES = [
   ['/call-switch-one', 'cs1'],
 ];
 app.use((req, res, next) => {
-  // Sidebar collapsed to icons (cookie set by the toggle in app.js), rendered server-side so it does not flash.
-  res.locals.navCollapsed = /(?:^|;\s*)itsupport_nav=collapsed(?:;|$)/.test(req.headers.cookie || '');
+  // The current top-bar nav item (and group) for this page.
   const hit = NAV_PREFIXES.find(([prefix]) => req.path === prefix || req.path.startsWith(`${prefix}/`));
   res.locals.nav = hit ? hit[1] : req.path === '/' ? 'dashboard' : '';
   next();
@@ -208,6 +209,14 @@ app.use(async (req, res, next) => {
     // Desktop notifications: the VAPID public key for the banner / My profile toggle.
     const push = pushStatus();
     res.locals.push = { enabled: push.enabled, publicKey: push.publicKey || '', message: push.message || '', wanted: channelsOf(req.user).has('desktop') };
+    // Quick-action rail "Add reminder": the open tickets to pick from.
+    if (req.method === 'GET') {
+      const [quick] = await pool.query(`
+        SELECT t.id, t.title, c.name AS client_name FROM tickets t JOIN clients c ON c.id = t.client_id
+        WHERE t.status <> 'closed' ORDER BY t.updated_at DESC LIMIT 200
+      `);
+      res.locals.quickTickets = quick;
+    }
   }
   next();
 });

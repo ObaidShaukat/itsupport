@@ -1,10 +1,11 @@
 // Service catalogue: categories > services > steps.
-// Categories and services are listed A-Z; steps keep the order they were added in.
+// Categories and services are listed A-Z; steps keep the order they were added in (drag to
+// reorder) and can have an optional stage; the process is shown as a journey (src/lib/journey.js).
 const express = require('express');
 const { pool, transaction } = require('../db');
 const { HttpError, str, requireId, toId, flash, notFound } = require('../lib/http');
 const { nextStepPosition } = require('../lib/order');
-const { buildFlowchart } = require('../lib/mermaid');
+const { journey, stageNames } = require('../lib/journey');
 const { receivedFiles, removeStoredFiles, discardUploads } = require('../lib/uploads');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
@@ -152,7 +153,7 @@ router.get('/services/:id', async (req, res) => {
   `, [id]);
   if (!service) throw notFound();
   const [steps] = await pool.query(
-    'SELECT id, title FROM service_steps WHERE service_id = ? ORDER BY position, id',
+    'SELECT id, title, stage FROM service_steps WHERE service_id = ? ORDER BY position, id',
     [id]
   );
   const [categories] = await pool.query('SELECT id, name FROM service_categories ORDER BY name');
@@ -175,7 +176,8 @@ router.get('/services/:id', async (req, res) => {
     steps,
     categories,
     tutorials,
-    flowchart: buildFlowchart(steps),
+    journey: journey(steps),
+    stages: stageNames(steps),
   });
 });
 
@@ -231,6 +233,7 @@ router.post('/services/:id/delete', async (req, res) => {
 router.post('/services/:id/steps', async (req, res) => {
   const serviceId = requireId(req.params.id);
   const title = str(req.body.title, 500);
+  const stage = str(req.body.stage, 100) || null;
   if (!title) {
     flash(req, 'error', 'Step text is required.');
     return res.redirect(`/services/${serviceId}#steps`);
@@ -240,16 +243,16 @@ router.post('/services/:id/steps', async (req, res) => {
     if (!service) throw notFound();
     const position = await nextStepPosition(conn, serviceId);
     await conn.query(
-      'INSERT INTO service_steps (service_id, title, position) VALUES (?, ?, ?)',
-      [serviceId, title, position]
+      'INSERT INTO service_steps (service_id, title, stage, position) VALUES (?, ?, ?, ?)',
+      [serviceId, title, stage, position]
     );
   });
-  await logService(req, serviceId, 'updated', `Added step: ${title}`);
+  await logService(req, serviceId, 'updated', `Added step: ${title}${stage ? ` (stage ${stage})` : ''}`);
   res.redirect(`/services/${serviceId}#steps`);
 });
 
 // Saves a drag-and-drop reorder. Expects order=<step ids, comma-separated> covering
-// every step of the service; replies with the rebuilt flowchart.
+// every step of the service; replies with the redrawn journey (journeyHtml).
 router.post('/services/:id/steps/order', async (req, res) => {
   const serviceId = requireId(req.params.id);
   const order = str(req.body.order, 20000).split(',').map(toId);
@@ -258,7 +261,7 @@ router.post('/services/:id/steps/order', async (req, res) => {
     const [[service]] = await conn.query('SELECT id FROM services WHERE id = ? FOR UPDATE', [serviceId]);
     if (!service) throw notFound();
     const [rows] = await conn.query(
-      'SELECT id, title FROM service_steps WHERE service_id = ? ORDER BY position, id',
+      'SELECT id, title, stage FROM service_steps WHERE service_id = ? ORDER BY position, id',
       [serviceId]
     );
     const current = new Set(rows.map((r) => r.id));
@@ -273,7 +276,10 @@ router.post('/services/:id/steps/order', async (req, res) => {
   });
 
   await logService(req, serviceId, 'updated', 'Reordered steps');
-  res.json({ ok: true, flowchart: buildFlowchart(steps) });
+  res.render('partials/journey', { journey: journey(steps), layout: false }, (err, html) => {
+    if (err) return res.status(500).json({ ok: false, error: 'The process could not be redrawn. Refresh the page.' });
+    return res.json({ ok: true, journeyHtml: html });
+  });
 });
 
 async function stepServiceId(id) {
@@ -286,11 +292,14 @@ router.post('/steps/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const serviceId = await stepServiceId(id);
   const title = str(req.body.title, 500);
+  const stage = str(req.body.stage, 100) || null;
   if (!title) {
     flash(req, 'error', 'Step text is required.');
   } else {
-    await pool.query('UPDATE service_steps SET title = ? WHERE id = ?', [title, id]);
-    await logService(req, serviceId, 'updated', `Edited step: ${title}`);
+    const [[before]] = await pool.query('SELECT title, stage FROM service_steps WHERE id = ?', [id]);
+    await pool.query('UPDATE service_steps SET title = ?, stage = ? WHERE id = ?', [title, stage, id]);
+    const stageNote = (before && (before.stage || null) !== stage) ? ` (stage ${stage || 'none'})` : '';
+    await logService(req, serviceId, 'updated', `Edited step: ${title}${stageNote}`);
   }
   res.redirect(`/services/${serviceId}#steps`);
 });

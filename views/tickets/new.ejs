@@ -38,6 +38,14 @@
         </label>
       </div>
       <label class="field">
+        <span>Assigned to</span>
+        <select name="assigned_to">
+          <% for (const p of (locals.people || [])) { %>
+            <option value="<%= p.id %>" <%= Number(ticket.assigned_to || currentUser.id) === p.id ? 'selected' : '' %>><%= p.name %><%= p.id === currentUser.id ? ' (me)' : '' %></option>
+          <% } %>
+        </select>
+      </label>
+      <label class="field">
         <span>Description</span>
         <textarea name="description" rows="6" maxlength="10000"><%= ticket.description %></textarea>
       </label>

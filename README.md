@@ -1,6 +1,6 @@
 # itsupport
 
-Cleartwo IT support portal: clients, service checklists with flowcharts and tutorials, tickets, Articles (known issues and fixes), an activity log and a Daily Report.
+Cleartwo IT support portal: clients, service checklists shown as a journey of stages, tutorials, tickets (board and list), Articles (known issues and fixes), an activity log and a Daily Report.
 
 Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads), marked (Markdown), exceljs (stock report Excel export), nodemailer (email) and sharp (profile pictures). It runs under PM2.
 
@@ -112,7 +112,10 @@ pm2 restart itsupport
 
 ## Tickets
 
-Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as glowing LED flags (Low green, Normal cyan, High amber, Urgent red) that all pulse together. Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time). A paperclip with a number in the list shows how many attachments a ticket has.
+Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set when it is created and changed on the ticket page. Priorities show as glowing LED dots (Low green, Normal cyan, High amber, Urgent red) that all pulse together. Each ticket is also **Assigned to** one person (default: whoever opened it; change it on the New ticket form or in the ticket's Details card). `npm run migrate` adds `tickets.assigned_to` and sets it to the creator on existing tickets, once.
+
+- **Board and List:** the Tickets page opens as a board (Open | Customer waiting | Closed, with counts). Drag a card to another column to change its status; it is saved and logged like the status dropdown. Cards show the LED, title, number, client, date, comment and attachment counts and the assignee; urgent cards are black. List is the table. Both filter by priority, client, person and a search (title, client or #number).
+- **Dashboard:** "Good morning, {name}", Open per person (avatars with counts; click one to see their tickets), Tickets this week (opened vs closed, Mon to Fri), Closed within 24 hours (% of this week's closed tickets), Open tickets, Reminders today, and the board (Closed = closed this week). Ticket lists can be filtered by status and priority and sorted by any column. By default urgent tickets come first, then the most recently updated. Every change records who made it (Updated by) and when (Last updated, UK time). A paperclip with a number in the list shows how many attachments a ticket has.
 
 - **Ticket page:** the header has the number, title, client (link) and the status and priority as dropdowns that save as soon as you change them, with who opened and last updated it. On the left: the description, then one timeline with the comments (newest at the bottom) and status / priority changes. On the right: Details, Reminders, Attachments and History (on a phone these move below). Comments show the author, picture and time ("2h ago"; hover for the full date); hover your own comment to edit or delete it.
 - **Comment box:** pinned at the bottom of the timeline. It grows as you type, supports @mentions, the paperclip, dropping files onto it and pasting screenshots (Ctrl+V). Ctrl+Enter posts.
@@ -122,7 +125,7 @@ Each ticket has a priority (Low, Normal, High, Urgent; Normal by default), set w
 
 Cleartwo's own staff, accounts and kit, not linked to clients. Rebuilt in October 2026: the first `npm run migrate` after updating **drops the old inventory tables and their data** (people, assets, stock, access, shared accounts, offboarding, custom fields) and installs the new defaults. This happens once only. Take a database backup first if you want to keep the old data.
 
-- **Tabs:** Employees, Stock, Writers, Ex Employees and Old Accounts, shown as tabs and under Inventory in the sidebar. **Tabs** (Settings) adds simple tabs with their own columns; tabs can be renamed and dragged into a new order, and added tabs, Writers and Old Accounts can be deleted (you type the name to confirm).
+- **Tabs:** Employees, Stock, Writers, Ex Employees and Old Accounts, shown as tabs and under Inventory in the top bar. **Tabs** (Settings) adds simple tabs with their own columns; tabs can be renamed and dragged into a new order, and added tabs, Writers and Old Accounts can be deleted (you type the name to confirm).
 - **Columns:** every tab (and every stock category) has its own fields: text, long text, email, phone, number, date, link, dropdown (editable options), password, PIN and access toggle (Granted / Not granted). **Columns** adds, renames, changes the type, hides / shows, marks required, sets the default width or deletes them (the delete page says how many records have data).
 - **Editing values in place:** on a record page (employee profile, Writers, Old Accounts, added tabs) click any value to edit it right there, with an input that matches the field (dropdowns, dates, passwords with an eye to see what you type). Enter or the tick saves, Esc cancels. Empty values show "Click to add" when you hover them. Ex employees are read-only until reactivated.
 - **Two kinds of fields:** *shared* fields exist for every record in the tab (a table column; a value only fills the record you are on) and *extra* fields belong to one record only (shown after the shared ones, marked "only this record" on hover; not table columns, an **Extra** column shows "+2" with their names and search finds their names and values, never passwords). Extra passwords / PINs are encrypted and have the same eye / copy buttons, every reveal logged.
@@ -189,7 +192,7 @@ The **Microsoft Partner** page (`/microsoft-partner`; old `/gdap` links redirect
 
 ## Call Switch One (customers and monthly call charges)
 
-The sidebar group **Call Switch One** has **Customers** (`/call-switch-one/customers`) and **Billing** (`/call-switch-one/billing`). Run `npm run migrate` after updating: it creates the `cs1_*` tables (including `cs1_sync_log`), adds the new customer columns, and once clears names that were really CS1 IDs. Email uses the same SMTP settings as the Daily Report.
+The top bar menu **Call Switch One** has **Customers** (`/call-switch-one/customers`) and **Billing** (`/call-switch-one/billing`). Run `npm run migrate` after updating: it creates the `cs1_*` tables (including `cs1_sync_log`), adds the new customer columns, and once clears names that were really CS1 IDs. Email uses the same SMTP settings as the Daily Report.
 
 ### Customers (CallSwitch One, read only)
 
@@ -237,9 +240,17 @@ Known examples to check after a refresh: Simple Insurance Solutions = CS1-517164
 - **History:** every month with totals, who uploaded it, and when and to whom it was sent; view, download Excel or resend.
 - Everything is logged in `/activity` (entity type `cs1`), never on the Daily Report.
 
-## Sidebar groups
+## Layout and navigation
 
-Inventory and Call Switch One are collapsible groups in the sidebar. Click the name or the arrow to open or close one. The group of the current page opens automatically, and each browser remembers the others (localStorage). With the sidebar collapsed to icons, hovering a group shows its sub-items as a flyout. To add a sub-item, add it to the group's `children` in `navItems` in `index.js`.
+The portal is black and white: one large rounded surface on a grey background. The only colours are the priority LEDs, red for deletes and errors, and the red notification dot. Fonts are Poppins (headings and numbers) and Manrope (text) from Google Fonts.
+
+- **Top bar:** the logo, the pill navigation (Dashboard, Tickets, Clients, Services, Articles, Daily Report, Inventory ▾, Microsoft Partner, Call Switch One ▾), ticket search, the notifications bell and your picture (My profile, Users, Activity log, Sign out). Inventory and Call Switch One open a dropdown; to add an item, add it to the group's `children` in `navItems` in `index.js` (Inventory lists its tabs). On narrow screens the navigation scrolls sideways.
+- **Quick actions** (round buttons on the left, a bar at the bottom on phones): Log work, New ticket, Add reminder (pick a ticket, its Reminders panel opens), New article, Daily report.
+- Animations (sections sliding in, bars growing, the gauge filling, the journey drawing) are off when the computer is set to reduce motion.
+
+## Service journeys
+
+A service's steps can have an optional **Stage** (e.g. Preparation, Setup, Handover). The Services page shows the steps as a journey of stage cards from left to right; steps without any stages are grouped in threes. `npm run migrate` adds the `stage` columns. When a service is assigned to a client, the steps and their stages are copied. Click an assigned service on the client page to open it (`/client-services/:id`): "{done} of {total} steps done" with a progress bar, the stage cards (tick a step to mark it done; the current step is black with a spinning ring, the next ones are dashed), the notes, the History and the client's other services.
 
 ## Desktop notifications
 
@@ -270,8 +281,8 @@ Each ticket page has a **Reminders** panel listing pending reminders (soonest fi
 ## Users, My profile and email signatures
 
 - **Users page:** add people, and edit anyone with the pencil: display name, email / username (use the person's email address, as emails are sent to it), password, and email signature, each with its own Save and Cancel. Clicking outside the popup or pressing Esc closes it without saving.
-- **My profile:** click your name or picture in the sidebar or top bar. You can change:
-  - **Profile picture:** choose a JPG, PNG or WebP (phone photos are fine) and a Crop picture popup opens: drag to move, zoom with the slider, mouse wheel or a pinch, rotate 90°, or reset, with a live preview of the round picture. Save uploads just the cropped square (a 512 × 512 JPG); Cancel, Esc or a click outside cancels. It is stored at 256 × 256 and shown in the sidebar, top bar, comments, history, the Users list and created / updated by columns. Without a picture you get a coloured circle with your initials. Remove picture takes it away.
+- **My profile:** click your picture in the top bar, then My profile. You can change:
+  - **Profile picture:** choose a JPG, PNG or WebP (phone photos are fine) and a Crop picture popup opens: drag to move, zoom with the slider, mouse wheel or a pinch, rotate 90°, or reset, with a live preview of the round picture. Save uploads just the cropped square (a 512 × 512 JPG); Cancel, Esc or a click outside cancels. It is stored at 256 × 256 and shown in the top bar, comments, history, the Users list and created / updated by columns. Without a picture you get a coloured circle with your initials. Remove picture takes it away.
   - **Display name and job title:** the job title shows under your name on your profile and in the Users list, and `{job_title}` in your signature is replaced by it.
   - **Notifications:** any combination of Popup in the portal, Email and Desktop notification (all three by default). They apply to reminders, @mentions and being added to a reminder.
   - **Desktop notifications:** turn them on (or off) for the browser you are using, and send yourself a test. After signing in, a banner also offers "Enable desktop notifications" until you allow or dismiss it. They appear even when the portal tab is in the background or closed, as long as the browser is running. Turn them on in each browser you use.
@@ -316,9 +327,9 @@ Tutorials (on each service), article attachments and ticket attachments (in the 
 
 ## Branding assets
 
-- **Logo:** `public/logo.png` (served at `/logo.png`) appears in the sidebar and on the sign-in page. Until it exists, the text "Cleartwo" is shown instead. It's picked up without a restart.
+- **Logo:** `public/logo.png` (served at `/logo.png`) appears in the top bar and on the sign-in page. Until it exists, the text "Cleartwo" is shown instead. It's picked up without a restart.
 - **Favicon:** `public/favicon.svg` (served at `/favicon.svg`).
-- **Fonts:** put Kollektif and Made Tommy files (`.woff2`, `.woff`, `.ttf` or `.otf`) in `public/fonts/`. They're matched by file name, so names should contain "Kollektif" or "Made Tommy" (for example `Kollektif-Bold.woff2`). Weight is read from the name (Regular, Medium, Bold, ExtraBold, Black). Restart the app after adding fonts. Until they're present, the portal uses Poppins from Google Fonts.
+- **Fonts:** Poppins and Manrope load from Google Fonts; nothing to install.
 
 ## Project layout
 
@@ -329,7 +340,7 @@ db/schema.sql         Table definitions (npm run migrate)
 scripts/              migrate, seed and create-user scripts
 src/routes/           auth, dashboard, users, profile, services (+ tutorials), clients, tickets, reminders, notifications, kb, files, activity (log work), report
 src/middleware/       login check and CSRF protection
-src/lib/              helpers (ordering, Mermaid flowcharts, fonts, validation, mailer, report emails, signatures)
+src/lib/              helpers (ordering, journeys, dashboard, validation, mailer, report emails, signatures)
 views/                EJS templates
 public/               CSS, JS, fonts, images
 uploads/              uploaded files (git-ignored, created automatically)

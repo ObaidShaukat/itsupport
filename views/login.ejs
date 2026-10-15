@@ -1,10 +1,11 @@
 <%- include('partials/head') %>
 <div class="login">
-  <div class="card login-card">
+  <div class="login-card">
     <div class="login-brand">
       <% if (hasLogo) { %>
         <img src="/logo.png" alt="Cleartwo" class="brand-logo">
       <% } else { %>
+        <img src="<%= locals.logoMark || '/favicon.svg' %>" alt="" class="brand-mark brand-mark-lg">
         <span class="brand-name">Cleartwo</span>
       <% } %>
       <span class="brand-sub">IT Support</span>

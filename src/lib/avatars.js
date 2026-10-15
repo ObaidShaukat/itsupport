@@ -64,7 +64,9 @@ async function removeAvatar(name) {
 
 // ---- Rendering ----
 
-const COLOURS = ['#200D6C', '#0390D7', '#6741C3', '#1D7A46', '#B4234B', '#C25E00', '#00838F', '#5D4037'];
+// Initials sit on black, dark grey or mid grey (the portal is black and white); white text on
+// each keeps at least 4.5:1 contrast.
+const COLOURS = ['#0B0B0F', '#3A3A44', '#5C5C66'];
 const escape = (text) => String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function initials(name) {

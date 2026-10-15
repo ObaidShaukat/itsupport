@@ -44,68 +44,76 @@
 </header>
 
 <nav class="tabs" aria-label="Service sections">
-  <a href="/services/<%= service.id %>" class="<%= tab === 'steps' ? 'active' : '' %>" <%- tab === 'steps' ? 'aria-current="page"' : '' %>><%- icon('layers') %><span>Steps &amp; flowchart</span></a>
+  <a href="/services/<%= service.id %>" class="<%= tab === 'steps' ? 'active' : '' %>" <%- tab === 'steps' ? 'aria-current="page"' : '' %>><%- icon('layers') %><span>Steps &amp; process</span></a>
   <a href="/services/<%= service.id %>?tab=tutorials" class="<%= tab === 'tutorials' ? 'active' : '' %>" <%- tab === 'tutorials' ? 'aria-current="page"' : '' %>><%- icon('book') %><span>Tutorials</span><% if (tutorials.length) { %> <span class="count"><%= tutorials.length %></span><% } %></a>
 </nav>
 
 <% if (tab === 'steps') { %>
-<div class="grid-2">
-  <section class="card" id="steps">
-    <div class="card-head">
-      <h2>Steps</h2>
-      <% if (steps.length > 1) { %><span class="muted small">Drag <%- icon('grip') %> to reorder</span><% } %>
-    </div>
-    <% if (!steps.length) { %>
-      <p class="empty">No steps yet. Add the first one below.</p>
-    <% } else { %>
-      <ol class="rows step-list" data-sortable-steps data-order-url="/services/<%= service.id %>/steps/order">
-        <% steps.forEach((step, i) => { %>
-          <li class="row" data-id="<%= step.id %>">
-            <span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span>
-            <span class="step-num"><%= i + 1 %></span>
-            <div class="row-main"><%= step.title %></div>
-            <div class="row-actions">
-              <details class="edit">
-                <summary class="icon-btn" title="Edit" aria-label="Edit"><%- icon('edit') %></summary>
-                <div class="edit-panel">
-                  <form method="post" action="/steps/<%= step.id %>" class="form">
-                    <%- csrfField %>
-                    <label class="field">
-                      <span>Step</span>
-                      <input type="text" name="title" value="<%= step.title %>" required maxlength="500">
-                    </label>
-                    <div class="form-actions">
-                      <button type="submit" class="btn btn-primary">Save</button>
-                      <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
-                    </div>
-                  </form>
-                </div>
-              </details>
-              <%- include('../partials/delete', { action: `/steps/${step.id}/delete`, confirm: 'Delete this step?' }) %>
-            </div>
-          </li>
-        <% }) %>
-      </ol>
-      <p class="reorder-status small" data-reorder-status role="status" hidden></p>
-    <% } %>
-    <form method="post" action="/services/<%= service.id %>/steps" class="inline-form add-step">
-      <%- csrfField %>
-      <label class="field field-grow">
-        <span>New step</span>
-        <input type="text" name="title" required maxlength="500">
-      </label>
-      <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add step</span></button>
-    </form>
-  </section>
+<section class="panel journey-panel" aria-labelledby="process-title">
+  <div class="section-head">
+    <h2 id="process-title">Process</h2>
+    <span class="muted small"><%= steps.length %> step<%= steps.length === 1 ? '' : 's' %><%= stages.length ? ` in ${stages.length} stage${stages.length === 1 ? '' : 's'}` : ' (no stages set: grouped in threes)' %></span>
+  </div>
+  <div class="journey-scroll" data-journey><%- include('../partials/journey', { journey }) %></div>
+</section>
 
-  <section class="card">
-    <h2>Flowchart</h2>
-    <div class="flowchart" data-flowchart>
-      <pre class="mermaid"><%= flowchart %></pre>
-    </div>
-  </section>
-</div>
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<section class="card" id="steps">
+  <div class="card-head">
+    <h2>Steps</h2>
+    <% if (steps.length > 1) { %><span class="muted small">Drag <%- icon('grip') %> to reorder</span><% } %>
+  </div>
+  <% if (!steps.length) { %>
+    <p class="empty">No steps yet. Add the first one below.</p>
+  <% } else { %>
+    <ol class="rows step-list" data-sortable-steps data-order-url="/services/<%= service.id %>/steps/order">
+      <% steps.forEach((step, i) => { %>
+        <li class="row" data-id="<%= step.id %>">
+          <span class="drag-handle" title="Drag to reorder" aria-hidden="true"><%- icon('grip') %></span>
+          <span class="step-num"><%= i + 1 %></span>
+          <div class="row-main"><%= step.title %><% if (step.stage) { %> <span class="chip chip-stage"><%= step.stage %></span><% } %></div>
+          <div class="row-actions">
+            <details class="edit">
+              <summary class="icon-btn" title="Edit" aria-label="Edit step <%= i + 1 %>"><%- icon('edit') %></summary>
+              <div class="edit-panel">
+                <form method="post" action="/steps/<%= step.id %>" class="form">
+                  <%- csrfField %>
+                  <label class="field">
+                    <span>Step</span>
+                    <input type="text" name="title" value="<%= step.title %>" required maxlength="500" autocomplete="off" data-1p-ignore data-lpignore="true">
+                  </label>
+                  <label class="field">
+                    <span>Stage <span class="muted">(optional)</span></span>
+                    <input type="text" name="stage" value="<%= step.stage || '' %>" maxlength="100" list="stage-names" placeholder="e.g. Preparation" autocomplete="off" data-1p-ignore data-lpignore="true">
+                  </label>
+                  <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+                  </div>
+                </form>
+              </div>
+            </details>
+            <%- include('../partials/delete', { action: `/steps/${step.id}/delete`, confirm: 'Delete this step?' }) %>
+          </div>
+        </li>
+      <% }) %>
+    </ol>
+    <p class="reorder-status small" data-reorder-status role="status" hidden></p>
+  <% } %>
+  <form method="post" action="/services/<%= service.id %>/steps" class="inline-form add-step">
+    <%- csrfField %>
+    <label class="field field-grow">
+      <span>New step</span>
+      <input type="text" name="title" required maxlength="500" autocomplete="off">
+    </label>
+    <label class="field">
+      <span>Stage <span class="muted">(optional)</span></span>
+      <input type="text" name="stage" maxlength="100" list="stage-names" placeholder="e.g. Preparation" autocomplete="off">
+    </label>
+    <button type="submit" class="btn btn-primary"><%- icon('plus') %><span>Add step</span></button>
+  </form>
+  <datalist id="stage-names"><% for (const s of stages) { %><option value="<%= s %>"></option><% } %></datalist>
+  <p class="muted small">Steps with the same stage are grouped together in the process (and on each client's copy). With no stages set, steps are grouped in threes.</p>
+</section>
 <% if (steps.length > 1) { %><script src="https://cdn.jsdelivr.net/npm/sortablejs@1/Sortable.min.js"></script><% } %>
 <% } else { %>
 <div class="grid-2 grid-wide-left">

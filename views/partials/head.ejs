@@ -7,74 +7,71 @@
   <% if (locals.csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>"><% } %>
   <% if (locals.currentUser && locals.push && push.enabled) { %><meta name="push-key" content="<%= push.publicKey %>" data-wanted="<%= push.wanted ? '1' : '0' %>"><% } %>
   <title><%= locals.title ? title + ' · ' : '' %>Cleartwo IT Support</title>
-  <% if (fonts.needPoppins) { %>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
-  <% } %>
-  <link rel="stylesheet" href="/css/fonts.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap">
   <link rel="stylesheet" href="/css/style.css">
 </head>
-<body>
+<%#
+  The shell: the page sits on the grey ground with one large rounded surface. Top bar = logo,
+  pill navigation (groups open a dropdown: [data-menu]), search, notifications bell and the
+  avatar menu; the quick-action rail on the left (a bottom bar on phones).
+%>
+<body class="<%= locals.currentUser ? 'is-app' : 'is-bare' %>">
+<a href="#main" class="skip-link">Skip to content</a>
 <%- include('icons') %>
 <% if (locals.currentUser) { %>
-<div class="shell <%= locals.navCollapsed ? 'nav-collapsed' : '' %>" data-shell>
-  <input type="checkbox" id="nav-toggle" class="nav-toggle">
-  <aside class="sidebar">
-    <div class="sidebar-top">
-      <a href="/" class="brand">
-        <% if (locals.hasLogo) { %>
-          <img src="/logo.png" alt="Cleartwo" class="brand-logo">
-        <% } else { %>
-          <span class="brand-name">Cleartwo</span>
-        <% } %>
-        <span class="brand-sub">IT Support</span>
-        <img src="/favicon.svg" alt="Cleartwo" class="brand-mark">
-      </a>
-      <button type="button" class="nav-collapse" data-nav-collapse aria-pressed="<%= locals.navCollapsed ? 'true' : 'false' %>" title="<%= locals.navCollapsed ? 'Expand menu' : 'Collapse menu' %>" aria-label="<%= locals.navCollapsed ? 'Expand menu' : 'Collapse menu' %>"><%- icon('left') %></button>
-      <label for="nav-toggle" class="nav-button" aria-label="Toggle menu"><%- icon('menu') %></label>
-    </div>
-    <nav class="nav" aria-label="Main">
-      <% const path = (locals.currentPath || '').split('?')[0]; %>
-      <% for (const item of navItems) { %>
-        <% if (item.group) {
-          // Collapsible group (Inventory, Call Switch One): the group of the current page is
-          // open and its sub-item highlighted; others remember open / closed (app.js).
-          const children = item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []);
-          const here = locals.nav === item.key;
-          const subId = `nav-sub-${item.key}`; %>
-          <div class="nav-group <%= here ? 'is-open is-current' : '' %>" data-nav-group="<%= item.key %>">
-            <button type="button" class="nav-group-head <%= here ? 'active' : '' %>" data-nav-group-toggle aria-expanded="<%= here ? 'true' : 'false' %>" aria-controls="<%= subId %>" title="<%= item.label %>">
-              <%- icon(item.icon) %><span class="nav-group-label"><%= item.label %></span><span class="nav-chevron" aria-hidden="true"><%- icon('right') %></span>
-            </button>
-            <div class="nav-sub-outer" id="<%= subId %>">
-              <div class="nav-sub">
-                <span class="nav-flyout-title"><%= item.label %></span>
+<% const path = (locals.currentPath || '').split('?')[0]; %>
+<div class="app" data-shell>
+  <header class="topbar">
+    <a href="/" class="brand" aria-label="Cleartwo IT Support: dashboard">
+      <% if (locals.hasLogo) { %>
+        <img src="/logo.png" alt="Cleartwo" class="brand-logo">
+      <% } else { %>
+        <img src="<%= locals.logoMark || '/favicon.svg' %>" alt="" class="brand-mark">
+        <span class="brand-name">Cleartwo</span>
+      <% } %>
+    </a>
+
+    <nav class="pillnav" aria-label="Main">
+      <ul class="pillnav-track">
+        <% for (const item of navItems) {
+          const here = locals.nav === item.key; %>
+          <% if (item.group) {
+            const children = item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []); %>
+            <li class="pillnav-group" data-menu>
+              <button type="button" class="pill-item <%= here ? 'is-active' : '' %>" data-menu-toggle aria-haspopup="true" aria-expanded="false" <%- here ? 'aria-current="page"' : '' %>>
+                <span><%= item.label %></span><span class="pill-caret" aria-hidden="true"><%- icon('down') %></span>
+              </button>
+              <div class="menu" data-menu-panel hidden>
                 <% for (const c of children) {
                   const active = path === c.href || path.startsWith(`${c.match || c.href}/`); %>
-                  <a href="<%= c.href %>" class="<%= here && active ? 'active' : '' %>" title="<%= c.label %>" <%- here && active ? 'aria-current="page"' : '' %>><span><%= c.label %></span></a>
+                  <a href="<%= c.href %>" class="menu-item <%= here && active ? 'is-active' : '' %>" <%- here && active ? 'aria-current="page"' : '' %>><%= c.label %></a>
                 <% } %>
-                <% if (!children.length) { %><a href="<%= item.href %>"><span>Open</span></a><% } %>
+                <% if (!children.length) { %><a href="<%= item.href %>" class="menu-item">Open <%= item.label %></a><% } %>
               </div>
-            </div>
-          </div>
-        <% } else { %>
-          <a href="<%= item.href %>" class="<%= locals.nav === item.key ? 'active' : '' %>" title="<%= item.label %>"><%- icon(item.icon) %><span><%= item.label %></span></a>
+            </li>
+          <% } else { %>
+            <li><a href="<%= item.href %>" class="pill-item <%= here ? 'is-active' : '' %>" <%- here ? 'aria-current="page"' : '' %>><%= item.label %></a></li>
+          <% } %>
         <% } %>
-      <% } %>
-      <div class="nav-foot">
-        <a href="/profile" class="whoami <%= locals.nav === 'profile' ? 'active' : '' %>" title="My profile"><%- avatar(currentUser, 'sm') %><span><%= currentUser.name || currentUser.username %></span></a>
-        <form method="post" action="/logout">
-          <%- locals.csrfField %>
-          <button type="submit" class="nav-signout" title="Sign out"><%- icon('logout') %><span>Sign out</span></button>
-        </form>
-      </div>
+      </ul>
     </nav>
-  </aside>
-  <main class="main">
-    <div class="topbar">
-      <div class="bell" data-bell>
-        <button type="button" class="icon-btn bell-button" aria-haspopup="true" aria-expanded="false" aria-label="Reminders" title="Reminders" data-bell-toggle>
+
+    <div class="topbar-tools">
+      <div class="tool" data-menu data-search>
+        <button type="button" class="round-btn" data-menu-toggle aria-haspopup="true" aria-expanded="false" aria-label="Search tickets" title="Search tickets"><%- icon('search') %></button>
+        <div class="menu menu-right search-pop" data-menu-panel hidden>
+          <form method="get" action="/tickets" role="search" class="search-pop-form">
+            <label class="visually-hidden" for="global-search">Search tickets</label>
+            <input type="search" id="global-search" name="q" placeholder="Search tickets: title, client or #number" autocomplete="off" data-1p-ignore data-lpignore="true">
+            <input type="hidden" name="view" value="list">
+            <button type="submit" class="btn btn-primary btn-small">Search</button>
+          </form>
+        </div>
+      </div>
+      <div class="bell tool" data-bell>
+        <button type="button" class="round-btn bell-button" aria-haspopup="true" aria-expanded="false" aria-label="Notifications" title="Notifications" data-bell-toggle>
           <%- icon('bell') %><span class="bell-count" data-bell-count hidden>0</span>
         </button>
         <div class="bell-panel card" data-bell-panel hidden>
@@ -82,13 +79,39 @@
           <div class="bell-list" data-bell-list><p class="empty small">Loading…</p></div>
         </div>
       </div>
-      <a href="/report" class="topbar-link"><%- icon('calendar') %><span>Today's report</span></a>
-      <a href="/profile" class="topbar-link topbar-profile" title="My profile"><%- avatar(currentUser, 'sm') %><span><%= currentUser.name %></span></a>
-      <a href="/log-work?back=<%= encodeURIComponent(locals.currentPath || '/') %>" class="btn btn-primary" data-log-work><%- icon('pen') %><span>Log work</span></a>
+      <div class="tool user-menu" data-menu>
+        <button type="button" class="avatar-btn" data-menu-toggle aria-haspopup="true" aria-expanded="false" aria-label="Account menu for <%= currentUser.name %>" title="<%= currentUser.name %>">
+          <%- avatar(currentUser, 'md') %>
+        </button>
+        <div class="menu menu-right" data-menu-panel hidden>
+          <div class="menu-who">
+            <%- avatar(currentUser, 'md') %>
+            <div><strong><%= currentUser.name || currentUser.username %></strong><% if (currentUser.job_title) { %><span class="muted small"><%= currentUser.job_title %></span><% } %></div>
+          </div>
+          <a href="/profile" class="menu-item <%= locals.nav === 'profile' ? 'is-active' : '' %>"><%- icon('users') %> My profile</a>
+          <a href="/users" class="menu-item <%= locals.nav === 'users' ? 'is-active' : '' %>"><%- icon('users') %> Users</a>
+          <a href="/activity" class="menu-item"><%- icon('clock') %> Activity log</a>
+          <form method="post" action="/logout" class="menu-form">
+            <%- locals.csrfField %>
+            <button type="submit" class="menu-item"><%- icon('logout') %> Sign out</button>
+          </form>
+        </div>
+      </div>
     </div>
+  </header>
+
+  <aside class="rail" aria-label="Quick actions">
+    <a href="/log-work?back=<%= encodeURIComponent(locals.currentPath || '/') %>" class="rail-btn rail-primary" data-log-work data-tip="Log work" aria-label="Log work"><%- icon('pen') %></a>
+    <a href="/tickets/new" class="rail-btn" data-tip="New ticket" aria-label="New ticket"><%- icon('plus') %></a>
+    <button type="button" class="rail-btn" data-quick-reminder data-tip="Add reminder" aria-label="Add reminder"><%- icon('bell') %></button>
+    <a href="/articles/new" class="rail-btn" data-tip="New article" aria-label="New article"><%- icon('book') %></a>
+    <a href="/report" class="rail-btn" data-tip="Daily report" aria-label="Daily report"><%- icon('calendar') %></a>
+  </aside>
+
+  <main class="main surface" id="main">
 <% } else { %>
-<div class="shell shell-bare">
-  <main class="main">
+<div class="app app-bare">
+  <main class="main" id="main">
 <% } %>
     <% if (locals.currentUser && locals.push && push.enabled && push.wanted) { %>
       <div class="push-banner" data-push-banner role="region" aria-label="Desktop notifications" hidden>

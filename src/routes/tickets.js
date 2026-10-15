@@ -3,8 +3,11 @@ const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound, backPath } = require('../lib/http');
 const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } = require('../lib/tickets');
 const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
+const { boardColumns } = require('../lib/dashboard');
 const { ticketReminders, reminderUsers, clearReminderNotifications } = require('../lib/reminders');
-const { logActivity, historyFor, recordMeta } = require('../lib/activity');
+const {
+  logActivity, historyFor, recordMeta, londonDate,
+} = require('../lib/activity');
 const {
   mentionUsers, mentionNames, mentionHtml, recordMentions,
 } = require('../lib/mentions');
@@ -34,22 +37,43 @@ async function ticketContext(db, id, lock = false) {
 
 const router = express.Router();
 
+// Portal users a ticket can be assigned to, A-Z.
+async function assignableUsers(db = pool) {
+  const [users] = await db.query("SELECT u.id, COALESCE(NULLIF(u.display_name, ''), u.username) AS name FROM users u ORDER BY name");
+  return users;
+}
+
+const wantsJson = (req) => req.accepts(['html', 'json']) === 'json';
+
 async function clientOptions() {
   const [clients] = await pool.query('SELECT id, name FROM clients ORDER BY name');
   return clients;
 }
 
+// Board (default: columns by status, drag a card to change its status) or List (the table).
 router.get('/', async (req, res) => {
   const state = readListQuery(req.query);
-  const tickets = await listTickets(state);
+  // The board always shows every status (one column each); the status filter is for the List.
+  const tickets = await listTickets(state.view === 'board' ? { ...state, status: '' } : state);
   const controls = listControls('/tickets', state, await ticketCounts());
-  res.render('tickets/index', { title: 'Tickets', tickets, state, controls });
+  const [clients, people] = await Promise.all([clientOptions(), assignableUsers()]);
+  res.render('tickets/index', {
+    title: 'Tickets', tickets, state, controls, clients, people,
+    board: boardColumns(tickets, { closedLabel: 'Closed', closedLimit: 50 }),
+  });
+});
+
+// Quick-action rail "Add reminder": the chosen ticket's page with the Add reminder form open.
+router.get('/remind', (req, res) => {
+  const id = toId(req.query.ticket);
+  if (!id) return res.redirect('/tickets');
+  return res.redirect(`/tickets/${id}?remind=1#reminders`);
 });
 
 router.get('/new', async (req, res) => {
   const clients = await clientOptions();
-  const ticket = { client_id: toId(req.query.client_id), title: '', description: '', priority: 'normal' };
-  res.render('tickets/new', { title: 'New ticket', clients, ticket, error: null });
+  const ticket = { client_id: toId(req.query.client_id), title: '', description: '', priority: 'normal', assigned_to: req.user.id };
+  res.render('tickets/new', { title: 'New ticket', clients, ticket, error: null, people: await assignableUsers() });
 });
 
 router.post('/', async (req, res) => {
@@ -58,6 +82,7 @@ router.post('/', async (req, res) => {
     title: str(req.body.title, 255),
     description: str(req.body.description, 10000),
     priority: isTicketPriority(req.body.priority) ? req.body.priority : 'normal',
+    assigned_to: toId(req.body.assigned_to) || req.user.id,
   };
 
   let error = null;
@@ -69,9 +94,11 @@ router.post('/', async (req, res) => {
     ticketId = await transaction(async (conn) => {
       const [[client]] = await conn.query('SELECT id, name FROM clients WHERE id = ?', [ticket.client_id]);
       if (!client) return null;
+      // Assigned to a portal user (default: whoever opens it).
+      const [[assignee]] = await conn.query('SELECT id FROM users WHERE id = ?', [ticket.assigned_to]);
       const [result] = await conn.query(
-        "INSERT INTO tickets (client_id, title, description, status, priority, created_by, updated_by) VALUES (?, ?, ?, 'open', ?, ?, ?)",
-        [ticket.client_id, ticket.title, ticket.description || null, ticket.priority, req.user.id, req.user.id]
+        "INSERT INTO tickets (client_id, title, description, status, priority, created_by, updated_by, assigned_to) VALUES (?, ?, ?, 'open', ?, ?, ?, ?)",
+        [ticket.client_id, ticket.title, ticket.description || null, ticket.priority, req.user.id, req.user.id, assignee ? assignee.id : req.user.id]
       );
       await conn.query(
         "INSERT INTO ticket_history (ticket_id, user_id, old_status, new_status) VALUES (?, ?, NULL, 'open')",
@@ -88,7 +115,7 @@ router.post('/', async (req, res) => {
 
   if (error) {
     const clients = await clientOptions();
-    return res.status(400).render('tickets/new', { title: 'New ticket', clients, ticket, error });
+    return res.status(400).render('tickets/new', { title: 'New ticket', clients, ticket, error, people: await assignableUsers() });
   }
   flash(req, 'success', 'Ticket created.');
   res.redirect(`/tickets/${ticketId}`);
@@ -97,11 +124,13 @@ router.post('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const id = requireId(req.params.id);
   const [[ticket]] = await pool.query(`
-    SELECT t.*, c.name AS client_name, COALESCE(NULLIF(u.display_name, ''), u.username) AS created_by_name, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by_name
+    SELECT t.*, c.name AS client_name, COALESCE(NULLIF(u.display_name, ''), u.username) AS created_by_name, COALESCE(NULLIF(uu.display_name, ''), uu.username) AS updated_by_name,
+           COALESCE(NULLIF(au.display_name, ''), au.username) AS assigned_to_name
     FROM tickets t
     JOIN clients c ON c.id = t.client_id
     LEFT JOIN users u ON u.id = t.created_by
     LEFT JOIN users uu ON uu.id = t.updated_by
+    LEFT JOIN users au ON au.id = t.assigned_to
     WHERE t.id = ?
   `, [id]);
   if (!ticket) throw notFound();
@@ -152,6 +181,10 @@ router.get('/:id', async (req, res) => {
   );
   res.render('tickets/show', {
     title: `Ticket #${ticket.id}`, ticket, comments, history, timeline, files, ticketFiles, activity, meta, reminders, users, mentionable,
+    people: await assignableUsers(),
+    remindOpen: req.query.remind === '1',
+    // The Reminders card's bell rings gently when one of them is due today (UK).
+    reminderToday: reminders.pending.some((r) => londonDate(new Date(r.remind_at)) === londonDate()),
   });
 });
 
@@ -159,6 +192,7 @@ router.post('/:id/status', async (req, res) => {
   const id = requireId(req.params.id);
   const status = req.body.status;
   if (!isTicketStatus(status)) {
+    if (wantsJson(req)) return res.status(400).json({ ok: false, error: 'Choose a valid status.' });
     flash(req, 'error', 'Choose a valid status.');
     return res.redirect(`/tickets/${id}`);
   }
@@ -177,8 +211,38 @@ router.post('/:id/status', async (req, res) => {
     return true;
   });
 
+  if (wantsJson(req)) return res.json({ ok: true, changed, status, label: TICKET_STATUSES[status] });
   flash(req, changed ? 'saved' : 'info', changed ? `Saved. Status changed to ${TICKET_STATUSES[status]}.` : 'Status unchanged.');
-  res.redirect(`/tickets/${id}`);
+  return res.redirect(backPath(req, `/tickets/${id}`));
+});
+
+// Assigned to: a portal user, or nobody (assigned_to empty). Logged on the ticket.
+router.post('/:id/assign', async (req, res) => {
+  const id = requireId(req.params.id);
+  const wanted = toId(req.body.assigned_to);
+  const result = await transaction(async (conn) => {
+    const ticket = await ticketContext(conn, id, true);
+    const [[before]] = await conn.query(`
+      SELECT t.assigned_to, COALESCE(NULLIF(u.display_name, ''), u.username) AS name
+      FROM tickets t LEFT JOIN users u ON u.id = t.assigned_to WHERE t.id = ?
+    `, [id]);
+    let person = null;
+    if (wanted) {
+      [[person]] = await conn.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name FROM users WHERE id = ?", [wanted]);
+      if (!person) return { error: 'That user no longer exists.' };
+    }
+    if ((before.assigned_to || null) === (person ? person.id : null)) return { changed: false, person };
+    await conn.query('UPDATE tickets SET assigned_to = ?, updated_by = ?, updated_at = NOW() WHERE id = ?', [person ? person.id : null, req.user.id, id]);
+    await logActivity(conn, req.user, ticketEntry(ticket, 'ticket', 'updated',
+      `Assigned to: ${before.name || 'nobody'} → ${person ? person.name : 'nobody'}`));
+    return { changed: true, person };
+  });
+  if (result.error) {
+    flash(req, 'error', result.error);
+    return res.redirect(`/tickets/${id}`);
+  }
+  flash(req, result.changed ? 'saved' : 'info', result.changed ? `Saved. Assigned to ${result.person ? result.person.name : 'nobody'}.` : 'Assignment unchanged.');
+  return res.redirect(`/tickets/${id}`);
 });
 
 router.post('/:id/priority', async (req, res) => {
