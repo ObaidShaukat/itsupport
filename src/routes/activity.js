@@ -61,7 +61,8 @@ router.post('/', async (req, res) => {
     INSERT INTO activity_log (user_id, client_id, client_name, entity_type, action, summary, activity_date)
     VALUES (?, ?, ?, 'manual', 'created', ?, ?)
   `, [req.user.id, client ? client.id : null, client ? client.name : null, entry.description, entry.date]);
-  flash(req, 'success', entry.date === londonDate() ? 'Work logged.' : `Work logged for ${entry.date}.`);
+  // A floating "Saved"-style toast (foot.ejs), not a banner that pushes the page down.
+  flash(req, 'saved', entry.date === londonDate() ? 'Work logged.' : `Work logged for ${entry.date}.`);
   res.redirect(back);
 });
 

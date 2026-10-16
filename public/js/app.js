@@ -597,8 +597,17 @@ if (bell) {
     }
   }
 
+  let lastCount = null;
   function renderBell(data) {
     const count = Number(data.count) || 0;
+    // A new notification arrived: the bell shakes briefly (not on the first load).
+    if (lastCount !== null && count > lastCount) {
+      bellToggle.classList.remove('is-shaking');
+      void bellToggle.offsetWidth; // restart the animation
+      bellToggle.classList.add('is-shaking');
+      setTimeout(() => bellToggle.classList.remove('is-shaking'), 900);
+    }
+    lastCount = count;
     bellCount.textContent = count > 99 ? '99+' : String(count);
     bellCount.hidden = count === 0;
     bell.classList.toggle('has-unread', count > 0);
@@ -1203,7 +1212,6 @@ function enhanceCombobox(native) {
     else sync();
   }
 
-  input.addEventListener('focus', () => input.select());
   input.addEventListener('click', open);
   input.addEventListener('input', () => {
     if (list.hidden) open();
@@ -2432,7 +2440,7 @@ document.querySelectorAll('[data-autohide]').forEach((toastEl) => {
   setTimeout(() => {
     toastEl.classList.add('is-leaving');
     setTimeout(() => toastEl.remove(), 300);
-  }, 3500);
+  }, 3000);
 });
 
 // ---- Ticket page: inline status / priority, auto-growing boxes, files, lightbox ----
@@ -3215,6 +3223,9 @@ document.querySelectorAll('[data-board]').forEach((board) => {
     if (col === source) return;
     const status = col.dataset.boardCol;
     place(card, col);
+    card.classList.remove('is-new');
+    void card.offsetWidth; // restart the slide-in
+    card.classList.add('is-new');
     bump(source, -1);
     bump(col, 1);
     syncEmpty(source);
@@ -3688,4 +3699,80 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault();
     fileForm(e.target);
   });
+})();
+
+// ---- Quick-action rail tooltips ----
+// Shown in a layer on <body> (never inside the layout): to the right of the button, centred,
+// 8px gap, with an arrow (above it on the phone bottom bar). Appears after a 300ms hover (at
+// once on keyboard focus) and hides on mouse leave, blur and click.
+(() => {
+  const buttons = document.querySelectorAll('.rail [data-tip]');
+  if (!buttons.length) return;
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  tip.setAttribute('role', 'tooltip');
+  tip.id = 'rail-tip';
+  tip.hidden = true;
+  document.body.appendChild(tip);
+  let timer = null;
+  const hide = () => {
+    clearTimeout(timer);
+    tip.classList.remove('is-shown');
+    tip.hidden = true;
+  };
+  const show = (btn) => {
+    tip.textContent = btn.dataset.tip;
+    tip.hidden = false;
+    const r = btn.getBoundingClientRect();
+    const below = window.matchMedia('(max-width: 1023.98px)').matches;
+    tip.classList.toggle('tip-above', below);
+    if (below) {
+      tip.style.left = `${Math.round(r.left + r.width / 2 - tip.offsetWidth / 2)}px`;
+      tip.style.top = `${Math.round(r.top - tip.offsetHeight - 8)}px`;
+    } else {
+      tip.style.left = `${Math.round(r.right + 8)}px`;
+      tip.style.top = `${Math.round(r.top + r.height / 2 - tip.offsetHeight / 2)}px`;
+    }
+    tip.classList.add('is-shown');
+  };
+  buttons.forEach((btn) => {
+    btn.setAttribute('aria-describedby', 'rail-tip');
+    btn.addEventListener('mouseenter', () => { clearTimeout(timer); timer = setTimeout(() => show(btn), 300); });
+    btn.addEventListener('mouseleave', hide);
+    btn.addEventListener('focus', () => { if (btn.matches(':focus-visible')) show(btn); });
+    btn.addEventListener('blur', hide);
+    btn.addEventListener('click', hide);
+  });
+  window.addEventListener('scroll', hide, { passive: true });
+})();
+
+// ---- Big numbers count up from 0 on load ([data-count], optional data-suffix) ----
+(() => {
+  const nums = document.querySelectorAll('[data-count]');
+  if (!nums.length || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  nums.forEach((el) => {
+    const target = Number(el.dataset.count);
+    if (!Number.isFinite(target) || target <= 0) return;
+    const suffix = el.dataset.suffix || '';
+    const duration = 900;
+    const start = performance.now();
+    el.textContent = `0${suffix}`;
+    const step = (now) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - (1 - p) ** 3;
+      el.textContent = `${Math.round(target * eased)}${suffix}`;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    // Background tabs pause animation frames: the real number always shows in the end.
+    setTimeout(() => { el.textContent = `${target}${suffix}`; }, duration + 150);
+  });
+})();
+
+// ---- New items slide in: the comment / note the page was sent back to (#comment-12) ----
+(() => {
+  if (!window.location.hash || window.location.hash.length < 2) return;
+  let el = null;
+  try { el = document.querySelector(window.location.hash); } catch (err) { el = null; }
+  if (el && /^#(comment|note)-/.test(window.location.hash)) el.classList.add('is-new');
 })();

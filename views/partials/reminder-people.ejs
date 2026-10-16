@@ -11,7 +11,7 @@
   <div class="multi-chips" data-multi-chips aria-live="polite"></div>
   <button type="button" class="btn btn-small btn-ghost multi-toggle" data-multi-toggle aria-expanded="false" hidden><%- icon('plus') %><span>Add people</span></button>
   <div class="multi-panel" data-multi-panel role="group" aria-label="Who the reminder is for">
-    <input type="search" class="multi-search" placeholder="Search people" aria-label="Search people" data-multi-search hidden>
+    <input type="search" class="multi-search" placeholder="Search" aria-label="Search people" data-multi-search hidden>
     <div class="user-checks">
       <% for (const u of users) { %>
         <label class="user-check" data-search="<%= u.name %>">

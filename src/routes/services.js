@@ -1,11 +1,11 @@
 // Service catalogue: categories > services > steps.
 // Categories and services are listed A-Z; steps keep the order they were added in (drag to
-// reorder) and can have an optional stage; the process is shown as a journey (src/lib/journey.js).
+// reorder) and can have an optional stage (used by a client's assigned service journey).
 const express = require('express');
 const { pool, transaction } = require('../db');
 const { HttpError, str, requireId, toId, flash, notFound } = require('../lib/http');
 const { nextStepPosition } = require('../lib/order');
-const { journey, stageNames } = require('../lib/journey');
+const { stageNames } = require('../lib/journey');
 const { receivedFiles, removeStoredFiles, discardUploads } = require('../lib/uploads');
 const { logActivity, historyFor, recordMeta } = require('../lib/activity');
 
@@ -176,7 +176,6 @@ router.get('/services/:id', async (req, res) => {
     steps,
     categories,
     tutorials,
-    journey: journey(steps),
     stages: stageNames(steps),
   });
 });
@@ -252,7 +251,7 @@ router.post('/services/:id/steps', async (req, res) => {
 });
 
 // Saves a drag-and-drop reorder. Expects order=<step ids, comma-separated> covering
-// every step of the service; replies with the redrawn journey (journeyHtml).
+// every step of the service; replies { ok: true }.
 router.post('/services/:id/steps/order', async (req, res) => {
   const serviceId = requireId(req.params.id);
   const order = str(req.body.order, 20000).split(',').map(toId);
@@ -276,10 +275,7 @@ router.post('/services/:id/steps/order', async (req, res) => {
   });
 
   await logService(req, serviceId, 'updated', 'Reordered steps');
-  res.render('partials/journey', { journey: journey(steps), layout: false }, (err, html) => {
-    if (err) return res.status(500).json({ ok: false, error: 'The process could not be redrawn. Refresh the page.' });
-    return res.json({ ok: true, journeyHtml: html });
-  });
+  res.json({ ok: true, count: steps.length });
 });
 
 async function stepServiceId(id) {

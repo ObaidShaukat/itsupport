@@ -74,17 +74,18 @@ app.locals.invFieldTypes = FIELD_TYPES;
 // The pill navigation in the top bar, in this order. Groups (group: true) open a dropdown of
 // their sub-items (children; Inventory's are its tabs, loaded per page as navInvTabs). Add more
 // Call Switch One tools (Devices, Numbers...) as children here. Users is in the avatar menu.
+// secondary: true items move into a "More" pill on screens 1024-1439px wide (head.ejs).
 app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },
   { key: 'tickets', href: '/tickets', label: 'Tickets', icon: 'message' },
   { key: 'clients', href: '/clients', label: 'Clients', icon: 'briefcase' },
   { key: 'services', href: '/services', label: 'Services', icon: 'layers' },
   { key: 'kb', href: '/articles', label: 'Articles', icon: 'book' },
-  { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar' },
+  { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar', secondary: true },
   { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard', group: true },
-  { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield' },
+  { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield', secondary: true },
   {
-    key: 'cs1', href: '/call-switch-one/billing', label: 'Call Switch One', icon: 'phone', group: true,
+    key: 'cs1', href: '/call-switch-one/billing', label: 'Call Switch One', icon: 'phone', group: true, secondary: true,
     children: [
       { href: '/call-switch-one/customers', label: 'Customers', match: '/call-switch-one/customers' },
       { href: '/call-switch-one/billing', label: 'Billing', match: '/call-switch-one/billing' },

@@ -50,9 +50,15 @@ async function clientOptions() {
   return clients;
 }
 
-// Board (default: columns by status, drag a card to change its status) or List (the table).
+// List (the default) or Board (columns by status, drag a card to change its status). The
+// last choice is remembered in users.ticket_view (a display preference, not activity-logged).
 router.get('/', async (req, res) => {
   const state = readListQuery(req.query);
+  if (state.view) {
+    if (state.view !== req.user.ticket_view) await pool.query('UPDATE users SET ticket_view = ? WHERE id = ?', [state.view, req.user.id]);
+  } else {
+    state.view = req.user.ticket_view === 'board' ? 'board' : 'list';
+  }
   // The board always shows every status (one column each); the status filter is for the List.
   const tickets = await listTickets(state.view === 'board' ? { ...state, status: '' } : state);
   const controls = listControls('/tickets', state, await ticketCounts());

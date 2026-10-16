@@ -1,7 +1,8 @@
+<%# Filter-as-you-type box: the placeholder is always "Search"; placeholder (optional) says what it searches, for screen readers and the tooltip. %>
 <div class="list-search">
   <label class="search-field">
     <%- icon('search') %>
-    <span class="visually-hidden"><%= placeholder %></span>
-    <input type="search" data-filter="<%= target %>" placeholder="<%= placeholder %>" autocomplete="off">
+    <span class="visually-hidden"><%= locals.placeholder || 'Search' %></span>
+    <input type="search" data-filter="<%= target %>" placeholder="Search" <% if (locals.placeholder) { %>title="<%= placeholder %>"<% } %> autocomplete="off">
   </label>
 </div>

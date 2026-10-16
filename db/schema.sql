@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
   display_name VARCHAR(100) NULL,
   -- Last Daily Report "View" choice: 'me', 'all' or a user id.
   report_view VARCHAR(20) NULL,
+  -- Last Tickets page view: 'list' (default) or 'board'.
+  ticket_view VARCHAR(10) NULL,
   -- Sanitised HTML signature added to Daily Reports this user emails.
   email_signature MEDIUMTEXT NULL,
   -- Last recipients of the emailed Daily Report (comma-separated), pre-filled next time.

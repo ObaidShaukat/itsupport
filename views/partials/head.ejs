@@ -39,7 +39,7 @@
           const here = locals.nav === item.key; %>
           <% if (item.group) {
             const children = item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []); %>
-            <li class="pillnav-group" data-menu>
+            <li class="pillnav-group <%= item.secondary ? 'is-secondary' : '' %>" data-menu>
               <button type="button" class="pill-item <%= here ? 'is-active' : '' %>" data-menu-toggle aria-haspopup="true" aria-expanded="false" <%- here ? 'aria-current="page"' : '' %>>
                 <span><%= item.label %></span><span class="pill-caret" aria-hidden="true"><%- icon('down') %></span>
               </button>
@@ -52,8 +52,30 @@
               </div>
             </li>
           <% } else { %>
-            <li><a href="<%= item.href %>" class="pill-item <%= here ? 'is-active' : '' %>" <%- here ? 'aria-current="page"' : '' %>><%= item.label %></a></li>
+            <li class="<%= item.secondary ? 'is-secondary' : '' %>"><a href="<%= item.href %>" class="pill-item <%= here ? 'is-active' : '' %>" <%- here ? 'aria-current="page"' : '' %>><%= item.label %></a></li>
           <% } %>
+        <% } %>
+        <%# "More": the secondary items, shown instead of them on screens 1024-1439px wide (CSS). %>
+        <% const extra = navItems.filter((i) => i.secondary); const extraHere = extra.some((i) => locals.nav === i.key); %>
+        <% if (extra.length) { %>
+          <li class="pillnav-group pillnav-more" data-menu>
+            <button type="button" class="pill-item <%= extraHere ? 'is-active' : '' %>" data-menu-toggle aria-haspopup="true" aria-expanded="false">
+              <span>More</span><span class="pill-caret" aria-hidden="true"><%- icon('down') %></span>
+            </button>
+            <div class="menu" data-menu-panel hidden>
+              <% for (const item of extra) { %>
+                <% if (item.group) { %>
+                  <span class="menu-label"><%= item.label %></span>
+                  <% for (const c of (item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []))) {
+                    const active = locals.nav === item.key && (path === c.href || path.startsWith(`${c.match || c.href}/`)); %>
+                    <a href="<%= c.href %>" class="menu-item menu-item-sub <%= active ? 'is-active' : '' %>"><%= c.label %></a>
+                  <% } %>
+                <% } else { %>
+                  <a href="<%= item.href %>" class="menu-item <%= locals.nav === item.key ? 'is-active' : '' %>"><%= item.label %></a>
+                <% } %>
+              <% } %>
+            </div>
+          </li>
         <% } %>
       </ul>
     </nav>
@@ -64,7 +86,7 @@
         <div class="menu menu-right search-pop" data-menu-panel hidden>
           <form method="get" action="/tickets" role="search" class="search-pop-form">
             <label class="visually-hidden" for="global-search">Search tickets</label>
-            <input type="search" id="global-search" name="q" placeholder="Search tickets: title, client or #number" autocomplete="off" data-1p-ignore data-lpignore="true">
+            <input type="search" id="global-search" name="q" placeholder="Search" autocomplete="off" data-1p-ignore data-lpignore="true">
             <input type="hidden" name="view" value="list">
             <button type="submit" class="btn btn-primary btn-small">Search</button>
           </form>
@@ -76,7 +98,7 @@
         </button>
         <div class="bell-panel card" data-bell-panel hidden>
           <div class="bell-head"><strong>Notifications</strong></div>
-          <div class="bell-list" data-bell-list><p class="empty small">Loading…</p></div>
+          <div class="bell-list" data-bell-list><div class="skeleton-list" aria-label="Loading"><span class="skeleton"></span><span class="skeleton"></span><span class="skeleton skeleton-short"></span></div></div>
         </div>
       </div>
       <div class="tool user-menu" data-menu>

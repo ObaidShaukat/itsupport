@@ -1,0 +1,21 @@
+<%#
+  One ticket card (board columns and the dashboard's Updates): priority LED, "Ticket {id}",
+  date chip, title, client, comment and attachment counts and the assignee's avatar. Cards are
+  always white; draggable adds draggable="true" for the Tickets board.
+%>
+<article class="tcard" data-ticket-id="<%= t.id %>" <%- locals.draggable ? 'draggable="true"' : '' %>>
+  <div class="tcard-top">
+    <%- include('priority', { priority: t.priority, dotOnly: true }) %>
+    <span class="tcard-no">Ticket <%= t.id %></span>
+    <span class="tcard-date" title="Opened <%= fmtDate(t.created_at) %>"><%= fmtShort(t.created_at).split(',')[0] %></span>
+  </div>
+  <h3 class="tcard-title"><a href="/tickets/<%= t.id %>" class="tcard-link"><%= t.title %></a></h3>
+  <p class="tcard-client"><%= t.client_name %></p>
+  <div class="tcard-foot">
+    <span class="tcard-meta" title="<%= Number(t.comment_count) %> comment<%= Number(t.comment_count) === 1 ? '' : 's' %>"><%- icon('message') %><%= Number(t.comment_count) %></span>
+    <span class="tcard-meta" title="<%= Number(t.attachment_count) %> attachment<%= Number(t.attachment_count) === 1 ? '' : 's' %>"><%- icon('paperclip') %><%= Number(t.attachment_count) %></span>
+    <span class="tcard-who" title="<%= t.assigned_to ? `Assigned to ${t.assigned_to}` : 'Not assigned' %>">
+      <% if (t.assigned_to) { %><%- avatar({ id: t.assigned_to_id, name: t.assigned_to }, 'sm') %><% } else { %><span class="avatar avatar-sm avatar-empty" aria-label="Not assigned">–</span><% } %>
+    </span>
+  </div>
+</article>

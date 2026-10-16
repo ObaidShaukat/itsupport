@@ -69,6 +69,7 @@ const ADDED_COLUMNS = [
   ['cs1_customers', 'is_demo', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER id_alerted_at'],
   ['cs1_customers', 'refreshed_at', 'DATETIME NULL AFTER is_demo'],
   ['tickets', 'assigned_to', 'INT UNSIGNED NULL AFTER updated_by'],
+  ['users', 'ticket_view', 'VARCHAR(10) NULL AFTER report_view'],
   ['service_steps', 'stage', 'VARCHAR(100) NULL AFTER title'],
   ['client_service_steps', 'stage', 'VARCHAR(100) NULL AFTER title'],
 ];

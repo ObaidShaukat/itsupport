@@ -3078,10 +3078,10 @@ body.is-bare { background: var(--ground); }
 @keyframes fade-up { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 
 /* ---- Responsive ---- */
-@media (max-width: 1280px) {
+@media (max-width: 1279.98px) {
   .summary { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
-@media (max-width: 1100px) {
+@media (max-width: 1023.98px) {
   .topbar { grid-template-columns: auto auto; grid-template-areas: "brand tools" "nav nav"; row-gap: 10px; }
   .topbar > .brand { grid-area: brand; }
   .topbar > .pillnav { grid-area: nav; justify-content: flex-start; }
@@ -3089,7 +3089,7 @@ body.is-bare { background: var(--ground); }
   .pillnav-track { max-width: 100%; }
   .board { grid-template-columns: 1fr; }
 }
-@media (max-width: 860px) {
+@media (max-width: 1023.98px) {
   .app { margin: 10px; border-radius: 22px; grid-template-columns: minmax(0, 1fr); grid-template-areas: "top" "main"; min-height: calc(100vh - 20px); }
   .topbar { padding: 12px 14px 6px; border-radius: 22px 22px 0 0; }
   .main { padding: 10px 14px 104px; }
@@ -3126,7 +3126,7 @@ body.is-bare { background: var(--ground); }
 .stack-count { z-index: 3; top: -6px; right: 0; }
 .dash-people { flex-wrap: wrap; }
 .grid-2 > *, .grid-wide-left > * { min-width: 0; }
-@media (max-width: 860px) {
+@media (max-width: 1023.98px) {
   .grid-2, .grid-wide-left { grid-template-columns: minmax(0, 1fr); }
   /* The sticky comment box stays above the quick-action bar. */
   .tk-composer { bottom: 84px; }
@@ -3135,3 +3135,156 @@ body.is-bare { background: var(--ground); }
 .panel-dark .btn { white-space: normal; height: auto; padding-top: 8px; padding-bottom: 8px; text-align: left; }
 /* Screen-reader-only stays 1px even where a form rule sets a width. */
 .visually-hidden { width: 1px !important; height: 1px !important; min-height: 0 !important; padding: 0 !important; margin: -1px !important; border: 0 !important; }
+
+/* ==========================================================================
+   Round 2: white ticket cards, brighter LEDs, Updates, tooltips, motion, responsive.
+   ========================================================================== */
+
+/* ---- Ticket cards: always white; hover only lifts (text colour never changes) ---- */
+.tcard, .tcard.is-inverted { background: #FFFFFF; color: var(--ink); border-color: var(--border); }
+.tcard.is-inverted .tcard-title, .tcard-title, .tcard-link, .tcard-link:hover, .tcard:hover .tcard-link { color: var(--ink); }
+.tcard.is-inverted .tcard-top, .tcard.is-inverted .tcard-client, .tcard.is-inverted .tcard-foot { color: var(--muted); }
+.tcard.is-inverted .tcard-date { background: var(--surface-main); color: var(--muted); }
+.tcard-no { color: var(--ink-2); }
+
+/* ---- Priority LEDs: 10px solid dot, 10px glow, a ring expanding to 8px every 1.4s ---- */
+:root { --led-pulse: 1.4s; }
+.led { position: relative; width: 10px; height: 10px; background: var(--led); box-shadow: 0 0 10px var(--led); animation: none; }
+.led::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--led) 70%, transparent);
+  animation: led-ring var(--led-pulse) ease-out infinite;
+}
+.led-sort::after { display: none; }
+@keyframes led-ring {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--led) 70%, transparent); }
+  100% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--led) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .led::after { animation: none !important; box-shadow: none; } }
+
+/* ---- Tickets list: delete in its own 40px column, never over Last updated ---- */
+.table-tickets .col-actions { width: 40px; }
+.table td.row-actions.cell-actions { display: table-cell; width: 40px; padding: 0 6px 0 0; text-align: right; overflow: hidden; }
+.table td.row-actions.cell-actions form { display: inline-flex; }
+.table td.row-actions .icon-btn, .table td.cell-actions .icon-btn { width: 28px; height: 28px; }
+.table-tickets td.right { padding-right: 12px; }
+
+/* ---- Dashboard: Open per person side by side (8px gap), Updates ---- */
+.avatar-row { gap: 8px; padding-left: 0; }
+.avatar-row .stack-item, .avatar-row .stack-item + .stack-item { margin-left: 0; }
+.avatar-row .stack-count { top: -6px; right: -6px; }
+.updates-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.updates-col .board-col-head h3 { margin: 0; font-size: 15px; }
+.link-more { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.link-more:hover { color: var(--ink); text-decoration: underline; }
+.ucard {
+  display: grid; gap: 8px; padding: 14px 16px; background: #FFFFFF; color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--radius); transition: transform 0.22s, box-shadow 0.22s;
+  animation: fade-up 0.4s ease-out both;
+}
+.ucard:hover { color: var(--ink); transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+.ucard-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.ucard-kicker { font-size: 12.5px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ucard-title { font-weight: 700; font-size: 14.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.ucard-progress { display: flex; align-items: center; gap: 10px; }
+.ucard-progress .progress { flex: 1; height: 6px; }
+.ucard-count { font-size: 12.5px; font-weight: 700; color: var(--ink-2); }
+.ucard-foot { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--muted); }
+.ucard-when { margin-left: auto; white-space: nowrap; }
+
+/* ---- Rail tooltips: in a layer on <body>, right of the button with an arrow ---- */
+.rail-btn[data-tip]::after, .rail-btn[data-tip]::before { display: none !important; }
+.tip {
+  position: fixed; z-index: 3000; pointer-events: none; padding: 6px 10px; border-radius: 8px;
+  background: var(--ink); color: #FFFFFF; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  opacity: 0; transition: opacity 0.15s ease-out;
+}
+.tip.is-shown { opacity: 1; }
+.tip::before { content: ""; position: absolute; top: 50%; left: -5px; margin-top: -5px; border: 5px solid transparent; border-left: 0; border-right-color: var(--ink); }
+.tip.tip-above::before { top: 100%; left: 50%; margin: 0 0 0 -5px; border: 5px solid transparent; border-bottom: 0; border-top-color: var(--ink); }
+
+/* ---- Client picker: light grey highlight, bold match, tick on the chosen one ---- */
+.combobox .combobox-input, .combobox .combobox-input:focus { background: #FFFFFF; color: var(--ink); }
+.combobox-list li.combobox-option { position: relative; padding-right: 30px; color: var(--ink); background: transparent; }
+.combobox-list li.combobox-option:hover, .combobox-list li.combobox-option.is-active { background: var(--surface-main); color: var(--ink); }
+.combobox-list li.combobox-option mark { background: none; color: var(--ink); font-weight: 800; padding: 0; }
+.combobox-list li.combobox-option.is-selected { color: var(--ink); font-weight: 600; }
+.combobox-list li.combobox-option.is-selected::after {
+  content: ""; position: absolute; right: 12px; top: 50%; width: 5px; height: 10px; margin-top: -7px;
+  border: solid var(--ink); border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.mention-list li.is-active { background: var(--surface-main); color: var(--ink); }
+::selection { background: #D5D6DC; color: var(--ink); }
+
+/* ---- Motion ---- */
+/* Page content fades in on navigation; Board / List, tabs and filters reload the page, so
+   they get the same fade. */
+.main { animation: page-in 0.35s ease-out both; }
+@keyframes page-in { from { opacity: 0; } to { opacity: 1; } }
+/* Buttons press down slightly. */
+.btn:active, .round-btn:active, .rail-btn:active, .icon-btn:active, .pill-item:active, .segmented a:active, .filters a:active, .tabs a:active { transform: scale(0.97); }
+/* Dropdowns, popovers and modals scale in from 0.96 with a fade. */
+@keyframes pop-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes pop-in-up { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
+.menu { transform-origin: top left; }
+.menu-right { transform-origin: top right; }
+.bell-panel:not([hidden]), .combobox-list:not([hidden]), .date-pop:not([hidden]), .time-list:not([hidden]), .mention-list:not([hidden]) { animation: pop-in 0.16s ease-out both; transform-origin: top center; }
+dialog[open] { animation: pop-in 0.18s ease-out both; }
+dialog[open]::backdrop { animation: fade-in 0.18s ease-out both; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+/* Toasts slide in from the top right and fade out. */
+.toasts { top: 20px; right: 20px; bottom: auto; z-index: 1500; }
+.toast { animation: toast-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.toast.is-leaving { animation: toast-leave 0.3s ease-in both; }
+@keyframes toast-in { from { opacity: 0; transform: translate(24px, -8px); } to { opacity: 1; transform: none; } }
+@keyframes toast-leave { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(16px); } }
+/* The bell shakes briefly when a new notification arrives. */
+.bell-button.is-shaking .icon { animation: bell-shake 0.8s ease-in-out both; transform-origin: 50% 10%; }
+@keyframes bell-shake {
+  0%, 100% { transform: rotate(0); }
+  15% { transform: rotate(16deg); } 30% { transform: rotate(-14deg); } 45% { transform: rotate(10deg); }
+  60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); }
+}
+/* New comments, notes and cards slide in. */
+.is-new { animation: slide-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes slide-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+/* Skeleton shimmer while something loads. */
+.skeleton-list { display: grid; gap: 10px; padding: 6px 2px; }
+.skeleton { display: block; height: 14px; border-radius: 8px; background: linear-gradient(90deg, #EDEEF2 25%, #F7F7F9 50%, #EDEEF2 75%); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+.skeleton-short { width: 60%; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .main, .ucard, .toast, .is-new, .skeleton, dialog[open], .bell-button.is-shaking .icon { animation: none !important; }
+  .btn:active, .round-btn:active, .rail-btn:active, .icon-btn:active, .pill-item:active, .segmented a:active, .filters a:active, .tabs a:active, .ucard:hover { transform: none !important; }
+  .tip { transition: none; }
+}
+
+/* ---- Responsive: fluid from 1920 down to 1280, tablet and phone ---- */
+.app { margin: clamp(8px, 1.4vw, 20px); min-height: calc(100vh - 2 * clamp(8px, 1.4vw, 20px)); }
+.main { padding: 16px clamp(14px, 2vw, 28px) 40px 8px; }
+h1 { font-size: clamp(24px, 2.4vw, 34px); }
+.big-num { font-size: clamp(32px, 3vw, 44px); }
+.gauge-value .big-num { font-size: clamp(30px, 2.7vw, 40px); }
+.menu-label { display: block; padding: 8px 12px 2px; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.menu-item-sub { padding-left: 20px; }
+.pillnav-more { display: none; }
+@media (max-width: 1439.98px) {
+  .topbar { gap: 12px; }
+  .pill-item { padding: 0 11px; font-size: 13px; height: 34px; }
+}
+@media (min-width: 1024px) and (max-width: 1439.98px) {
+  .pillnav-track > .is-secondary { display: none; }
+  .pillnav-more { display: block; }
+}
+@media (max-width: 1279.98px) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .updates-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .updates-grid > :last-child { grid-column: 1 / -1; }
+  .table-tickets .col-created, .table-tickets .cell-created { display: none; }
+}
+@media (max-width: 1023.98px) {
+  .updates-grid, .board, .grid-2, .grid-wide-left, .summary { grid-template-columns: minmax(0, 1fr); }
+  .updates-grid > :last-child { grid-column: auto; }
+  .main { padding: 10px 14px 104px; }
+  .tk-composer { bottom: 84px; }
+}

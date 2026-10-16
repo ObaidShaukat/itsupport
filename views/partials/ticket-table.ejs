@@ -2,7 +2,8 @@
   tickets: rows from listTickets(); controls.columns: sortable headers;
   filtered: true when a status/priority filter is applied.
   Fixed column widths, one line per cell (full text in the tooltip), priority as a
-  flag at the start of the row, people as avatar + first name, delete on hover.
+  flag at the start of the row, people as avatar + first name, delete in its own narrow last
+  column (shown on row hover). Created by (cell-created) is hidden below 1280px.
 %>
 <% if (!tickets.length) { %>
   <p class="empty">No tickets<%= locals.filtered ? ' match these filters' : '' %>.</p>
@@ -12,12 +13,12 @@
     <table class="table table-tickets">
       <colgroup>
         <col class="col-flag"><col class="col-id"><col><col class="col-client"><col class="col-status">
-        <col class="col-person"><col class="col-person"><col class="col-updated"><col class="col-actions">
+        <col class="col-person col-created"><col class="col-person"><col class="col-updated"><col class="col-actions">
       </colgroup>
       <thead>
         <tr>
           <% for (const col of controls.columns) { %>
-            <th aria-sort="<%= col.active ? (col.dir === 'asc' ? 'ascending' : 'descending') : 'none' %>" class="<%= col.key === 'updated' ? 'right' : '' %>">
+            <th aria-sort="<%= col.active ? (col.dir === 'asc' ? 'ascending' : 'descending') : 'none' %>" class="<%= col.key === 'updated' ? 'right' : col.key === 'created_by' ? 'cell-created' : '' %>">
               <% if (col.key === 'priority') { %>
                 <a href="<%= col.href %>" class="sort-link sort-flag <%= col.active ? 'is-sorted' : '' %>" title="Sort by priority" aria-label="Sort by priority"><span class="led led-sort" aria-hidden="true"></span></a>
               <% } else { %>
@@ -25,7 +26,7 @@
               <% } %>
             </th>
           <% } %>
-          <th><span class="visually-hidden">Delete</span></th>
+          <th class="cell-actions"><span class="visually-hidden">Delete</span></th>
         </tr>
       </thead>
       <tbody>
@@ -44,10 +45,10 @@
             </td>
             <td title="<%= t.client_name %>"><a href="/clients/<%= t.client_id %>"><%= t.client_name %></a></td>
             <td><%- include('status', { status: t.status }) %></td>
-            <td title="<%= t.created_by || 'Deleted user' %>"><span class="person"><%- avatar({ id: t.created_by_id, name: t.created_by }, 'xs') %><%= firstName(t.created_by) || 'Deleted user' %></span></td>
+            <td class="cell-created" title="<%= t.created_by || 'Deleted user' %>"><span class="person"><%- avatar({ id: t.created_by_id, name: t.created_by }, 'xs') %><%= firstName(t.created_by) || 'Deleted user' %></span></td>
             <td title="<%= t.updated_by || '' %>"><% if (t.updated_by) { %><span class="person"><%- avatar({ id: t.updated_by_id, name: t.updated_by }, 'xs') %><%= firstName(t.updated_by) %></span><% } else { %><span class="muted">—</span><% } %></td>
             <td class="right muted" title="<%= fmtDate(t.updated_at) %>"><%= fmtShort(t.updated_at) %></td>
-            <td class="row-actions">
+            <td class="row-actions cell-actions">
               <%- include('delete', {
                 action: `/tickets/${t.id}/delete`,
                 confirm: `Delete ticket '${t.title}'? This cannot be undone.`,

@@ -69,7 +69,7 @@
     <% } else { %>
       <ul class="note-list">
         <% for (const note of notes) { %>
-          <li class="note">
+          <li class="note" id="note-<%= note.id %>">
             <div class="note-head">
               <span class="person"><%- avatar({ id: note.user_id, name: note.author }, 'sm') %><strong class="note-author"><%= note.author || 'Deleted user' %></strong></span>
               <span class="muted small"><%= fmtDate(note.created_at) %><% if (note.updated_at) { %> · edited <%= fmtDate(note.updated_at) %><% if (note.editor) { %> by <%= note.editor %><% } %><% } %></span>

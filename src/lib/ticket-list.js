@@ -44,7 +44,8 @@ function readListQuery(query) {
     // A user id, or 'none' for unassigned tickets.
     person: query.person === 'none' ? 'none' : positiveId(query.person) || '',
     q: typeof query.q === 'string' ? query.q.trim().slice(0, 100) : '',
-    view: query.view === 'list' ? 'list' : 'board',
+    // '' when the address names no view (the Tickets page then uses the user's last choice).
+    view: query.view === 'list' || query.view === 'board' ? query.view : '',
   };
 }
 
@@ -123,7 +124,7 @@ function listControls(base, state, counts, hash = '') {
   const href = (changes) => {
     const next = { ...state, ...changes };
     const q = new URLSearchParams();
-    for (const key of ['status', 'priority', 'sort', 'dir', 'client', 'person', 'q', 'view']) if (next[key] && !(key === 'view' && next[key] === 'board')) q.set(key, next[key]);
+    for (const key of ['status', 'priority', 'sort', 'dir', 'client', 'person', 'q', 'view']) if (next[key]) q.set(key, next[key]);
     const qs = q.toString();
     return `${base}${qs ? `?${qs}` : ''}${hash}`;
   };

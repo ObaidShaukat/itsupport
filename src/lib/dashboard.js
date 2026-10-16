@@ -4,7 +4,8 @@
 //            opened (gauge); null when nothing was closed
 //   open     open tickets; remindersToday: the signed-in user's pending reminders due today
 //   people   open (not closed) tickets per assignee, for the "Open per person" stack
-//   board    ticket board columns (Open, Customer waiting, Closed this week)
+//   updates  latest open / customer-waiting tickets, recently updated client services
+//            (from activity_log) and recently created or edited articles, 5 each
 const { pool } = require('../db');
 const { londonDate, londonDayStart } = require('./activity');
 
@@ -72,10 +73,46 @@ function boardColumns(tickets, { closedLabel = 'Closed', closedLimit = 50 } = {}
   return [col('open', 'Open'), col('customer_waiting', 'Customer waiting'), col('closed', closedLabel, closedLimit)];
 }
 
+const UPDATES_LIMIT = 5;
+
+// The dashboard's Updates columns.
+async function recentUpdates(db) {
+  const [tickets] = await db.query(`${CARD_SQL}
+    WHERE t.status IN ('open', 'customer_waiting')
+    ORDER BY t.updated_at DESC, t.id DESC LIMIT ?`, [UPDATES_LIMIT]);
+  // Client services have no updated_at: their latest activity (the service itself, its steps
+  // and notes all log against the client service id) says who touched it last and when.
+  const [services] = await db.query(`
+    SELECT cs.id, cs.service_name, cs.status, c.name AS client_name, a.created_at AS updated_at,
+           a.user_id AS updated_by_id, COALESCE(NULLIF(u.display_name, ''), u.username) AS updated_by,
+           (SELECT COUNT(*) FROM client_service_steps s WHERE s.client_service_id = cs.id) AS step_count,
+           (SELECT COUNT(*) FROM client_service_steps s WHERE s.client_service_id = cs.id AND s.done = 1) AS done_count
+    FROM (
+      SELECT entity_id, MAX(id) AS last_id FROM activity_log
+      WHERE entity_type IN ('client_service', 'step', 'note') AND entity_id IS NOT NULL
+      GROUP BY entity_id ORDER BY last_id DESC LIMIT 20
+    ) x
+    JOIN activity_log a ON a.id = x.last_id
+    JOIN client_services cs ON cs.id = x.entity_id
+    JOIN clients c ON c.id = cs.client_id
+    LEFT JOIN users u ON u.id = a.user_id
+    ORDER BY x.last_id DESC LIMIT ?`, [UPDATES_LIMIT]);
+  const [articles] = await db.query(`
+    SELECT k.id, k.title, k.category, k.updated_at, k.created_at,
+           COALESCE(k.updated_by, k.created_by) AS author_id,
+           COALESCE(NULLIF(u.display_name, ''), u.username) AS author
+    FROM kb_articles k LEFT JOIN users u ON u.id = COALESCE(k.updated_by, k.created_by)
+    ORDER BY k.updated_at DESC, k.id DESC LIMIT ?`, [UPDATES_LIMIT]);
+  return {
+    tickets,
+    services: services.map((s) => ({ ...s, step_count: Number(s.step_count), done_count: Number(s.done_count) })),
+    articles,
+  };
+}
+
 async function dashboardData(user) {
   const week = ukWeek();
   const chart = await weekChart(pool, week);
-  const weekStart = londonDayStart(week.monday);
   const [[counts]] = await pool.query(`
     SELECT (SELECT COUNT(*) FROM tickets WHERE status = 'open') AS open_tickets,
            (SELECT COUNT(*) FROM tickets WHERE status = 'customer_waiting') AS waiting_tickets
@@ -96,10 +133,7 @@ async function dashboardData(user) {
     ORDER BY open_count DESC, name
   `);
   const [[unassigned]] = await pool.query("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'closed' AND assigned_to IS NULL");
-  const [boardTickets] = await pool.query(`${CARD_SQL}
-    WHERE t.status <> 'closed'
-       OR (t.status = 'closed' AND t.id IN (SELECT th.ticket_id FROM ticket_history th WHERE th.new_status = 'closed' AND th.created_at >= ?))
-  `, [weekStart]);
+  const updates = await recentUpdates(pool);
   return {
     week,
     chart,
@@ -108,7 +142,7 @@ async function dashboardData(user) {
     remindersToday: Number(rem.n),
     people: people.map((p) => ({ id: p.id, name: p.name, count: Number(p.open_count) })),
     unassigned: Number(unassigned.n),
-    board: boardColumns(boardTickets, { closedLabel: 'Closed this week', closedLimit: 0 }),
+    updates,
   };
 }
 

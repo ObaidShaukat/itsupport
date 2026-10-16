@@ -2,7 +2,7 @@
 <%#
   Dashboard (src/lib/dashboard.js): greeting, "Open per person" avatar stack, the summary
   panel (this week's tickets chart, closed-within-24h gauge, Open tickets and Reminders today
-  tiles) and the ticket board (Open, Customer waiting, Closed this week).
+  tiles) and Updates (latest tickets, recent client services, recent articles).
 %>
 <%
   const shownPeople = people.slice(0, 6);
@@ -22,14 +22,14 @@
   </div>
   <div class="dash-people" aria-label="Open tickets per person">
     <span class="dash-people-label">Open per person</span>
-    <div class="avatar-stack">
+    <div class="avatar-stack avatar-row">
       <% for (const p of shownPeople) { %>
-        <a href="/tickets?person=<%= p.id %>" class="stack-item" title="<%= p.name %>: <%= p.count %> open">
+        <a href="/tickets?person=<%= p.id %>&view=list" class="stack-item" title="<%= firstName(p.name) %>" aria-label="<%= p.name %>: <%= p.count %> open">
           <%- avatar({ id: p.id, name: p.name }, 'md') %><span class="stack-count"><%= p.count %></span>
         </a>
       <% } %>
       <% if (people.length > shownPeople.length) { %><span class="stack-item stack-more" title="<%= people.length - shownPeople.length %> more">+<%= people.length - shownPeople.length %></span><% } %>
-      <% if (unassigned) { %><a href="/tickets?person=none" class="stack-item stack-more" title="<%= unassigned %> open, not assigned">?<span class="stack-count"><%= unassigned %></span></a><% } %>
+      <% if (unassigned) { %><a href="/tickets?person=none&view=list" class="stack-item stack-more" title="Not assigned" aria-label="<%= unassigned %> open, not assigned">?<span class="stack-count"><%= unassigned %></span></a><% } %>
       <% if (!people.length && !unassigned) { %><span class="muted small">Nothing open</span><% } %>
     </div>
   </div>
@@ -62,28 +62,80 @@
           <line x1="<%= t.x1 %>" y1="<%= t.y1 %>" x2="<%= t.x2 %>" y2="<%= t.y2 %>" class="gauge-tick <%= i < filled ? 'is-on' : '' %>" style="--d: <%= i * 40 %>ms"></line>
         <% } %>
       </svg>
-      <div class="gauge-value"><span class="big-num"><%= chart.fast === null ? '—' : `${chart.fast}%` %></span><span class="muted small"><%= chart.closedCount ? `${chart.fastCount} of ${chart.closedCount} closed this week` : 'Nothing closed yet this week' %></span></div>
+      <div class="gauge-value"><span class="big-num" <%- chart.fast === null ? '' : `data-count="${chart.fast}" data-suffix="%"` %>><%= chart.fast === null ? '—' : `${chart.fast}%` %></span><span class="muted small"><%= chart.closedCount ? `${chart.fastCount} of ${chart.closedCount} closed this week` : 'Nothing closed yet this week' %></span></div>
     </div>
   </div>
 
   <a href="/tickets?status=open&view=list" class="tile">
     <span class="tile-label">Open tickets</span>
-    <span class="big-num"><%= openTickets %></span>
+    <span class="big-num" data-count="<%= openTickets %>"><%= openTickets %></span>
     <span class="tile-foot"><span class="muted small"><%= waitingTickets %> customer waiting</span><span class="tile-arrow" aria-hidden="true"><%- icon('arrow-right') %></span></span>
   </a>
 
   <button type="button" class="tile tile-dark" data-bell-open aria-label="Reminders today: <%= remindersToday %>. Open the reminders list">
     <span class="tile-label">Reminders today</span>
-    <span class="big-num"><%= remindersToday %></span>
+    <span class="big-num" data-count="<%= remindersToday %>"><%= remindersToday %></span>
     <span class="tile-foot"><span class="small">Due today for you</span><span class="tile-arrow" aria-hidden="true"><%- icon('arrow-right') %></span></span>
   </button>
 </section>
 
-<section class="board-wrap reveal" aria-label="Ticket board">
-  <div class="section-head">
-    <h2>Ticket board</h2>
-    <a href="/tickets" class="btn btn-secondary btn-small">All tickets <%- icon('arrow-right') %></a>
+<section class="updates reveal" aria-labelledby="updates-title">
+  <div class="section-head"><h2 id="updates-title">Updates</h2></div>
+  <div class="updates-grid">
+    <section class="board-col updates-col" aria-labelledby="up-tickets">
+      <header class="board-col-head">
+        <h3 id="up-tickets">Tickets</h3>
+        <a href="/tickets?view=list" class="link-more">View all</a>
+      </header>
+      <div class="board-cards">
+        <% for (const t of updates.tickets) { %><%- include('partials/ticket-card', { t }) %><% } %>
+        <% if (!updates.tickets.length) { %><p class="board-empty">No open tickets</p><% } %>
+      </div>
+    </section>
+
+    <section class="board-col updates-col" aria-labelledby="up-services">
+      <header class="board-col-head">
+        <h3 id="up-services">Recent services</h3>
+        <a href="/clients" class="link-more">View all</a>
+      </header>
+      <div class="board-cards">
+        <% for (const s of updates.services) { const pct = s.step_count ? Math.round((s.done_count / s.step_count) * 100) : 0; %>
+          <a href="/client-services/<%= s.id %>" class="ucard">
+            <span class="ucard-top"><span class="ucard-kicker"><%= s.client_name %></span><% if (s.status === 'closed') { %><span class="badge badge-closed">Closed</span><% } %></span>
+            <span class="ucard-title"><%= s.service_name %></span>
+            <span class="ucard-progress">
+              <span class="progress" aria-hidden="true"><span style="--w: <%= pct %>%"></span></span>
+              <span class="ucard-count"><%= s.done_count %>/<%= s.step_count %></span>
+            </span>
+            <span class="ucard-foot">
+              <% if (s.updated_by) { %><%- avatar({ id: s.updated_by_id, name: s.updated_by }, 'xs') %><span><%= firstName(s.updated_by) %></span><% } %>
+              <span class="ucard-when" title="<%= fmtDate(s.updated_at) %>"><%= fmtAgo(s.updated_at) %></span>
+            </span>
+          </a>
+        <% } %>
+        <% if (!updates.services.length) { %><p class="board-empty">No service updates yet</p><% } %>
+      </div>
+    </section>
+
+    <section class="board-col updates-col" aria-labelledby="up-articles">
+      <header class="board-col-head">
+        <h3 id="up-articles">Recent articles</h3>
+        <a href="/articles" class="link-more">View all</a>
+      </header>
+      <div class="board-cards">
+        <% for (const a of updates.articles) { %>
+          <a href="/articles/<%= a.id %>" class="ucard">
+            <span class="ucard-top"><span class="chip chip-category"><%= a.category %></span></span>
+            <span class="ucard-title"><%= a.title %></span>
+            <span class="ucard-foot">
+              <% if (a.author) { %><%- avatar({ id: a.author_id, name: a.author }, 'xs') %><span><%= firstName(a.author) %></span><% } %>
+              <span class="ucard-when" title="<%= fmtDate(a.updated_at) %>"><%= +new Date(a.updated_at) - +new Date(a.created_at) > 60000 ? 'Edited' : 'Created' %> <%= fmtAgo(a.updated_at) %></span>
+            </span>
+          </a>
+        <% } %>
+        <% if (!updates.articles.length) { %><p class="board-empty">No articles yet</p><% } %>
+      </div>
+    </section>
   </div>
-  <%- include('partials/ticket-board', { columns: board, draggable: false }) %>
 </section>
 <%- include('partials/foot') %>

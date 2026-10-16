@@ -362,16 +362,20 @@ router.post('/client-services/:id/notes', async (req, res) => {
   const csId = requireId(req.params.id);
   const cs = await csContext(pool, csId);
   const body = str(req.body.body, 10000);
+  let noteId = null;
   if (!body) {
     flash(req, 'error', 'Note cannot be empty.');
   } else {
-    await pool.query(
+    const [result] = await pool.query(
       'INSERT INTO client_service_notes (client_service_id, user_id, body) VALUES (?, ?, ?)',
       [csId, req.user.id, body]
     );
+    noteId = result.insertId;
     await logActivity(null, req.user, csEntry(cs, 'note', 'created', body));
   }
-  res.redirect(csBack(req, csId, '#notes'));
+  // Back to the new note (#note-12), which slides in.
+  const back = csBack(req, csId, '#notes');
+  res.redirect(noteId ? back.replace(/#notes$/, `#note-${noteId}`) : back);
 });
 
 async function noteContext(noteId) {
