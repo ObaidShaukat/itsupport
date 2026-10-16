@@ -52,7 +52,7 @@
 </dialog>
 <%- include('crop-dialog') %>
 <% } %>
-<div class="toasts" data-toasts aria-live="polite"><% if (locals.flash && flash.type === 'saved') { %><div class="toast toast-saved" role="status" data-autohide><span class="toast-icon"><%- icon('check-circle') %></span><span><%= flash.message %></span></div><% } %></div>
+<div class="toasts" data-toasts aria-live="polite"><% if (locals.flash && flash.type === 'saved') { %><div class="toast toast-saved" role="status" data-autohide><span class="toast-icon toast-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M7.5 12.5l3 3 6-6.5"></path></svg></span><span><%= flash.message %></span></div><% } %></div>
 <dialog class="dialog dialog-confirm" id="confirm-dialog" aria-labelledby="confirm-message">
   <p id="confirm-message" class="confirm-message"></p>
   <div class="form-actions">

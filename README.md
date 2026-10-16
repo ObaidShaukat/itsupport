@@ -327,7 +327,7 @@ Tutorials (on each service), article attachments and ticket attachments (in the 
 
 ## Branding assets
 
-- **Logo:** `public/logo.png` (served at `/logo.png`) appears in the top bar and on the sign-in page. Until it exists, the text "Cleartwo" is shown instead. It's picked up without a restart.
+- **Logo:** `public/logo.png` (served at `/logo.png`) appears on the sign-in page. The top bar shows the round icon (`public/logo.jpg`, or `favicon.svg` when `logo.png` exists), which turns slowly, with "Cleartwo" as text next to it. Until it exists, the text "Cleartwo" is shown instead. It's picked up without a restart.
 - **Favicon:** `public/favicon.svg` (served at `/favicon.svg`).
 - **Fonts:** Poppins and Manrope load from Google Fonts; nothing to install.
 

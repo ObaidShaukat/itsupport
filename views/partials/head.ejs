@@ -24,13 +24,11 @@
 <% const path = (locals.currentPath || '').split('?')[0]; %>
 <div class="app" data-shell>
   <header class="topbar">
+    <%# Only the round icon turns (8s a turn, faster on hover); "Cleartwo" is text. logo.png has
+        the name in it, so the top bar uses the round mark (logo.jpg, else favicon.svg). %>
     <a href="/" class="brand" aria-label="Cleartwo IT Support: dashboard">
-      <% if (locals.hasLogo) { %>
-        <img src="/logo.png" alt="Cleartwo" class="brand-logo">
-      <% } else { %>
-        <img src="<%= locals.logoMark || '/favicon.svg' %>" alt="" class="brand-mark">
-        <span class="brand-name">Cleartwo</span>
-      <% } %>
+      <span class="brand-spin" aria-hidden="true"><span class="brand-spin-fast"><img src="<%= locals.hasLogo ? '/favicon.svg' : (locals.logoMark || '/favicon.svg') %>" alt="" class="brand-mark"></span></span>
+      <span class="brand-name">Cleartwo</span>
     </a>
 
     <nav class="pillnav" aria-label="Main">

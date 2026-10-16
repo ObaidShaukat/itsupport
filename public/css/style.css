@@ -3288,3 +3288,105 @@ h1 { font-size: clamp(24px, 2.4vw, 34px); }
   .main { padding: 10px 14px 104px; }
   .tk-composer { bottom: 84px; }
 }
+
+/* ==========================================================================
+   Round 3: logo, micro-interactions, avatars. All motion off with reduced motion.
+   ========================================================================== */
+
+/* ---- Logo: only the round icon turns, 8s a turn; on hover 2s a turn and 1.08 bigger ----
+   The outer ring always turns at 8s; the inner one only runs while hovered (8/3s a turn),
+   so together they make 2s a turn and never jump back when the mouse leaves. */
+.brand-spin { display: inline-grid; place-items: center; width: 36px; height: 36px; flex: none; transition: scale 0.25s ease-out; animation: logo-turn 8s linear infinite; }
+.brand-spin-fast { display: block; width: 100%; height: 100%; animation: logo-turn 2.6667s linear infinite paused; }
+.brand-spin .brand-mark { width: 100%; height: 100%; }
+.brand:hover .brand-spin { scale: 1.08; }
+.brand:hover .brand-spin-fast { animation-play-state: running; }
+@keyframes logo-turn { to { transform: rotate(360deg); } }
+
+/* ---- Pill nav: a quick horizontal buzz on hover (plus the white background) ---- */
+.pill-item:hover { animation: buzz 0.3s ease-in-out; }
+@keyframes buzz { 0% { transform: translateX(0); } 25% { transform: translateX(-2px); } 50% { transform: translateX(2px); } 75% { transform: translateX(-1px); } 100% { transform: translateX(0); } }
+
+/* ---- Quick-action rail: bounce (1.08 with an overshoot), the icon tilts -8deg and back ---- */
+.rail-btn { transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s, border-color 0.15s; }
+.rail-btn:hover { transform: scale(1.08); }
+.rail-btn:hover .icon { animation: icon-tilt 0.35s ease-in-out; }
+.rail-btn:active { transform: scale(0.97); }
+@keyframes icon-tilt { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-8deg); } }
+
+/* ---- Bell: swings on hover; the red badge pops in ---- */
+.bell-button:hover .icon { animation: bell-swing 0.5s ease-in-out; transform-origin: 50% 10%; }
+@keyframes bell-swing { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(12deg); } 50% { transform: rotate(-10deg); } 75% { transform: rotate(5deg); } }
+.bell-count:not([hidden]) { animation: badge-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+@keyframes badge-pop { from { transform: scale(0); } to { transform: scale(1); } }
+
+/* ---- Primary buttons: a light shine sweeps across on hover ---- */
+.btn-primary { position: relative; overflow: hidden; isolation: isolate; }
+.btn-primary::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: -60%; width: 45%; z-index: -1; pointer-events: none;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.26), transparent);
+  transform: skewX(-20deg); opacity: 0;
+}
+.btn-primary:hover::after { animation: shine 0.6s ease-out; }
+@keyframes shine { from { left: -60%; opacity: 1; } to { left: 130%; opacity: 1; } }
+
+/* ---- Cards: arrow icons slide 3px right on hover ---- */
+svg.icon:has(> use[href="#i-arrow-right"]) { transition: transform 0.2s ease-out; }
+a:hover svg.icon:has(> use[href="#i-arrow-right"]), button:hover svg.icon:has(> use[href="#i-arrow-right"]) { transform: translateX(3px); }
+.tile:hover .tile-arrow .icon, a:hover > .tile-arrow .icon, .cs-card:hover .tile-arrow .icon { transform: rotate(0) translateX(3px); }
+
+/* ---- Toggles and checkboxes ---- */
+.switch { transition: background 0.2s; }
+.switch::after { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.switch.is-on, input:checked + .switch { background: var(--ink); }
+input[type="checkbox"]:not(.visually-hidden, .switch-field input, .user-check input) {
+  appearance: none; -webkit-appearance: none; flex: none; display: inline-block; vertical-align: middle;
+  width: 18px; height: 18px; margin: 0; border: 1.5px solid var(--border-strong); border-radius: 5px;
+  background: #FFFFFF no-repeat center / 12px 12px; cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
+}
+input[type="checkbox"]:not(.visually-hidden, .switch-field input, .user-check input):hover { border-color: var(--ink-2); }
+input[type="checkbox"]:not(.visually-hidden, .switch-field input, .user-check input):checked {
+  background-color: var(--ink); border-color: var(--ink);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23FFFFFF' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5'/%3E%3C/svg%3E");
+  animation: check-pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+input[type="checkbox"]:not(.visually-hidden, .switch-field input, .user-check input):disabled { opacity: 0.5; cursor: not-allowed; }
+@keyframes check-pop { from { transform: scale(0.75); } to { transform: scale(1); } }
+
+/* ---- Success toasts: the tick draws itself ---- */
+.toast-tick svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.toast-tick circle { stroke-dasharray: 63; stroke-dashoffset: 63; animation: draw 0.4s ease-out 0.1s forwards; }
+.toast-tick path { stroke-dasharray: 16; stroke-dashoffset: 16; animation: draw 0.3s ease-out 0.4s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+
+/* ---- Avatars: initials perfectly centred, about 38% of the circle; raise on hover ---- */
+.avatar { --av: 28px; width: var(--av); height: var(--av); padding: 0; transition: transform 0.15s ease-out; }
+.avatar-xs { --av: 20px; }
+.avatar-sm { --av: 28px; }
+.avatar-md { --av: 40px; }
+.avatar-lg { --av: 88px; }
+.avatar-btn .avatar { --av: 44px; width: var(--av); height: var(--av); }
+.emp-head .avatar-lg { --av: 76px; width: var(--av); height: var(--av); }
+.bd-chip .avatar { --av: 18px; width: var(--av); height: var(--av); }
+.avatar-initials, .stack-item .avatar-initials {
+  display: inline-flex; align-items: center; justify-content: center;
+  line-height: 1; padding: 0; text-indent: 0; letter-spacing: 0; text-align: center;
+  font-size: calc(var(--av) * 0.38); color: #FFFFFF; font-weight: 700; overflow: hidden;
+}
+.stack-item .avatar-initials { display: flex; }
+.avatar:hover { transform: translateY(-2px); }
+/* Open per person: the count sits centred under the avatar, clear of the initials. */
+.avatar-row { padding-bottom: 10px; }
+.avatar-row .stack-count { top: auto; right: auto; bottom: -10px; left: 50%; transform: translateX(-50%); }
+.avatar-row .stack-item:hover { transform: translateY(-2px); }
+.avatar-row .stack-item:hover .avatar { transform: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-spin, .brand-spin-fast, .pill-item:hover, .rail-btn:hover .icon, .bell-button:hover .icon, .bell-count:not([hidden]),
+  .btn-primary:hover::after, input[type="checkbox"]:checked { animation: none !important; }
+  .brand:hover .brand-spin { scale: none; }
+  .rail-btn:hover, .avatar:hover, .avatar-row .stack-item:hover,
+  a:hover svg.icon:has(> use[href="#i-arrow-right"]), button:hover svg.icon:has(> use[href="#i-arrow-right"]) { transform: none !important; }
+  .toast-tick circle, .toast-tick path { animation: none !important; stroke-dashoffset: 0; }
+}

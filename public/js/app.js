@@ -3160,9 +3160,15 @@ document.querySelectorAll('[data-board]').forEach((board) => {
     const t = document.createElement('div');
     t.className = isError ? 'toast toast-error' : 'toast toast-saved';
     t.setAttribute('role', isError ? 'alert' : 'status');
-    t.textContent = text;
+    // Success toasts get the tick that draws itself (same markup as the Saved toast in foot.ejs).
+    if (isError) {
+      t.textContent = text;
+    } else {
+      t.innerHTML = '<span class="toast-icon toast-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M7.5 12.5l3 3 6-6.5"></path></svg></span><span></span>';
+      t.lastChild.textContent = text;
+    }
     box.append(t);
-    setTimeout(() => { t.classList.add('is-leaving'); setTimeout(() => t.remove(), 300); }, 3500);
+    setTimeout(() => { t.classList.add('is-leaving'); setTimeout(() => t.remove(), 300); }, 3000);
   };
   const countOf = (col) => col.querySelector('[data-board-count]');
   const bump = (col, by) => {
@@ -3775,4 +3781,30 @@ document.addEventListener('keydown', (e) => {
   let el = null;
   try { el = document.querySelector(window.location.hash); } catch (err) { el = null; }
   if (el && /^#(comment|note)-/.test(window.location.hash)) el.classList.add('is-new');
+})();
+
+// ---- Avatar fallback: a profile picture that fails to load becomes the initials circle ----
+// (avatar() in src/lib/avatars.js puts data-initials / data-bg on every picture.)
+(() => {
+  const swap = (img) => {
+    if (!img.dataset.initials || !img.parentNode) return;
+    const span = document.createElement('span');
+    span.className = `${img.className} avatar-initials`;
+    span.style.background = img.dataset.bg || '#3A3A44';
+    span.textContent = img.dataset.initials;
+    if (img.title) span.title = img.title;
+    span.setAttribute('aria-hidden', 'true');
+    img.replaceWith(span);
+  };
+  // Errors do not bubble, so listen in the capture phase (also catches lazy images later).
+  document.addEventListener('error', (e) => {
+    if (e.target instanceof HTMLImageElement && e.target.matches('img.avatar[data-initials]')) swap(e.target);
+  }, true);
+  // Pictures that already failed before this script ran (only ones on screen: a lazy picture
+  // further down has not started loading yet and reports itself the same way).
+  document.querySelectorAll('img.avatar[data-initials]').forEach((img) => {
+    const r = img.getBoundingClientRect();
+    const onScreen = r.bottom > 0 && r.top < window.innerHeight && r.width > 0;
+    if (onScreen && img.complete && img.naturalWidth === 0 && img.getAttribute('src')) swap(img);
+  });
 })();

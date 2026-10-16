@@ -64,9 +64,9 @@ async function removeAvatar(name) {
 
 // ---- Rendering ----
 
-// Initials sit on black, dark grey or mid grey (the portal is black and white); white text on
-// each keeps at least 4.5:1 contrast.
-const COLOURS = ['#0B0B0F', '#3A3A44', '#5C5C66'];
+// Initials sit on black, dark grey or mid grey from the palette, the same one for a person
+// every time (colourFor: a hash of their id), with white text.
+const COLOURS = ['#0B0B0F', '#3A3A44', '#8A8B95'];
 const escape = (text) => String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 function initials(name) {
@@ -93,10 +93,12 @@ function avatarHelper(people) {
     const known = (p.id && byId.get(Number(p.id))) || (p.name && byName.get(String(p.name).toLowerCase())) || null;
     const name = (known && known.name) || p.name || 'Deleted user';
     const cls = `avatar avatar-${['xs', 'sm', 'md', 'lg'].includes(size) ? size : 'sm'}`;
-    if (known && isAvatarName(known.avatar_file)) {
-      return `<img class="${cls}" src="/avatars/${known.avatar_file}" alt="" title="${escape(name)}" loading="lazy">`;
-    }
     const seed = known ? known.id : name;
+    if (known && isAvatarName(known.avatar_file)) {
+      // A picture that fails to load is swapped for the initials circle (data-initials /
+      // data-bg, "Avatar fallback" in app.js; inline onerror is blocked by the CSP).
+      return `<img class="${cls}" src="/avatars/${known.avatar_file}" alt="" title="${escape(name)}" loading="lazy" data-initials="${escape(initials(name))}" data-bg="${colourFor(seed)}">`;
+    }
     return `<span class="${cls} avatar-initials" style="background:${colourFor(seed)}" title="${escape(name)}" aria-hidden="true">${escape(initials(name))}</span>`;
   };
 }
