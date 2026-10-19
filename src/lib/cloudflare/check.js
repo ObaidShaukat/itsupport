@@ -15,7 +15,7 @@
 const { pool } = require('../../db');
 const api = require('./api');
 const { publicNameservers, sameNs, nsList, providersLabel } = require('./lookups');
-const { autoLink, parseList } = require('./data');
+const { parseList } = require('./data');
 const { addEvent, log } = require('./events');
 const { runRdapQueue, lookupDomain } = require('./rdap');
 const { sendEventAlerts } = require('./alerts');
@@ -44,8 +44,7 @@ async function syncAccounts(user) {
     await pool.query('UPDATE cf_accounts SET access_lost = 1, access_lost_at = NOW() WHERE id = ?', [a.id]);
     if (await addEvent(pool, { accountId: a.id, type: 'access_lost', details: { account: a.name, text: `the token no longer sees ${a.name}` } }, user)) events += 1;
   }
-  await autoLink(pool);
-  const [rows] = await pool.query('SELECT id, account_id, name, client_id FROM cf_accounts WHERE access_lost = 0');
+  const [rows] = await pool.query('SELECT id, account_id, name FROM cf_accounts WHERE access_lost = 0');
   return { accounts: rows, events };
 }
 
@@ -66,9 +65,9 @@ async function saveZone(zone, account, user) {
   let events = 0;
   if (!existing) {
     await pool.query(`
-      INSERT INTO domains (name, zone_id, cf_account_id, client_id, cf_status, cf_type, plan, assigned_ns, last_checked)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
-    `, [fields.name, fields.zone_id, fields.cf_account_id, account.client_id || null, fields.cf_status, fields.cf_type, fields.plan, fields.assigned_ns]);
+      INSERT INTO domains (name, zone_id, cf_account_id, cf_status, cf_type, plan, assigned_ns, last_checked)
+      VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+    `, [fields.name, fields.zone_id, fields.cf_account_id, fields.cf_status, fields.cf_type, fields.plan, fields.assigned_ns]);
     return { events, isNew: true };
   }
   const domain = { ...existing, ...fields };
@@ -79,12 +78,10 @@ async function saveZone(zone, account, user) {
   if (fields.cf_status === 'moved' && existing.cf_status !== 'moved') {
     if (await addEvent(pool, { domain, type: 'moved', details: { text: 'Cloudflare marked the zone as moved', from: existing.cf_status } }, user)) events += 1;
   }
-  const clientSql = existing.client_manual ? '' : ', client_id = ?';
   await pool.query(`
-    UPDATE domains SET name = ?, zone_id = ?, cf_account_id = ?, cf_status = ?, cf_type = ?, plan = ?, assigned_ns = ?, last_checked = NOW() ${clientSql}
+    UPDATE domains SET name = ?, zone_id = ?, cf_account_id = ?, cf_status = ?, cf_type = ?, plan = ?, assigned_ns = ?, last_checked = NOW()
     WHERE id = ?
-  `, [fields.name, fields.zone_id, fields.cf_account_id, fields.cf_status, fields.cf_type, fields.plan, fields.assigned_ns,
-    ...(existing.client_manual ? [] : [account.client_id || null]), existing.id]);
+  `, [fields.name, fields.zone_id, fields.cf_account_id, fields.cf_status, fields.cf_type, fields.plan, fields.assigned_ns, existing.id]);
   return { events, isNew: false };
 }
 
@@ -225,14 +222,14 @@ async function runChecks(user = null, { trigger = 'schedule' } = {}) {
 // One domain ("Check now" on its row or page): its zone, nameservers, RDAP (always), alerts.
 async function checkDomain(user, id) {
   const cfg = api.cfConfig();
-  const [[d]] = await pool.query('SELECT d.*, a.account_id, a.name AS account_name, a.client_id AS account_client, a.access_lost FROM domains d LEFT JOIN cf_accounts a ON a.id = d.cf_account_id WHERE d.id = ?', [id]);
+  const [[d]] = await pool.query('SELECT d.*, a.account_id, a.name AS account_name, a.access_lost FROM domains d LEFT JOIN cf_accounts a ON a.id = d.cf_account_id WHERE d.id = ?', [id]);
   if (!d) return { ok: false, error: 'That domain no longer exists.' };
   if (!cfg.configured) return { ok: false, error: cfg.message, notConfigured: true };
   const logId = await startLog('domain', user);
   try {
     let events = 0;
     if (d.zone_id && !d.deleted_at && d.account_id && !d.access_lost) {
-      const account = { id: d.cf_account_id, account_id: d.account_id, name: d.account_name, client_id: d.account_client };
+      const account = { id: d.cf_account_id, account_id: d.account_id, name: d.account_name };
       try {
         const zone = await api.getZone(d.zone_id);
         events += (await saveZone(zone, account, user)).events;

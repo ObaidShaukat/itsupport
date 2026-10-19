@@ -1,16 +1,26 @@
-<%# controls: { statusFilters, priorityFilters } from src/lib/ticket-list.js; search: { target, placeholder } (optional) %>
+<%#
+  controls: { statusFilters, priorityFilters } from src/lib/ticket-list.js; search (optional):
+  { placeholder } adds the instant search box. Used inside a [data-list] (app.js): the pills
+  filter and count in the browser; their addresses still work without JavaScript.
+%>
 <div class="ticket-filters">
-  <nav class="filters" aria-label="Filter by status">
+  <nav class="filters" aria-label="Filter by status" data-list-group="status">
     <% for (const f of controls.statusFilters) { %>
-      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %>"><%= f.label %> <span class="count"><%= f.count %></span></a>
+      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %>" data-list-value="<%= f.key || '' %>" <%= f.key ? '' : 'data-list-default' %>><%= f.label %> <span class="count"><%= f.count %></span></a>
     <% } %>
   </nav>
-  <nav class="filters filters-priority" aria-label="Filter by priority">
+  <nav class="filters filters-priority" aria-label="Filter by priority" data-list-group="priority">
     <% for (const f of controls.priorityFilters) { %>
-      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %> <%= f.key ? `filter-priority-${f.key}` : '' %>" <%= f.key ? '' : 'title="Any priority"' %>>
-        <% if (f.key) { %><span class="priority-dot priority-dot-<%= f.key %>" aria-hidden="true"></span><% } %><%= f.label %> <span class="count"><%= f.count %></span>
+      <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %> <%= f.key ? `filter-priority-${f.key}` : '' %>" <%= f.key ? '' : 'title="Any priority"' %> data-list-value="<%= f.key || '' %>" <%= f.key ? '' : 'data-list-default' %>>
+        <% if (f.key) { %><span class="led led-<%= f.key %>" aria-hidden="true"></span><% } %><%= f.label %> <span class="count"><%= f.count %></span>
       </a>
     <% } %>
   </nav>
-  <% if (locals.search) { %><%- include('search', search) %><% } %>
+  <% if (locals.search) { %>
+    <label class="search-field">
+      <%- icon('search') %>
+      <span class="visually-hidden"><%= search.placeholder || 'Search tickets' %></span>
+      <input type="search" name="q" value="<%= search.q || '' %>" placeholder="Search" title="<%= search.placeholder || 'Search tickets' %>" autocomplete="off" data-1p-ignore data-lpignore="true" data-list-search>
+    </label>
+  <% } %>
 </div>

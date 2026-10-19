@@ -3535,11 +3535,10 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .search-clear[hidden] { display: none; }
 .search-pop-form { display: block; }
 .search-pop-form input[type="search"] { width: 100%; }
-[data-live-part].is-live-loading { opacity: 0.55; transition: opacity 0.15s; pointer-events: none; }
 .cs1-filter-links { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 /* Cloudflare expiry lookups */
 .cf-rdap { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; margin: -6px 0 16px; }
 .cf-rdap-bar { flex: 1 1 200px; max-width: 360px; }
 .cf-rdap-bar > span { animation: none; transition: width 0.4s ease-out; }
 .cf-unknown { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
-@media (prefers-reduced-motion: reduce) { [data-live-part].is-live-loading, .cf-rdap-bar > span { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .cf-rdap-bar > span { transition: none; } }

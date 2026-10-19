@@ -1,7 +1,7 @@
 <%- include('../partials/head') %>
 <%#
   One domain (GET /cloudflare/domains/:id): every field, the event timeline (domain_events),
-  the client link (from the Cloudflare account or set by hand), notes, Check now and Hide.
+  the client link (set by hand here; accounts are not linked to clients), notes, Check now and Hide.
 %>
 <%
   const EVENT_LABELS = { ns_changed: 'Nameservers changed', moved: 'Moved', deleted: 'Removed from Cloudflare', re_added: 'Back in Cloudflare', back_to_cloudflare: "Back on Cloudflare's nameservers", expiring: 'Expiring', expired: 'Expired', access_lost: 'Account access lost' };
@@ -86,16 +86,14 @@
       <h2 id="cf-client">Client</h2>
       <p>
         <% if (domain.client_name) { %><a href="/clients/<%= domain.client_id %>"><strong><%= domain.client_name %></strong></a><% } else { %><span class="muted">Not linked to a client</span><% } %>
-        <span class="muted small">· <%= domain.client_manual ? 'set by hand' : `from the Cloudflare account${account && account.client_name ? ` (${account.client_name})` : ''}` %></span>
       </p>
       <form method="post" action="<%= page %>/client" class="form">
         <%- csrfField %><input type="hidden" name="back" value="<%= page %>">
         <label class="field">
           <span>Link to client</span>
           <select name="client_id" data-combobox>
-            <option value="auto" <%= domain.client_manual ? '' : 'selected' %>>Same as the Cloudflare account</option>
-            <option value="" <%= domain.client_manual && !domain.client_id ? 'selected' : '' %>>Not linked</option>
-            <% for (const c of clients) { %><option value="<%= c.id %>" <%= domain.client_manual && domain.client_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+            <option value="" <%= domain.client_id ? '' : 'selected' %>>Not linked</option>
+            <% for (const c of clients) { %><option value="<%= c.id %>" <%= domain.client_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
           </select>
         </label>
         <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save</button></div>

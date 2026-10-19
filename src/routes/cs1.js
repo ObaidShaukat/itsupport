@@ -321,16 +321,29 @@ router.get('/customers', async (req, res) => {
   const statuses = [...new Set(all.map((c) => c.statusText))].sort((a, b) => (a === 'Active' ? -1 : b === 'Active' ? 1 : a.localeCompare(b)));
   if (needsId) statuses.push('Missing CS1 ID');
   const stores = [...new Set(all.map((c) => c.store).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const statusOk = (c) => !status || (status === 'Missing CS1 ID' ? !c.identifier && !c.removed_at : c.statusText === status);
-  let customers = all.filter((c) => statusOk(c) && (!store || (store === '-' ? !c.store : c.store === store)));
-  if (q) {
-    customers = customers.filter((c) => [c.company, c.identifier, c.account_holder, c.store, c.email, c.phone, c.client_name, c.statusText]
-      .some((v) => v && String(v).toLowerCase().includes(q)));
+  // Every customer goes to the page; status / store / search filter and sort in the browser
+  // ([data-list] in app.js). Each row gets its search text, tags (values URI-encoded), default
+  // rank (company A-Z), sort values and visible (the address's filters, right before JS runs).
+  const byCompany = [...all].sort((a, b) => {
+    const x = SORTS.company(a); const y = SORTS.company(b);
+    return (x < y ? -1 : x > y ? 1 : 0) || String(a.identifier || '').localeCompare(String(b.identifier || '')) || a.id - b.id;
+  });
+  byCompany.forEach((c, i) => { c.rank = i; });
+  const words = q.split(/\s+/).filter(Boolean);
+  for (const c of all) {
+    const missing = !c.identifier && !c.removed_at;
+    c.search = [c.company, c.identifier, c.account_holder, c.store, c.email, c.phone, c.client_name, c.statusText].filter(Boolean).join(' ').toLowerCase();
+    c.tags = [`status:${encodeURIComponent(c.statusText)}`, ...(missing ? [`status:${encodeURIComponent('Missing CS1 ID')}`] : []),
+      `store:${encodeURIComponent(c.store || '-')}`].join(' ');
+    c.sortValues = Object.fromEntries(Object.entries(SORTS).map(([k, fn]) => [k, fn(c)]));
+    c.visible = (!status || (status === 'Missing CS1 ID' ? missing : c.statusText === status))
+      && (!store || (store === '-' ? !c.store : c.store === store))
+      && words.every((w) => c.search.includes(w));
   }
   const key = SORTS[sort];
-  customers.sort((a, b) => {
+  const customers = [...all].sort((a, b) => {
     const x = key(a); const y = key(b);
-    const r = x < y ? -1 : x > y ? 1 : String(a.identifier || '').localeCompare(String(b.identifier || '')) || a.id - b.id;
+    const r = x < y ? -1 : x > y ? 1 : a.rank - b.rank;
     return dir === 'desc' ? -r : r;
   });
   const sync = await lastSync();

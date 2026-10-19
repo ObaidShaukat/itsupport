@@ -99,6 +99,40 @@ async function listTickets({
   return tickets;
 }
 
+// Instant lists ([data-list] in app.js): every ticket goes to the page and is filtered there.
+// Each gets its search text, filter tags, default rank (urgent first, then last updated),
+// sort values and visible (whether it matches the address's filters, so the page is right
+// before the script runs). ignoreStatus: the board shows every status in its own column.
+const STATUS_RANK = { open: 0, customer_waiting: 1, closed: 2 };
+const PRIORITY_RANK = { urgent: 0, high: 1, normal: 2, low: 3 };
+function instantTickets(tickets, state, { ignoreStatus = false } = {}) {
+  const ranked = [...tickets].sort((a, b) => ((b.priority === 'urgent') - (a.priority === 'urgent'))
+    || (new Date(b.updated_at) - new Date(a.updated_at)) || (b.id - a.id));
+  ranked.forEach((t, i) => { t.rank = i; });
+  const words = String(state.q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  for (const t of tickets) {
+    t.search = [`#${t.id}`, t.title, t.client_name, TICKET_STATUSES[t.status], TICKET_PRIORITIES[t.priority], t.created_by, t.updated_by, t.assigned_to]
+      .filter(Boolean).join(' ').toLowerCase();
+    t.tags = [`status:${t.status}`, `priority:${t.priority}`, `client:${t.client_id}`, `person:${t.assigned_to_id || 'none'}`].join(' ');
+    t.sortValues = {
+      priority: PRIORITY_RANK[t.priority] ?? 9,
+      id: t.id,
+      title: String(t.title || '').toLowerCase(),
+      client: String(t.client_name || '').toLowerCase(),
+      status: STATUS_RANK[t.status] ?? 9,
+      created_by: String(t.created_by || '~').toLowerCase(),
+      updated_by: String(t.updated_by || '~').toLowerCase(),
+      updated: new Date(t.updated_at).getTime(),
+    };
+    t.visible = (ignoreStatus || !state.status || t.status === state.status)
+      && (!state.priority || t.priority === state.priority)
+      && (!state.client || t.client_id === Number(state.client))
+      && (!state.person || (state.person === 'none' ? !t.assigned_to_id : t.assigned_to_id === Number(state.person)))
+      && words.every((w) => t.search.includes(w));
+  }
+  return tickets;
+}
+
 // Counts per status and per priority (within a client, if given).
 async function ticketCounts(clientId = null) {
   const [rows] = await pool.query(`
@@ -130,13 +164,13 @@ function listControls(base, state, counts, hash = '') {
   };
 
   const statusFilters = [
-    { label: 'All', href: href({ status: '' }), active: !state.status, count: counts.all },
+    { key: '', label: 'All', href: href({ status: '' }), active: !state.status, count: counts.all },
     ...Object.entries(TICKET_STATUSES).map(([key, label]) => ({
-      label, href: href({ status: key }), active: state.status === key, count: counts.status[key],
+      key, label, href: href({ status: key }), active: state.status === key, count: counts.status[key],
     })),
   ];
   const priorityFilters = [
-    { label: 'Any', href: href({ priority: '' }), active: !state.priority, count: counts.all },
+    { key: '', label: 'Any', href: href({ priority: '' }), active: !state.priority, count: counts.all },
     ...['urgent', 'high', 'normal', 'low'].map((key) => ({
       key, label: TICKET_PRIORITIES[key], href: href({ priority: key }), active: state.priority === key, count: counts.priority[key],
     })),
@@ -144,7 +178,7 @@ function listControls(base, state, counts, hash = '') {
   const columns = COLUMNS.map(([key, label]) => {
     const active = state.sort === key;
     const dir = active ? (state.dir === 'asc' ? 'desc' : 'asc') : SORTS[key][1];
-    return { key, label, active, dir: active ? state.dir : null, href: href({ sort: key, dir }) };
+    return { key, label, active, dir: active ? state.dir : null, first: SORTS[key][1], href: href({ sort: key, dir }) };
   });
   return {
     statusFilters,
@@ -155,4 +189,4 @@ function listControls(base, state, counts, hash = '') {
   };
 }
 
-module.exports = { readListQuery, listTickets, ticketCounts, listControls };
+module.exports = { readListQuery, listTickets, ticketCounts, listControls, instantTickets };

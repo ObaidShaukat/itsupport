@@ -250,10 +250,9 @@ document.querySelectorAll('input[data-filter]').forEach((input) => {
     if (empty) empty.hidden = !query || visible > 0;
   };
 
-  // As you type (250ms after the last key); the search is kept in the address (?q=).
+  // As you type (120ms after the last key); the search is kept in the address (?q=).
   let timer = null;
-  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 250); });
-  input.addEventListener('live:apply', apply);
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 120); });
   // Browsers may restore the box's text on back/forward navigation.
   if (input.value) apply();
 });
@@ -1039,8 +1038,7 @@ document.querySelectorAll('[data-sortable-list]').forEach((list) => {
 
 // Selects marked data-autosubmit submit their form when changed (e.g. Daily Report View).
 document.querySelectorAll('select[data-autosubmit]').forEach((select) => {
-  // Live filter forms update in place instead ("Live search and filters").
-  select.addEventListener('change', () => select.form && !select.form.matches('[data-live-form]') && select.form.submit());
+  select.addEventListener('change', () => select.form && select.form.submit());
 });
 
 // ---- Searchable dropdown (combobox) ----
@@ -1911,7 +1909,9 @@ document.querySelectorAll('[data-grid]').forEach((root) => {
     if (count) count.textContent = `${shown} ${shown === 1 ? 'row' : 'rows'}${shown !== rows.length ? ` of ${rows.length}` : ''}`;
     if (emptyMsg) emptyMsg.hidden = shown > 0;
   }
-  if (search) search.addEventListener('input', apply);
+  // Search: 120ms after the last key.
+  let searchTimer = null;
+  if (search) search.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(apply, 120); });
   root.querySelectorAll('[data-grid-filter]').forEach((el) => el.addEventListener('input', apply));
 
   const filterToggle = root.querySelector('[data-grid-filter-toggle]');
@@ -3917,88 +3917,6 @@ document.addEventListener('keydown', (e) => {
   });
 })();
 
-// ---- Live search and filters ----
-// Server-filtered lists (Tickets, Cloudflare domains, CS1 customers, Microsoft Partner):
-// form[data-live-form] fields (typing 250ms after the last key; dropdowns and ticks at once)
-// and same-page links inside [data-live-part] (filter pills, sort headers, Clear, Board / List)
-// load the new address in the background and swap in every [data-live-part="name"] with
-// the same name from the reply, so the box you type in keeps its focus. The address is
-// updated with history.replaceState, so refresh and back / forward still work. Without
-// JavaScript the forms and links work as before (full page loads).
-(() => {
-  const forms = [...document.querySelectorAll('form[data-live-form]')];
-  if (!forms.length && !document.querySelector('[data-live-part]')) return;
-  let controller = null;
-
-  const urlFor = (form) => {
-    const url = new URL(form.getAttribute('action') || location.pathname, location.href);
-    const params = new URLSearchParams();
-    for (const [k, v] of new FormData(form)) if (String(v).trim() !== '' && k !== '_csrf') params.append(k, v);
-    url.search = params.toString();
-    return url;
-  };
-
-  async function load(url) {
-    if (controller) controller.abort();
-    controller = new AbortController();
-    const parts = [...document.querySelectorAll('[data-live-part]')];
-    parts.forEach((p) => p.classList.add('is-live-loading'));
-    try {
-      const res = await fetch(url, { headers: { Accept: 'text/html', 'X-Live': '1' }, credentials: 'same-origin', signal: controller.signal });
-      if (!res.ok || res.redirected) throw new Error(`HTTP ${res.status}`);
-      const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
-      for (const part of parts) {
-        const next = doc.querySelector(`[data-live-part="${part.dataset.livePart}"]`);
-        if (next) part.replaceWith(document.importNode(next, true));
-        else part.remove();
-      }
-      // The document title (counts) and the address.
-      if (doc.title) document.title = doc.title;
-      history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
-      // Lists filtered in the browser too (data-filter search boxes) re-apply to the new rows.
-      document.querySelectorAll('input[data-filter]').forEach((input) => { if (input.value) input.dispatchEvent(new Event('live:apply')); });
-      // Dropdowns that came back with the new parts get the searchable dropdown again.
-      document.querySelectorAll('[data-combobox]').forEach(enhanceCombobox);
-      document.dispatchEvent(new CustomEvent('live:updated'));
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      window.location.href = url.toString(); // fall back to a normal page load
-    } finally {
-      document.querySelectorAll('.is-live-loading').forEach((p) => p.classList.remove('is-live-loading'));
-    }
-  }
-
-  forms.forEach((form) => {
-    let timer = null;
-    const go = () => load(urlFor(form));
-    form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(timer); go(); });
-    form.addEventListener('input', (e) => {
-      if (!e.target.matches('input[type="search"], input[type="text"]') || e.target.closest('.combobox')) return;
-      clearTimeout(timer);
-      timer = setTimeout(go, 250);
-    });
-    form.addEventListener('change', (e) => {
-      if (e.target.matches('select, input[type="checkbox"], input[type="radio"]')) { clearTimeout(timer); go(); }
-    });
-  });
-
-  // Same-page links inside a live part: filter pills, sort headers, Clear, Board / List.
-  document.addEventListener('click', (e) => {
-    const a = e.target.closest && e.target.closest('[data-live-part] a[href]');
-    if (!a || a.target || a.hasAttribute('download') || a.hasAttribute('data-no-live') || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
-    const url = new URL(a.href, location.href);
-    if (url.origin !== location.origin || url.pathname !== location.pathname) return;
-    e.preventDefault();
-    // Keep the form's text box in step (e.g. Clear empties it).
-    // A search box filtered in the browser (data-filter) keeps its text in the address too.
-    const browserBox = document.querySelector('input[data-filter]');
-    if (browserBox && browserBox.value.trim() && !url.searchParams.has('q')) url.searchParams.set('q', browserBox.value.trim());
-    const q = url.searchParams.get('q') || '';
-    forms.forEach((form) => { const box = form.querySelector('input[type="search"][name="q"]'); if (box && box.value !== q) box.value = q; });
-    load(url);
-  });
-})();
-
 // ---- Search boxes filtered in the browser keep their text in the address (?q=) ----
 // (data-filter lists and the inventory grids), so refresh and back / forward keep it.
 (() => {
@@ -4049,7 +3967,7 @@ document.addEventListener('keydown', (e) => {
     if (input.closest('.search-field, .search, .search-pop-form, .list-search, .grid-search')) add(input);
   });
   scan();
-  document.addEventListener('live:updated', scan);
+
 })();
 
 // ---- Cloudflare expiry lookups: progress while the background queue runs ----
@@ -4073,3 +3991,192 @@ document.addEventListener('keydown', (e) => {
   };
   setTimeout(tick, 3000);
 })();
+
+// ---- Instant lists ([data-list]) ----
+// The page has every row; filtering, searching, counting and sorting happen in the browser
+// with no network request. The server prepares each row once:
+//   [data-list-item]  data-search  lower-case text to search (domain, account, status...)
+//                     data-tags    "group:value" tokens the row belongs to (status:open ...;
+//                                  values URI-encoded with encodeURIComponent on the server)
+//                     data-rank    its place in the default order
+//                     data-sort-<key>  the value a sortable column sorts by
+// and the controls:
+//   [data-list-group="name"] a[data-list-value]  filter pills ("" = any; .count updated
+//                     with the search and the other filters; data-list-default on the default)
+//   select[data-list-select="name"]  dropdown filters ("" = any)
+//   input[data-list-search]          search (120ms after the last key; every word must match)
+//   a[data-list-sort="key"]          sortable headers (data-list-dir = first direction)
+//   [data-list-set="name:value"]     links that set a filter (e.g. summary tiles)
+//   [data-list-clear]                back to the defaults
+//   [data-list-empty] [data-list-shown]  "nothing matches" and the number shown
+//   [data-list-bucket] (+ [data-list-bucket-count], [data-list-bucket-empty])  board columns
+// Rows are shown / hidden with the hidden attribute (never re-rendered); sorting moves the
+// existing rows. Filters, search and sort are kept in the address (history.replaceState).
+// The links still have real addresses, so without JavaScript the server does the same.
+document.querySelectorAll('[data-list]').forEach((root) => {
+  const items = [...root.querySelectorAll('[data-list-item]')].map((el) => ({
+    el,
+    search: el.dataset.search || '',
+    tags: new Set((el.dataset.tags || '').split(' ').filter(Boolean)),
+    rank: Number(el.dataset.rank) || 0,
+  }));
+  const groups = [...root.querySelectorAll('[data-list-group]')].map((g) => {
+    const pills = [...g.querySelectorAll('a[data-list-value]')];
+    const active = pills.find((p) => p.classList.contains('active'));
+    const def = pills.find((p) => p.hasAttribute('data-list-default'));
+    return { name: g.dataset.listGroup, el: g, pills, value: active ? active.dataset.listValue : '', def: def ? def.dataset.listValue : '' };
+  });
+  const selects = [...root.querySelectorAll('select[data-list-select]')].map((el) => ({ name: el.dataset.listSelect, el }));
+  const search = root.querySelector('input[data-list-search]');
+  const sorters = [...root.querySelectorAll('a[data-list-sort]')];
+  const empty = root.querySelector('[data-list-empty]');
+  const shown = root.querySelectorAll('[data-list-shown]');
+  const buckets = [...root.querySelectorAll('[data-list-bucket]')];
+  const current = sorters.find((a) => a.classList.contains('is-sorted'));
+  let sort = current ? { key: current.dataset.listSort, dir: current.dataset.listCurrent || current.dataset.listDir || 'asc' } : null;
+
+  const filters = () => {
+    const out = [];
+    for (const g of groups) if (g.value) out.push([g.name, g.value]);
+    for (const s of selects) if (s.el.value) out.push([s.name, s.el.value]);
+    return out;
+  };
+  const words = () => (search ? search.value.toLowerCase().split(/\s+/).filter(Boolean) : []);
+  // Tags are space-separated, so values are URI-encoded ("Missing CS1 ID" -> Missing%20CS1%20ID).
+  const tag = (name, value) => `${name}:${encodeURIComponent(value)}`;
+  const passes = (item, q, active, skip) => q.every((w) => item.search.includes(w))
+    && active.every(([name, value]) => name === skip || item.tags.has(tag(name, value)));
+
+  function apply() {
+    const q = words();
+    const active = filters();
+    let count = 0;
+    for (const item of items) {
+      const show = passes(item, q, active, null);
+      if (item.el.hidden === show) item.el.hidden = !show;
+      if (show) count += 1;
+    }
+    // Pill counts: what each pill would show with the search and the other filters.
+    for (const g of groups) {
+      const base = items.filter((item) => passes(item, q, active, g.name));
+      for (const p of g.pills) {
+        p.classList.toggle('active', p.dataset.listValue === g.value);
+        if (p.dataset.listValue === g.value) p.setAttribute('aria-current', 'true'); else p.removeAttribute('aria-current');
+        const c = p.querySelector('.count');
+        if (c) c.textContent = String(p.dataset.listValue ? base.filter((item) => item.tags.has(tag(g.name, p.dataset.listValue))).length : base.length);
+      }
+    }
+    if (empty) empty.hidden = count > 0;
+    shown.forEach((el) => { el.textContent = String(count); });
+    for (const b of buckets) {
+      const n = [...b.querySelectorAll('[data-list-item]')].filter((el) => !el.hidden).length;
+      const c = b.querySelector('[data-list-bucket-count]');
+      if (c) c.textContent = String(n);
+      const e = b.querySelector('[data-list-bucket-empty]');
+      if (e) e.hidden = n > 0;
+    }
+    root.querySelectorAll('[data-list-clear]').forEach((el) => { el.hidden = !active.length && !q.length && !sort; });
+    saveUrl();
+  }
+
+  function saveUrl() {
+    const url = new URL(location.href);
+    for (const g of groups) { if (g.value && g.value !== g.def) url.searchParams.set(g.name, g.value); else url.searchParams.delete(g.name); }
+    for (const s of selects) { if (s.el.value) url.searchParams.set(s.name, s.el.value); else url.searchParams.delete(s.name); }
+    if (search) { const v = search.value.trim(); if (v) url.searchParams.set(search.name || 'q', v); else url.searchParams.delete(search.name || 'q'); }
+    if (sort) { url.searchParams.set('sort', sort.key); url.searchParams.set('dir', sort.dir); } else { url.searchParams.delete('sort'); url.searchParams.delete('dir'); }
+    history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  // data-sort-created-by -> dataset.sortCreatedBy (keys may use _ or -).
+  const valueOf = (item, key) => item.el.dataset[`sort${key.replace(/(^|[-_])(\w)/g, (m, sep, c) => c.toUpperCase())}`] ?? '';
+  function reorder() {
+    const sign = sort && sort.dir === 'desc' ? -1 : 1;
+    const ordered = [...items].sort((a, b) => {
+      if (!sort) return a.rank - b.rank;
+      const x = valueOf(a, sort.key);
+      const y = valueOf(b, sort.key);
+      const nx = Number(x);
+      const ny = Number(y);
+      const cmp = x !== '' && y !== '' && !Number.isNaN(nx) && !Number.isNaN(ny) ? nx - ny : String(x).localeCompare(String(y));
+      return cmp * sign || a.rank - b.rank;
+    });
+    // Move the existing rows (each within its own parent, e.g. the tbody).
+    for (const item of ordered) item.el.parentNode.appendChild(item.el);
+    for (const a of sorters) {
+      const on = sort && a.dataset.listSort === sort.key;
+      a.classList.toggle('is-sorted', Boolean(on));
+      const arrow = a.querySelector('.sort-arrow');
+      if (arrow) arrow.textContent = on ? (sort.dir === 'asc' ? '▲' : '▼') : '↕';
+      const th = a.closest('th');
+      if (th) th.setAttribute('aria-sort', on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    }
+  }
+
+  root.addEventListener('click', (e) => {
+    const pill = e.target.closest('[data-list-group] a[data-list-value]');
+    const sorter = e.target.closest('a[data-list-sort]');
+    const setter = e.target.closest('[data-list-set]');
+    const clear = e.target.closest('[data-list-clear]');
+    if (!pill && !sorter && !setter && !clear) return;
+    if (e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    if (pill) {
+      groups.find((g) => g.el.contains(pill)).value = pill.dataset.listValue;
+    } else if (setter) {
+      const [name, value] = setter.dataset.listSet.split(':');
+      const g = groups.find((x) => x.name === name);
+      if (g) g.value = value || '';
+    } else if (sorter) {
+      const key = sorter.dataset.listSort;
+      sort = sort && sort.key === key ? { key, dir: sort.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: sorter.dataset.listDir || 'asc' };
+      reorder();
+    } else if (clear) {
+      groups.forEach((g) => { g.value = g.def; });
+      selects.forEach((s) => {
+        s.el.value = '';
+        s.el.dispatchEvent(new Event('list:reset'));
+        const box = s.el.closest('.combobox');
+        if (box) { const input = box.querySelector('.combobox-input'); if (input) input.value = ''; box.classList.remove('has-value'); }
+      });
+      if (search) search.value = '';
+      sort = null;
+      reorder();
+    }
+    apply();
+  });
+  selects.forEach((s) => s.el.addEventListener('change', apply));
+  if (search) {
+    let timer = null;
+    search.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 120); });
+    search.closest('form')?.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(timer); apply(); });
+  }
+  root.querySelectorAll('form').forEach((form) => {
+    if (form.querySelector('[data-list-select], [data-list-search]')) form.addEventListener('submit', (e) => e.preventDefault());
+  });
+  apply();
+});
+// Forms on an instant list return to the list as it is filtered now (input[data-list-back]).
+document.addEventListener('submit', (e) => {
+  if (!e.target || !e.target.querySelectorAll) return;
+  const now = `${location.pathname}${location.search}`;
+  e.target.querySelectorAll('input[data-list-back]').forEach((input) => { input.value = now; });
+  // On a page with an instant list, forms (row deletes, edit popovers, which float outside the
+  // list) whose back address is this page return to it as filtered now (keeping any #hash).
+  if (document.querySelector('[data-list]')) {
+    e.target.querySelectorAll('input[name="back"]').forEach((input) => {
+      const [path] = input.value.split(/[?#]/);
+      const hash = input.value.includes('#') ? input.value.slice(input.value.indexOf('#')) : '';
+      if (path === location.pathname) input.value = `${now}${hash}`;
+    });
+  }
+}, true);
+// Links that switch the view (Board / List) keep the filters and search set in the browser.
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a[data-keep-query]');
+  if (!a || e.ctrlKey || e.metaKey || e.shiftKey) return;
+  const target = new URL(a.href, location.href);
+  const now = new URLSearchParams(location.search);
+  for (const [k, v] of now) if (!target.searchParams.has(k)) target.searchParams.set(k, v);
+  a.href = target.toString();
+});

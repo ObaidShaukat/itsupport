@@ -1,14 +1,14 @@
 <%- include('../partials/head') %>
 <%#
-  Cloudflare > Accounts: one Cloudflare account per customer. Linked automatically to a
-  client by name (case, punctuation, Ltd / Limited ignored; only a unique match) unless
-  linked by hand here; their domains follow the account's client unless set on the domain.
+  Cloudflare > Accounts: one Cloudflare account per customer, with its domain and problem
+  counts, when the token last saw it and whether it still can. Accounts are not linked to
+  clients (a domain can be linked to a client on its own page).
 %>
 <header class="page-head reveal">
   <div>
     <p class="crumbs">Cloudflare</p>
     <h1>Accounts</h1>
-    <p class="muted">The Cloudflare accounts the token can see. Link each one to a portal client; its domains follow.</p>
+    <p class="muted">The Cloudflare accounts the token can see (one per customer).</p>
   </div>
   <div class="actions">
     <form method="post" action="/cloudflare/check" class="inline" data-busy-label="Checking…">
@@ -24,29 +24,17 @@
   <% if (!accounts.length) { %>
     <p class="empty"><%= config.configured ? 'No accounts yet: click Check now.' : 'No accounts yet.' %></p>
   <% } else { %>
-    <%- include('../partials/search', { target: '#cf-accounts', placeholder: 'Search accounts and clients' }) %>
+    <%- include('../partials/search', { target: '#cf-accounts', placeholder: 'Search accounts' }) %>
     <p class="empty" data-filter-empty hidden>No accounts match your search.</p>
     <div class="table-wrap">
       <table class="table cf-accounts-table">
         <thead>
-          <tr><th>Cloudflare account</th><th class="w-25">Linked client</th><th class="w-num right">Domains</th><th class="w-num right">Problems</th><th class="w-15">Last seen</th><th class="w-sm">Access</th></tr>
+          <tr><th>Cloudflare account</th><th class="w-num right">Domains</th><th class="w-num right">Problems</th><th class="w-15">Last seen</th><th class="w-sm">Access</th></tr>
         </thead>
         <tbody>
           <% for (const a of accounts) { %>
-            <tr data-filter-item data-search="<%= a.name %> <%= a.client_name || '' %>">
+            <tr data-filter-item data-search="<%= a.name %>">
               <td title="<%= a.account_id %>"><a href="/cloudflare/domains?account=<%= a.id %>"><strong><%= a.name %></strong></a></td>
-              <td class="cf-link-cell">
-                <form method="post" action="/cloudflare/accounts/<%= a.id %>/link" class="cf-link-form">
-                  <%- csrfField %>
-                  <label class="visually-hidden" for="cf-link-<%= a.id %>">Link <%= a.name %> to a client</label>
-                  <select name="client_id" id="cf-link-<%= a.id %>" data-autosubmit data-combobox>
-                    <option value="auto" <%= !a.link_manual && !a.client_id ? 'selected' : '' %>>Match by name automatically</option>
-                    <option value="" <%= a.link_manual && !a.client_id ? 'selected' : '' %>>Not linked</option>
-                    <% for (const c of clients) { %><option value="<%= c.id %>" <%= a.client_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
-                  </select>
-                </form>
-                <span class="muted small"><%= a.link_manual ? 'linked by hand' : (a.client_id ? 'matched by name' : 'no match by name') %></span>
-              </td>
               <td class="right"><%= a.domain_count %></td>
               <td class="right"><% if (a.problems) { %><a href="/cloudflare/domains?account=<%= a.id %>&status=problems" class="cf-problems"><span class="led led-urgent" aria-hidden="true"></span><%= a.problems %></a><% } else { %><span class="muted">0</span><% } %></td>
               <td class="muted" title="<%= a.last_seen ? fmtDate(a.last_seen) : '' %>"><%= a.last_seen ? fmtAgo(a.last_seen) : '—' %></td>

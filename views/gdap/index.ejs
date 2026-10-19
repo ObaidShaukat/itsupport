@@ -40,23 +40,33 @@
   <% } %>
 </div>
 
-<div class="gdap-cards" data-live-part="gdap-cards">
-  <a href="/microsoft-partner?f=active" class="gdap-card gdap-card-ok <%= filter === 'active' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.active %></span><span class="gdap-card-label">Active</span></a>
-  <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-warn <%= filter === 'expiring30' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.soon30 %></span><span class="gdap-card-label">Expiring ≤ 30 days</span></a>
-  <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-bad"><span class="gdap-card-value"><%= summary.soon7 %></span><span class="gdap-card-label">Expiring ≤ 7 days</span></a>
-  <a href="/microsoft-partner?f=expired" class="gdap-card gdap-card-expired <%= filter === 'expired' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.expired %></span><span class="gdap-card-label">Expired</span></a>
+<%# Instant ([data-list] in app.js) except "Multiple relationships", which is a page of its own (grouped by customer). %>
+<div <%- grouped ? '' : 'data-list' %>>
+<div class="gdap-cards">
+  <a href="/microsoft-partner?f=active" class="gdap-card gdap-card-ok <%= filter === 'active' ? 'is-active' : '' %>" <%- grouped ? '' : 'data-list-set="f:active"' %>><span class="gdap-card-value"><%= summary.active %></span><span class="gdap-card-label">Active</span></a>
+  <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-warn <%= filter === 'expiring30' ? 'is-active' : '' %>" <%- grouped ? '' : 'data-list-set="f:expiring30"' %>><span class="gdap-card-value"><%= summary.soon30 %></span><span class="gdap-card-label">Expiring ≤ 30 days</span></a>
+  <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-bad" <%- grouped ? '' : 'data-list-set="f:expiring30"' %>><span class="gdap-card-value"><%= summary.soon7 %></span><span class="gdap-card-label">Expiring ≤ 7 days</span></a>
+  <a href="/microsoft-partner?f=expired" class="gdap-card gdap-card-expired <%= filter === 'expired' ? 'is-active' : '' %>" <%- grouped ? '' : 'data-list-set="f:expired"' %>><span class="gdap-card-value"><%= summary.expired %></span><span class="gdap-card-label">Expired</span></a>
 </div>
 
 <section class="card">
   <div class="ticket-filters">
-    <nav class="filters" aria-label="Filter GDAP relationships" data-live-part="gdap-pills">
-      <% for (const [key, f] of Object.entries(filters)) { %>
-        <a href="/microsoft-partner<%= key === 'all' ? '' : `?f=${key}` %>" class="<%= filter === key ? 'active' : '' %>"><%= f.label %> <span class="count"><%= counts[key] %></span></a>
+    <nav class="filters" aria-label="Filter GDAP relationships" <%- grouped ? '' : 'data-list-group="f"' %>>
+      <% for (const [key, f] of Object.entries(filters)) { const instant = !grouped && key !== 'multiple'; %>
+        <a href="/microsoft-partner<%= key === 'all' ? '' : `?f=${key}` %>" class="<%= filter === key ? 'active' : '' %>" <% if (instant) { %>data-list-value="<%= key %>" <%= key === 'all' ? 'data-list-default' : '' %><% } %>><%= f.label %> <span class="count"><%= counts[key] %></span></a>
       <% } %>
     </nav>
-    <%- include('../partials/search', { target: '#gdap-rows', placeholder: 'Search customer, client, relationship or role' }) %>
+    <% if (grouped) { %>
+      <%- include('../partials/search', { target: '#gdap-rows', placeholder: 'Search customer, client, relationship or role' }) %>
+    <% } else { %>
+      <label class="search-field">
+        <%- icon('search') %>
+        <span class="visually-hidden">Search customer, client, relationship, status or role</span>
+        <input type="search" name="q" placeholder="Search" autocomplete="off" data-1p-ignore data-lpignore="true" data-list-search>
+      </label>
+    <% } %>
   </div>
-  <div data-live-part="gdap-results">
+  <div>
   <% if (supersededCount) { %>
     <div class="gdap-bulk">
       <span class="muted small"><%= supersededCount %> expired relationship<%= supersededCount === 1 ? '' : 's' %> where the customer already has an active one.</span>
@@ -87,7 +97,7 @@
       <tbody id="gdap-rows">
         <% let prevKey = null; %>
         <% for (const r of rows) { const groupStart = grouped && prevKey !== null && prevKey !== r.customerKey; prevKey = r.customerKey; %>
-          <tr id="gdap-<%= r.id %>" class="gdap-row gdap-row-<%= r.band %> <%= groupStart ? 'gdap-group-start' : '' %> <%= r.hidden ? 'is-hidden' : '' %>" data-filter-item data-search="<%= [r.customer_name, r.client_name, r.display_name, r.customer_tenant_id, ...r.roleList.map((x) => x.name)].filter(Boolean).join(' ') %>">
+          <tr id="gdap-<%= r.id %>" class="gdap-row gdap-row-<%= r.band %> <%= groupStart ? 'gdap-group-start' : '' %> <%= r.hidden ? 'is-hidden' : '' %>" <% if (grouped) { %>data-filter-item data-search="<%= [r.customer_name, r.client_name, r.display_name, r.customer_tenant_id, ...r.roleList.map((x) => x.name)].filter(Boolean).join(' ') %>"<% } else { %>data-list-item data-search="<%= r.search %>" data-tags="<%= r.tags %>" data-rank="<%= r.rank %>" <%= r.visible ? '' : 'hidden' %><% } %>>
             <td class="gdap-hide-cell">
               <form method="post" action="/microsoft-partner/<%= r.id %>/hide" class="inline">
                 <%- csrfField %>
@@ -135,13 +145,16 @@
             </td>
           </tr>
         <% } %>
-        <tr data-filter-empty hidden><td colspan="10" class="empty">No relationships match your search.</td></tr>
+        <% if (grouped) { %><tr data-filter-empty hidden><td colspan="10" class="empty">No relationships match your search.</td></tr><% } %>
         <% if (!rows.length) { %>
           <tr><td colspan="10" class="empty"><%= sync.lastOk ? 'No relationships in this view.' : 'No GDAP relationships yet. They appear after the first sync.' %></td></tr>
+        <% } else if (!grouped) { %>
+          <tr data-list-empty <%= rows.some((r) => r.visible) ? 'hidden' : '' %>><td colspan="10" class="empty">No relationships match.</td></tr>
         <% } %>
       </tbody>
     </table>
   </div>
   </div>
 </section>
+</div>
 <%- include('../partials/foot') %>

@@ -3,7 +3,7 @@
   date chip, title, client, comment and attachment counts and the assignee's avatar. Cards are
   always white; draggable adds draggable="true" for the Tickets board.
 %>
-<article class="tcard" data-ticket-id="<%= t.id %>" <%- locals.draggable ? 'draggable="true"' : '' %>>
+<article class="tcard" data-ticket-id="<%= t.id %>" <%- locals.draggable ? 'draggable="true"' : '' %><% if (t.tags) { %> data-list-item data-search="<%= t.search %>" data-tags="<%= t.tags %>" data-rank="<%= t.rank %>" <%= t.visible === false ? 'hidden' : '' %><% } %>>
   <div class="tcard-top">
     <%- include('priority', { priority: t.priority, dotOnly: true }) %>
     <span class="tcard-no">Ticket <%= t.id %></span>

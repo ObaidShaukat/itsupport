@@ -7,7 +7,7 @@ const {
   str, requireId, toId, flash, notFound, backPath,
 } = require('../lib/http');
 const { journey } = require('../lib/journey');
-const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
+const { readListQuery, listTickets, ticketCounts, listControls, instantTickets } = require('../lib/ticket-list');
 const { logActivity, historyFor, clientHistory, recordMeta } = require('../lib/activity');
 
 const router = express.Router();
@@ -133,7 +133,8 @@ router.get('/clients/:id', async (req, res) => {
   const activity = await clientHistory(id);
 
   const ticketState = readListQuery(req.query);
-  const tickets = await listTickets({ ...ticketState, clientId: id });
+  // All the client's tickets; status / priority / search filter in the browser ([data-list]).
+  const tickets = instantTickets(await listTickets({ clientId: id, sort: ticketState.sort, dir: ticketState.dir }), ticketState);
   const ticketControls = listControls(`/clients/${id}`, ticketState, await ticketCounts(id), '#tickets');
 
   const [catalogue] = await pool.query(`

@@ -1,14 +1,16 @@
 <%#
   tickets: rows from listTickets(); controls.columns: sortable headers;
-  filtered: true when a status/priority filter is applied.
+  filtered: true when a status/priority filter is applied. Instant ([data-list] in app.js): every
+  row carries data-search / data-tags / data-rank / data-sort-* (instantTickets() in
+  src/lib/ticket-list.js) and starts hidden when the address's filters leave it out.
   Fixed column widths, one line per cell (full text in the tooltip), priority as a
   flag at the start of the row, people as avatar + first name, delete in its own narrow last
   column (shown on row hover). Created by (cell-created) is hidden below 1280px.
 %>
 <% if (!tickets.length) { %>
-  <p class="empty">No tickets<%= locals.filtered ? ' match these filters' : '' %>.</p>
+  <p class="empty">No tickets yet.</p>
 <% } else { %>
-  <p class="empty" data-filter-empty hidden>No tickets match your search.</p>
+  <p class="empty" data-list-empty <%= tickets.some((t) => t.visible !== false) ? 'hidden' : '' %>>No tickets match these filters.</p>
   <div class="table-wrap">
     <table class="table table-tickets">
       <colgroup>
@@ -20,9 +22,9 @@
           <% for (const col of controls.columns) { %>
             <th aria-sort="<%= col.active ? (col.dir === 'asc' ? 'ascending' : 'descending') : 'none' %>" class="<%= col.key === 'updated' ? 'right' : col.key === 'created_by' ? 'cell-created' : '' %>">
               <% if (col.key === 'priority') { %>
-                <a href="<%= col.href %>" class="sort-link sort-flag <%= col.active ? 'is-sorted' : '' %>" title="Sort by priority" aria-label="Sort by priority"><span class="led led-sort" aria-hidden="true"></span></a>
+                <a href="<%= col.href %>" class="sort-link sort-flag <%= col.active ? 'is-sorted' : '' %>" title="Sort by priority" aria-label="Sort by priority" data-list-sort="<%= col.key %>" data-list-dir="<%= col.first %>" <%- col.active ? 'data-list-current="' + col.dir + '"' : '' %>><span class="led led-sort" aria-hidden="true"></span></a>
               <% } else { %>
-                <a href="<%= col.href %>" class="sort-link <%= col.active ? 'is-sorted' : '' %>"><%= col.label %><span class="sort-arrow" aria-hidden="true"><%= col.active ? (col.dir === 'asc' ? '▲' : '▼') : '↕' %></span></a>
+                <a href="<%= col.href %>" class="sort-link <%= col.active ? 'is-sorted' : '' %>" data-list-sort="<%= col.key %>" data-list-dir="<%= col.first %>" <%- col.active ? 'data-list-current="' + col.dir + '"' : '' %>><%= col.label %><span class="sort-arrow" aria-hidden="true"><%= col.active ? (col.dir === 'asc' ? '▲' : '▼') : '↕' %></span></a>
               <% } %>
             </th>
           <% } %>
@@ -31,7 +33,7 @@
       </thead>
       <tbody>
         <% for (const t of tickets) { %>
-          <tr class="ticket-row ticket-row-<%= t.priority %>" data-filter-item data-search="#<%= t.id %> <%= t.title %> <%= t.client_name %> <%= ticketStatuses[t.status] %> <%= ticketPriorities[t.priority] %> <%= t.created_by || '' %> <%= t.updated_by || '' %>">
+          <tr class="ticket-row ticket-row-<%= t.priority %>" data-list-item data-search="<%= t.search %>" data-tags="<%= t.tags %>" data-rank="<%= t.rank %>" <% for (const [k, v] of Object.entries(t.sortValues || {})) { %>data-sort-<%= k.replace(/_/g, '-') %>="<%= v %>" <% } %><%= t.visible === false ? 'hidden' : '' %>>
             <td class="cell-flag"><%- include('priority', { priority: t.priority, dotOnly: true }) %></td>
             <td class="muted"><%= t.id %></td>
             <td title="<%= t.title %>">

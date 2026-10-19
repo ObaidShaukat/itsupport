@@ -8,7 +8,7 @@ const { str, requireId, toId, flash, backPath, notFound } = require('../lib/http
 const { logActivity } = require('../lib/activity');
 const { cfConfig } = require('../lib/cloudflare/api');
 const {
-  listDomains, getDomain, defaultOrder, listAccounts, getSettings, saveSetting, lastCheck, inheritClients, autoLink,
+  listDomains, getDomain, defaultOrder, listAccounts, getSettings, saveSetting, lastCheck,
 } = require('../lib/cloudflare/data');
 const { runChecks, checkDomain } = require('../lib/cloudflare/check');
 const { rdapProgress, runRdapQueue } = require('../lib/cloudflare/rdap');
@@ -59,24 +59,35 @@ router.get('/domains', async (req, res) => {
     movedDeleted: visible.filter((d) => ['moved', 'deactivated', 'deleted'].includes(d.status)).length,
     expiring: visible.filter((d) => d.expiring).length,
   };
-  const counts = Object.fromEntries(Object.entries(STATUS_FILTERS).map(([k, f]) => [k, all.filter(f.test).length]));
-  let rows = all.filter(STATUS_FILTERS[state.status].test);
-  if (state.client) rows = rows.filter((d) => d.client_id === state.client);
-  if (state.account) rows = rows.filter((d) => d.cf_account_id === state.account);
-  if (state.q) {
-    rows = rows.filter((d) => [d.name, d.client_name, d.account_name, d.provider, d.registrar, d.statusLabel]
-      .some((v) => String(v || '').toLowerCase().includes(state.q)));
+  // Every domain goes to the page and is filtered there ([data-list] in app.js: no request per
+  // key). Rows that do not match the address's filters start hidden, so the page is right
+  // before the script runs (and without it). Each row carries its search text, filter tags,
+  // default rank and sort values, worked out once here.
+  const ranked = defaultOrder(all);
+  for (const [i, d] of ranked.entries()) {
+    d.rank = i;
+    d.search = [d.name, d.account_name, d.client_name, d.statusLabel, d.provider, d.registrar].filter(Boolean).join(' ').toLowerCase();
+    d.tags = [
+      ...Object.entries(STATUS_FILTERS).filter(([, f]) => f.test(d)).map(([k]) => `status:${k}`),
+      d.client_id ? `client:${d.client_id}` : '', d.cf_account_id ? `account:${d.cf_account_id}` : '',
+    ].filter(Boolean).join(' ');
+    d.sortValues = Object.fromEntries(Object.entries(SORTS).map(([k, fn]) => [k, fn(d)]));
   }
+  const words = state.q.split(/\s+/).filter(Boolean);
+  const match = (d, skip) => (skip === 'status' || STATUS_FILTERS[state.status].test(d))
+    && (!state.client || d.client_id === state.client) && (!state.account || d.cf_account_id === state.account)
+    && words.every((w) => d.search.includes(w));
+  for (const d of ranked) d.visible = match(d);
+  const counts = Object.fromEntries(Object.entries(STATUS_FILTERS).map(([k, f]) => [k, ranked.filter((d) => match(d, 'status') && f.test(d)).length]));
+  let rows = ranked;
   if (state.sort) {
     const key = SORTS[state.sort];
     const sign = state.dir === 'desc' ? -1 : 1;
-    rows = [...rows].sort((a, b) => {
-      const x = key(a);
-      const y = key(b);
-      return (x < y ? -1 : x > y ? 1 : 0) * sign || a.name.localeCompare(b.name);
+    rows = [...rows].sort((x1, y1) => {
+      const x = key(x1);
+      const y = key(y1);
+      return (x < y ? -1 : x > y ? 1 : 0) * sign || x1.rank - y1.rank;
     });
-  } else {
-    rows = defaultOrder(rows);
   }
   const href = (changes) => {
     const next = { ...state, ...changes };
@@ -164,28 +175,23 @@ router.post('/domains/:id/hide', async (req, res) => {
   res.redirect(backPath(req, '/cloudflare/domains'));
 });
 
-// Client: "auto" (from the Cloudflare account), "" (none) or a client id.
+// Client, set by hand on the domain page: "" (none) or a client id. Nothing is linked
+// automatically (accounts are not linked to clients).
 router.post('/domains/:id/client', async (req, res) => {
   const d = await domainRow(requireId(req.params.id));
-  const choice = String(req.body.client_id || '');
+  const clientId = toId(req.body.client_id);
   let clientName = null;
-  if (choice === 'auto') {
-    await pool.query('UPDATE domains SET client_manual = 0 WHERE id = ?', [d.id]);
-    await inheritClients(pool);
-  } else {
-    const clientId = toId(choice);
-    if (clientId) {
-      const [[c]] = await pool.query('SELECT id, name FROM clients WHERE id = ?', [clientId]);
-      if (!c) { flash(req, 'error', 'Choose a client from the list.'); return res.redirect(`/cloudflare/domains/${d.id}`); }
-      clientName = c.name;
-    }
-    await pool.query('UPDATE domains SET client_id = ?, client_manual = 1 WHERE id = ?', [clientId || null, d.id]);
+  if (clientId) {
+    const [[c]] = await pool.query('SELECT id, name FROM clients WHERE id = ?', [clientId]);
+    if (!c) { flash(req, 'error', 'Choose a client from the list.'); return res.redirect(`/cloudflare/domains/${d.id}`); }
+    clientName = c.name;
   }
+  await pool.query('UPDATE domains SET client_id = ?, client_manual = 1 WHERE id = ?', [clientId || null, d.id]);
   const after = await domainRow(d.id);
-  if (after.client_id !== d.client_id || choice === 'auto') {
+  if (after.client_id !== d.client_id) {
     await log(req, {
       id: d.id, action: 'updated', clientId: after.client_id, clientName: after.client_name,
-      summary: `Domain ${d.name}: client ${choice === 'auto' ? `from the Cloudflare account (${after.client_name || 'none'})` : clientName ? `set to ${clientName}` : 'cleared'}`,
+      summary: `Domain ${d.name}: client ${clientName ? `set to ${clientName}` : 'cleared'}`,
     });
   }
   flash(req, 'saved', after.client_name ? `Saved. ${d.name} is linked to ${after.client_name}.` : `Saved. ${d.name} is not linked to a client.`);
@@ -205,37 +211,9 @@ router.post('/domains/:id/notes', async (req, res) => {
 
 // ---- Accounts ----
 router.get('/accounts', async (req, res) => {
-  const [clients] = await pool.query('SELECT id, name FROM clients ORDER BY name');
   res.render('cloudflare/accounts', {
-    title: 'Cloudflare accounts', nav: 'cloudflare', config: cfConfig(), check: await lastCheck(pool), accounts: await listAccounts(pool), clients,
+    title: 'Cloudflare accounts', nav: 'cloudflare', config: cfConfig(), check: await lastCheck(pool), accounts: await listAccounts(pool),
   });
-});
-
-// Link to client: a client id, "" (not linked) or "auto" (match by name again).
-router.post('/accounts/:id/link', async (req, res) => {
-  const id = requireId(req.params.id);
-  const [[a]] = await pool.query('SELECT a.*, c.name AS client_name FROM cf_accounts a LEFT JOIN clients c ON c.id = a.client_id WHERE a.id = ?', [id]);
-  if (!a) throw notFound();
-  const choice = String(req.body.client_id || '');
-  if (choice === 'auto') {
-    await pool.query('UPDATE cf_accounts SET link_manual = 0 WHERE id = ?', [id]);
-    await autoLink(pool);
-  } else {
-    const clientId = toId(choice);
-    if (clientId) {
-      const [[c]] = await pool.query('SELECT id FROM clients WHERE id = ?', [clientId]);
-      if (!c) { flash(req, 'error', 'Choose a client from the list.'); return res.redirect('/cloudflare/accounts'); }
-    }
-    await pool.query('UPDATE cf_accounts SET client_id = ?, link_manual = 1 WHERE id = ?', [clientId || null, id]);
-    await inheritClients(pool, id);
-  }
-  const [[after]] = await pool.query('SELECT a.client_id, c.name AS client_name FROM cf_accounts a LEFT JOIN clients c ON c.id = a.client_id WHERE a.id = ?', [id]);
-  await log(req, {
-    action: 'updated', clientId: after.client_id, clientName: after.client_name,
-    summary: `Cloudflare account ${a.name}: ${choice === 'auto' ? 'automatic client match' : 'client'} ${after.client_name ? `linked to ${after.client_name}` : 'not linked'}`,
-  });
-  flash(req, 'saved', after.client_name ? `Saved. ${a.name} is linked to ${after.client_name}; its domains follow unless set by hand.` : `Saved. ${a.name} is not linked to a client.`);
-  res.redirect('/cloudflare/accounts');
 });
 
 // ---- Settings ----

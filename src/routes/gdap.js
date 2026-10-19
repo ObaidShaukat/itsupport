@@ -49,12 +49,27 @@ router.get('/', async (req, res) => {
   // Customers with several relationships, counted once each for the pill.
   counts.multiple = new Set(rows.filter(FILTERS.multiple.test).map((r) => r.customerKey)).size;
   const supersededCount = rows.filter((r) => shown(r) && r.superseded).length;
-  let list = rows.filter(FILTERS[filter].test);
-  if (filter === 'multiple') list = groupOrder(list);
+  // Instant list ([data-list] in app.js): every relationship goes to the page with its search
+  // text, filter tags (f:<key>), rank and visible, and the pills filter and count in the
+  // browser. "Multiple relationships" needs the customer grouping, so it stays a page of its own.
+  const grouped = filter === 'multiple';
+  let list;
+  if (grouped) {
+    list = groupOrder(rows.filter(FILTERS.multiple.test));
+  } else {
+    list = rows;
+    list.forEach((r, i) => {
+      r.rank = i;
+      r.visible = FILTERS[filter].test(r);
+      r.tags = Object.entries(FILTERS).filter(([k, f]) => k !== 'multiple' && f.test(r)).map(([k]) => `f:${k}`).join(' ');
+      r.search = [r.customer_name, r.client_name, r.display_name, r.customer_tenant_id, r.statusLabel, ...r.roleList.map((x) => x.name)]
+        .filter(Boolean).join(' ').toLowerCase();
+    });
+  }
   const [clients] = await pool.query('SELECT id, name FROM clients ORDER BY name');
   res.render('gdap/index', {
     title: 'Microsoft Partner', nav: 'gdap', config: gdapConfig(), sync: await lastSync(pool), settings, filter, filters: FILTERS, counts,
-    summary, rows: list, clients, supersededCount, grouped: filter === 'multiple',
+    summary, rows: list, clients, supersededCount, grouped,
   });
 });
 

@@ -2,7 +2,6 @@
 // rules, settings and client links.
 const { pool } = require('../../db');
 const { londonDate } = require('../activity');
-const { matchKey, clientIndex } = require('../gdap/data');
 const { providersLabel, nsList } = require('./lookups');
 
 const parseList = (json) => {
@@ -118,34 +117,7 @@ async function lastCheck(db = pool) {
   return { last: last || null, lastOkAt: ok ? ok.at : null };
 }
 
-// Domains inherit their account's client unless set by hand on the domain.
-async function inheritClients(db, accountId = null) {
-  await db.query(`
-    UPDATE domains d JOIN cf_accounts a ON a.id = d.cf_account_id
-    SET d.client_id = a.client_id
-    WHERE d.client_manual = 0 AND NOT (d.client_id <=> a.client_id) ${accountId ? 'AND a.id = ?' : ''}
-  `, accountId ? [accountId] : []);
-}
-
-// Links accounts to clients by name (lower case, no punctuation, Ltd / Limited ignored, only
-// a unique match), except accounts linked by hand. Returns how many got a new link.
-async function autoLink(db = pool) {
-  const [clients] = await db.query('SELECT id, name FROM clients');
-  const index = clientIndex(clients);
-  const [accounts] = await db.query('SELECT id, name, client_id FROM cf_accounts WHERE link_manual = 0');
-  let linked = 0;
-  for (const a of accounts) {
-    const match = index.get(matchKey(a.name)) || null;
-    if (match !== a.client_id) {
-      await db.query('UPDATE cf_accounts SET client_id = ? WHERE id = ?', [match, a.id]);
-      if (match) linked += 1;
-    }
-  }
-  await inheritClients(db);
-  return linked;
-}
-
 module.exports = {
   STATUS_LABELS, shapeDomain, listDomains, getDomain, defaultOrder, listAccounts, getSettings, saveSetting, lastCheck,
-  inheritClients, autoLink, daysUntil, parseList,
+  daysUntil, parseList,
 };

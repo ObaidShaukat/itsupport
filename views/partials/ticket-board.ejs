@@ -7,16 +7,16 @@
 %>
 <div class="board <%= locals.draggable ? 'is-draggable' : '' %>" <%- locals.draggable ? 'data-board' : '' %>>
   <% for (const col of columns) { %>
-    <section class="board-col" data-board-col="<%= col.status %>" aria-label="<%= col.label %>">
+    <section class="board-col" data-board-col="<%= col.status %>" aria-label="<%= col.label %>" data-list-bucket>
       <header class="board-col-head">
         <h2><%= col.label %></h2>
-        <span class="count-chip" data-board-count><%= col.count %></span>
+        <span class="count-chip" data-board-count data-list-bucket-count><%= col.tickets.filter((t) => t.visible !== false).length %></span>
       </header>
       <div class="board-cards" data-board-cards>
         <% for (const t of col.tickets) { %>
           <%- include('ticket-card', { t, draggable: locals.draggable }) %>
         <% } %>
-        <% if (!col.tickets.length) { %><p class="board-empty">No tickets</p><% } %>
+        <p class="board-empty" data-list-bucket-empty <%= col.tickets.some((t) => t.visible !== false) ? 'hidden' : '' %>>No tickets</p>
         <% if (col.more && locals.moreHref) { %><a href="<%= moreHref(col.status) %>" class="board-more">+ <%= col.more %> more in the list</a><% } %>
       </div>
     </section>

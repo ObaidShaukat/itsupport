@@ -2,7 +2,7 @@ const express = require('express');
 const { pool, transaction } = require('../db');
 const { str, requireId, toId, flash, notFound, backPath } = require('../lib/http');
 const { TICKET_STATUSES, TICKET_PRIORITIES, isTicketStatus, isTicketPriority } = require('../lib/tickets');
-const { readListQuery, listTickets, ticketCounts, listControls } = require('../lib/ticket-list');
+const { readListQuery, listTickets, ticketCounts, listControls, instantTickets } = require('../lib/ticket-list');
 const { boardColumns } = require('../lib/dashboard');
 const { ticketReminders, reminderUsers, clearReminderNotifications } = require('../lib/reminders');
 const {
@@ -59,8 +59,9 @@ router.get('/', async (req, res) => {
   } else {
     state.view = req.user.ticket_view === 'board' ? 'board' : 'list';
   }
+  // Every ticket goes to the page; filters and search work in the browser ([data-list]).
   // The board always shows every status (one column each); the status filter is for the List.
-  const tickets = await listTickets(state.view === 'board' ? { ...state, status: '' } : state);
+  const tickets = instantTickets(await listTickets({ sort: state.sort, dir: state.dir }), state, { ignoreStatus: state.view === 'board' });
   const controls = listControls('/tickets', state, await ticketCounts());
   const [clients, people] = await Promise.all([clientOptions(), assignableUsers()]);
   res.render('tickets/index', {
