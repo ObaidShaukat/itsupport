@@ -85,7 +85,11 @@ function withClient(text, client) {
 // ---- Bullets ----
 
 // One user's day: one bullet per entry, in this order: log work, then Articles, then
-// always "Other IT related tasks.".
+// always "Other IT related tasks.". Returns { lines, sources }: sources[i] says where
+// lines[i] came from, so the preview can save edits back to Log work entries:
+//   { kind: 'logwork', id, userId, client }  a Log work entry (activity_log id)
+//   { kind: 'article', id }                  an article created / edited that day
+//   { kind: 'fixed' }                        "Other IT related tasks."
 //   Log work:         the typed text with the client put in (see withClient); no client: as typed.
 //   Articles:         "Documented a solution for '{title}' in Articles." /
 //                     "Updated the article '{title}'."
@@ -93,14 +97,15 @@ function withClient(text, client) {
 // duplicate lines are removed. Everything else (tickets, client services, deletes, sent
 // reports, client/user/catalogue changes) is left out; it is listed on /activity.
 function userLines(rows) {
-  const logwork = [];
+  const logwork = []; // { line, source }
   const articles = new Map(); // article id -> { title, created }
 
   for (const row of rows) {
     if (row.action === 'deleted') continue;
     if (row.entity_type === 'manual') {
       const text = withoutStop(row.summary);
-      if (text) logwork.push(sentence(withClient(text, clean(row.client_name))));
+      const client = clean(row.client_name);
+      if (text) logwork.push({ line: sentence(withClient(text, client)), source: { kind: 'logwork', id: row.id, userId: row.user_id, client } });
     } else if (row.entity_type === 'kb_article') {
       if (!articles.has(row.entity_id)) articles.set(row.entity_id, { title: '', created: false });
       const article = articles.get(row.entity_id);
@@ -110,20 +115,45 @@ function userLines(rows) {
     // Any other entity type is not on the report.
   }
 
-  const kb = [...articles.values()].map((a) => (a.created
-    ? sentence(`Documented a solution for '${a.title}' in Articles`)
-    : sentence(`Updated the article '${a.title}'`)));
+  const kb = [...articles.entries()].map(([id, a]) => ({
+    line: a.created
+      ? sentence(`Documented a solution for '${a.title}' in Articles`)
+      : sentence(`Updated the article '${a.title}'`),
+    source: { kind: 'article', id },
+  }));
 
   const seen = new Set();
   const lines = [];
-  for (const line of [...logwork, ...kb]) {
+  const sources = [];
+  for (const { line, source } of [...logwork, ...kb]) {
     if (line && !seen.has(line.toLowerCase())) {
       seen.add(line.toLowerCase());
       lines.push(line);
+      sources.push(source);
     }
   }
-  return lines.concat('Other IT related tasks.');
+  return { lines: lines.concat('Other IT related tasks.'), sources: sources.concat({ kind: 'fixed' }) };
 }
+
+// The text to save back to a Log work entry from an edited preview line: the client part
+// withClient() added ("to {client}" before "regarding", or " for {client}" at the end) and
+// the final full stop are taken off again, so the entry keeps only the person's own words.
+// original: the entry's saved text (when it already named the client, nothing was added).
+function entryTextFromLine(line, client, original) {
+  let text = clean(line).replace(/\.+$/, '').trim();
+  const name = clean(client);
+  if (name && !mentions(withoutStop(original), name)) {
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const before = new RegExp(`\\bto ${esc} (?=regarding\\b)`, 'i');
+    const atEnd = new RegExp(`\\s+for ${esc}$`, 'i');
+    if (before.test(text)) text = text.replace(before, '');
+    else text = text.replace(atEnd, '');
+  }
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+// The preview line for a Log work entry (what userLines() shows for it).
+const entryLine = (summary, client) => sentence(withClient(withoutStop(summary), clean(client)));
 
 // Report for from..to (inclusive UK dates), optionally one user.
 // Returns { days: [{ date, label, users: [{ heading, lines }] }], text, multiDay }.
@@ -158,7 +188,7 @@ async function buildReport({ from, to, userId }) {
     label: dayLabel(date),
     users: [...byDay.get(date).values()]
       .sort((a, b) => (a.username || '~').localeCompare(b.username || '~'))
-      .map((u) => ({ heading: heading(u.username), lines: userLines(u.rows) }))
+      .map((u) => ({ heading: heading(u.username), ...userLines(u.rows) }))
       // Only "Other IT related tasks." means nothing to report: leave them out.
       .filter((u) => u.lines.length > 1),
   })).filter((day) => day.users.length);
@@ -174,4 +204,5 @@ async function buildReport({ from, to, userId }) {
 
 module.exports = {
   MAX_RANGE_DAYS, isDate, addDays, daysBetween, dayLabel, utcRange, rangeCondition, userLines, buildReport,
+  entryTextFromLine, entryLine,
 };

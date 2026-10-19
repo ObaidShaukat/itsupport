@@ -1500,7 +1500,14 @@ if (sendDialog && typeof sendDialog.showModal === 'function') {
   const sendPreview = sendDialog.querySelector('[data-send-preview]');
   document.querySelectorAll('[data-send-open]').forEach((button) => {
     button.addEventListener('click', () => {
-      if (sendDialog.hasAttribute('data-copy-page') && reportPreview) sendPreview.innerHTML = reportPreview.innerHTML;
+      if (sendDialog.hasAttribute('data-copy-page') && reportPreview) {
+        sendPreview.innerHTML = reportPreview.innerHTML;
+        // The popup preview is one editable box: drop the page's per-line editing hooks.
+        sendPreview.querySelectorAll('[contenteditable], [data-entry], [data-preview-only], [data-spell]').forEach((n) => {
+          ['contenteditable', 'data-entry', 'data-preview-only', 'data-spell', 'spellcheck', 'title'].forEach((a) => n.removeAttribute(a));
+          n.classList.remove('is-saved', 'is-saving', 'is-error');
+        });
+      }
       sendDialog.showModal();
       const first = sendDialog.querySelector('.token-input input, input[name="subject"]');
       if (first) first.focus();
@@ -3806,5 +3813,99 @@ document.addEventListener('keydown', (e) => {
     const r = img.getBoundingClientRect();
     const onScreen = r.bottom > 0 && r.top < window.innerHeight && r.width > 0;
     if (onScreen && img.complete && img.naturalWidth === 0 && img.getAttribute('src')) swap(img);
+  });
+})();
+
+// ---- Daily Report preview lines ----
+// Every line is editable on its own (single line: Enter finishes, Esc cancels). Your own Log
+// work lines (li[data-entry]) are saved back to the entry when you leave them: POST
+// /log-work/:id/text, which strips the client part and full stop again; the line then shows
+// the server's version with a "Saved" tick, and "Your logged work" below updates without a
+// reload. Other lines (data-preview-only) change this copy only.
+(() => {
+  const preview = document.querySelector('[data-report-preview]');
+  if (!preview) return;
+  const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
+  const textOf = (el) => el.textContent.replace(/\s+/g, ' ').trim();
+  const toast = (text, isError) => {
+    const box = document.querySelector('[data-toasts]');
+    if (!box) return;
+    const t = document.createElement('div');
+    t.className = isError ? 'toast toast-error' : 'toast toast-saved';
+    t.setAttribute('role', isError ? 'alert' : 'status');
+    t.textContent = text;
+    box.append(t);
+    setTimeout(() => { t.classList.add('is-leaving'); setTimeout(() => t.remove(), 300); }, 4000);
+  };
+  const editable = '[contenteditable="true"]';
+
+  preview.addEventListener('focusin', (e) => {
+    const el = e.target.closest(editable);
+    if (el && el.dataset.original === undefined) el.dataset.original = el.textContent;
+  });
+  preview.addEventListener('keydown', (e) => {
+    const el = e.target.closest(editable);
+    if (!el) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      el.blur();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      if (el.dataset.original !== undefined) el.textContent = el.dataset.original;
+      el.dataset.cancelled = '1';
+      el.blur();
+    }
+  });
+  // Pasting rich text into a line keeps only its text.
+  preview.addEventListener('paste', (e) => {
+    const el = e.target.closest(editable);
+    if (!el || !e.clipboardData) return;
+    e.preventDefault();
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain').replace(/\s+/g, ' '));
+  });
+
+  preview.addEventListener('focusout', async (e) => {
+    const el = e.target.closest(editable);
+    if (!el) return;
+    const original = el.dataset.original;
+    const cancelled = el.dataset.cancelled === '1';
+    delete el.dataset.original;
+    delete el.dataset.cancelled;
+    if (!textOf(el) && original !== undefined) el.textContent = original; // never leave a blank line
+    if (cancelled || !el.dataset.entry || original === undefined || textOf(el) === original.replace(/\s+/g, ' ').trim()) return;
+    el.classList.remove('is-saved', 'is-error');
+    el.classList.add('is-saving');
+    try {
+      const res = await fetch(`/log-work/${el.dataset.entry}/text`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: token, text: textOf(el) }),
+        credentials: 'same-origin',
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'The change could not be saved.');
+      el.textContent = data.line;
+      // "Your logged work": the entry's text and its Edit popup.
+      const row = document.querySelector(`[data-entry-row="${el.dataset.entry}"]`);
+      if (row) {
+        const shown = row.querySelector('[data-entry-text]');
+        if (shown) shown.textContent = data.summary;
+        const area = row.querySelector('textarea[name="description"]');
+        if (area) { area.value = data.summary; area.defaultValue = data.summary; }
+        row.classList.remove('is-new');
+        void row.offsetWidth;
+        row.classList.add('is-new');
+      }
+      el.classList.add('is-saved');
+      setTimeout(() => el.classList.remove('is-saved'), 1800);
+    } catch (err) {
+      el.textContent = original;
+      el.classList.add('is-error');
+      setTimeout(() => el.classList.remove('is-error'), 2500);
+      toast(err.message, true);
+    } finally {
+      el.classList.remove('is-saving');
+    }
   });
 })();

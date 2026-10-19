@@ -3,8 +3,8 @@
 const express = require('express');
 const { pool } = require('../db');
 const { str, requireId, flash, notFound, safePath, backPath } = require('../lib/http');
-const { londonDate } = require('../lib/activity');
-const { isDate } = require('../lib/report');
+const { londonDate, logActivity } = require('../lib/activity');
+const { isDate, entryTextFromLine, entryLine } = require('../lib/report');
 
 const router = express.Router();
 
@@ -90,6 +90,29 @@ router.post('/:id', async (req, res) => {
   );
   flash(req, 'success', 'Logged work updated.');
   res.redirect(back);
+});
+
+// Daily Report preview: an edited Log work line saved straight back to its entry (JSON).
+// text is the line as shown; the client part the report adds and the final full stop are
+// taken off (entryTextFromLine), the client and date stay as they are. The change is logged
+// as entity_type 'report' / updated (on /activity, never on the Daily Report itself).
+router.post('/:id/text', async (req, res) => {
+  const row = await ownEntry(req, requireId(req.params.id));
+  const text = entryTextFromLine(str(req.body.text, 2200), row.client_name, row.summary);
+  if (!text) return res.status(400).json({ ok: false, error: 'A logged work line cannot be empty. Delete the entry below instead.' });
+  if (text.length > 2000) return res.status(400).json({ ok: false, error: 'Keep it under 2,000 characters.' });
+  // Unchanged when the report line would read the same (only capitals / the full stop differ
+  // from the saved text): the entry is left exactly as typed.
+  const changed = entryLine(text, row.client_name) !== entryLine(row.summary, row.client_name);
+  if (changed) {
+    await pool.query('UPDATE activity_log SET summary = ?, updated_at = NOW() WHERE id = ?', [text, row.id]);
+    await logActivity(null, req.user, {
+      type: 'report', id: row.id, action: 'updated', clientName: row.client_name, subject: 'Logged work',
+      summary: `Edited logged work from the Daily Report preview: "${row.summary}" → "${text}"`,
+    });
+  }
+  const summary = changed ? text : row.summary;
+  return res.json({ ok: true, changed, summary, line: entryLine(summary, row.client_name) });
 });
 
 router.post('/:id/delete', async (req, res) => {

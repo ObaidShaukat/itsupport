@@ -297,9 +297,11 @@
     state.replace = (issue, text) => {
       const { node, start, end, word } = issue;
       if (!node.isConnected || node.data.slice(start, end) !== word) { state.check(); return; }
+      // Focus first, so editors that remember the text on focus (the Daily Report lines) see
+      // the replacement as a change.
+      el.focus();
       node.replaceData(start, end - start, text);
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.focus();
       const sel = window.getSelection();
       const caret = new Range();
       caret.setStart(node, start + text.length);

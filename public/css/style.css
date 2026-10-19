@@ -3434,3 +3434,27 @@ input[type="checkbox"]:not(.visually-hidden, .switch-field input, .user-check in
 .spell-pop-sep { height: 1px; margin: 4px 2px; background: var(--border); }
 .spell-none { margin: 0; padding: 6px 10px; font-size: 13px; color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .spell-pop { animation: none; } }
+
+/* ---- Daily Report preview: each line edits on its own ---- */
+.report-preview [contenteditable="true"] { position: relative; border-radius: 6px; outline: none; transition: background 0.15s, box-shadow 0.15s; }
+.report-preview [contenteditable="true"]:hover { background: var(--surface-main); }
+.report-preview [contenteditable="true"]:focus { background: #FFFFFF; box-shadow: 0 0 0 2px var(--ink); }
+.report-preview li[contenteditable="true"] { padding: 1px 4px; margin-left: -4px; }
+/* Lines that change this copy only: a small hint on hover (not part of the text). */
+.report-preview [data-preview-only]:hover::after, .report-preview [data-preview-only]:focus::after {
+  content: "Preview only"; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  padding: 1px 8px; border-radius: 999px; background: var(--ground); color: var(--muted);
+  font-family: var(--font-body); font-size: 11px; font-weight: 700; text-decoration: none; pointer-events: none;
+}
+.report-preview li[data-preview-only] { padding-right: 96px; }
+/* Saving your logged work, then a small "Saved" tick that fades. */
+.report-preview li.is-saving { opacity: 0.6; }
+.report-preview li.is-saved::after {
+  content: "\2713  Saved"; position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  padding: 1px 8px; border-radius: 999px; background: var(--ink); color: #FFFFFF;
+  font-family: var(--font-body); font-size: 11px; font-weight: 700; pointer-events: none;
+  animation: saved-tick 1.8s ease-out both;
+}
+.report-preview li.is-error { box-shadow: 0 0 0 2px var(--red); }
+@keyframes saved-tick { 0% { opacity: 0; transform: translateY(-50%) scale(0.8); } 12% { opacity: 1; transform: translateY(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .report-preview li.is-saved::after { animation: none; } }

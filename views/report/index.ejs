@@ -61,17 +61,27 @@
     <p class="empty"><%= view === 'me' ? 'You have no activity' : view === 'all' ? 'Nobody has any activity' : 'No activity' %> recorded <%= from === to ? 'on this day' : 'in this period' %>.</p>
   <% } else { %>
     <div class="report-preview-head">
-      <p class="muted small"><%- icon('edit') %> Preview. Click any line to edit it before copying. Edits are not saved; reload to start again.</p>
+      <p class="muted small"><%- icon('edit') %> Click any line to edit it. Changes to your logged work are saved.</p>
     </div>
-    <div class="report-preview" contenteditable="true" spellcheck="true" data-spell data-report-preview>
+    <%#
+      Every line is editable on its own. Your Log work lines (data-entry) save back to the entry
+      when you leave them (Enter or a click elsewhere; Esc cancels): "Daily Report preview lines"
+      in app.js, POST /log-work/:id/text. Article lines, "Other IT related tasks.", headings and
+      other people's lines change this copy only (data-preview-only, "Preview only" on hover).
+    %>
+    <div class="report-preview" data-report-preview>
       <% for (const day of report.days) { %>
         <div class="report-day" data-report-day>
-          <% if (report.multiDay) { %><h2 class="report-day-title" data-report-day-title><%= day.label %></h2><% } %>
+          <% if (report.multiDay) { %><h2 class="report-day-title" data-report-day-title contenteditable="true" spellcheck="true" data-spell data-preview-only><%= day.label %></h2><% } %>
           <% for (const u of day.users) { %>
             <div class="report-user" data-report-user>
-              <h3 data-report-heading><%= u.heading %></h3>
+              <h3 data-report-heading contenteditable="true" spellcheck="true" data-spell data-preview-only><%= u.heading %></h3>
               <ul>
-                <% for (const line of u.lines) { %><li><%= line %></li><% } %>
+                <% u.lines.forEach((line, i) => {
+                  const src = (u.sources || [])[i] || { kind: 'fixed' };
+                  const own = src.kind === 'logwork' && src.userId === currentUser.id; %>
+                  <li contenteditable="true" spellcheck="true" data-spell <%- own ? `data-entry="${src.id}" title="Your logged work: changes are saved"` : 'data-preview-only' %>><%= line %></li>
+                <% }) %>
               </ul>
             </div>
           <% } %>
@@ -92,9 +102,9 @@
   <% } else { %>
     <ul class="rows">
       <% for (const m of manual) { %>
-        <li class="row">
+        <li class="row" data-entry-row="<%= m.id %>">
           <div class="row-main">
-            <div class="pre-line"><%= m.summary %></div>
+            <div class="pre-line" data-entry-text><%= m.summary %></div>
             <div class="muted small"><%= fmtDay(m.activity_date) %><% if (m.client_name) { %> · <%= m.client_name %><% } %></div>
           </div>
           <div class="row-actions">
