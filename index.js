@@ -92,6 +92,8 @@ app.locals.navItems = [
     ],
   },
 ];
+// Spellchecker files version (meta tag; the worker loads /spell/... with it, cached for a year).
+app.locals.spellVersion = require('./src/lib/spell').SPELL_VERSION;
 app.locals.icon = (name) => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"></use></svg>`;
 // Default date formatting ("7 Oct 2026, 15:00", UK time). Signed-in requests get the
 // user's own format in res.locals (src/middleware/auth.js).
@@ -177,6 +179,7 @@ const NAV_PREFIXES = [
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
   ['/inventory', 'inventory'],
   ['/call-switch-one', 'cs1'],
+  ['/settings', 'dictionary'],
 ];
 app.use((req, res, next) => {
   // The current top-bar nav item (and group) for this page.
@@ -189,6 +192,8 @@ app.use((req, res, next) => {
 
 app.use(require('./src/routes/auth'));
 app.use(requireAuth);
+// Spellchecker files and word lists: before the per-page data below (no page queries).
+app.use('/spell', require('./src/routes/spell'));
 
 // Data for the "Log work" dialog in the top bar of every page.
 app.use(async (req, res, next) => {
@@ -245,6 +250,7 @@ app.use('/microsoft-partner', require('./src/routes/gdap'));
 app.use('/gdap', moved('/microsoft-partner'));
 app.use('/call-switch-one', require('./src/routes/cs1'));
 app.use('/inventory', require('./src/routes/inventory'));
+app.use('/settings/dictionary', require('./src/routes/dictionary'));
 
 // ---- Errors ----
 

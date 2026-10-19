@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                    'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'manual') NOT NULL,
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
               'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced') NOT NULL,
@@ -845,6 +845,19 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   CONSTRAINT fk_user_sessions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Team spellchecker dictionary (src/lib/spell.js): words everyone's checker accepts.
+-- Matched case-insensitively; word is stored as typed (unique ignoring case).
+CREATE TABLE IF NOT EXISTS dictionary_words (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  word VARCHAR(100) NOT NULL,
+  added_by INT UNSIGNED NULL,
+  added_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_dictionary_words_word (word),
+  CONSTRAINT fk_dictionary_words_user FOREIGN KEY (added_by)
+    REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Every email the portal tries to send (src/lib/mailer.js): reminders and Daily Reports.
 CREATE TABLE IF NOT EXISTS email_log (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -896,7 +909,7 @@ ALTER TABLE ticket_history
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                           'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'manual') NOT NULL;
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'manual') NOT NULL;
 
 ALTER TABLE activity_log
   MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',

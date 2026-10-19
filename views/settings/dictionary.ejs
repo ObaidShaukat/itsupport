@@ -1,0 +1,60 @@
+<%- include('../partials/head') %>
+<%#
+  Settings > Dictionary: the team spellchecker dictionary (src/routes/dictionary.js). Names of
+  clients, users, services, categories, stock brands / models and CS1 companies are accepted
+  automatically and are not listed here.
+%>
+<header class="page-head reveal">
+  <div>
+    <p class="crumbs">Settings</p>
+    <h1>Dictionary</h1>
+    <p class="muted">Words the spellchecker accepts for everyone, besides UK English. Client, user, service, category, stock brand and model and Call Switch One company names are accepted automatically.</p>
+  </div>
+</header>
+
+<div class="grid-2 grid-wide-left">
+  <section class="card reveal" id="dictionary-list" aria-labelledby="dict-title">
+    <div class="card-head">
+      <h2 id="dict-title">Words <span class="muted small">(<%= words.length %>)</span></h2>
+    </div>
+    <%- include('../partials/search', { target: '#dictionary-list', placeholder: 'Search the dictionary' }) %>
+    <% if (!words.length) { %>
+      <p class="empty">No words yet. Add one here, or click a flagged word in any text box and choose "Add to dictionary".</p>
+    <% } else { %>
+      <p class="empty" data-filter-empty hidden>No words match your search.</p>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Word</th><th class="w-20">Added by</th><th class="w-15">Added</th><th class="w-xs"><span class="visually-hidden">Delete</span></th></tr>
+          </thead>
+          <tbody>
+            <% for (const w of words) { %>
+              <tr data-filter-item data-search="<%= w.word %> <%= w.added_by || '' %>">
+                <td><strong><%= w.word %></strong></td>
+                <td><% if (w.added_by) { %><span class="person"><%- avatar({ id: w.added_by_id, name: w.added_by }, 'xs') %><%= w.added_by %></span><% } else { %><span class="muted">—</span><% } %></td>
+                <td class="muted" title="<%= fmtDate(w.added_at) %>"><%= fmtDay(w.added_at) %></td>
+                <td class="row-actions cell-actions">
+                  <%- include('../partials/delete', { action: `/settings/dictionary/${w.id}/delete`, confirm: `Remove '${w.word}' from the dictionary? It will be flagged again for everyone.`, label: `Remove ${w.word}` }) %>
+                </td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </section>
+
+  <aside class="card reveal" aria-labelledby="dict-add">
+    <h2 id="dict-add">Add a word</h2>
+    <form method="post" action="/settings/dictionary" class="form">
+      <%- csrfField %>
+      <label class="field">
+        <span>Word</span>
+        <input type="text" name="word" required maxlength="100" autocomplete="off" spellcheck="false" data-1p-ignore data-lpignore="true">
+      </label>
+      <p class="muted small">One word, letters only (' and - are fine inside). Matching ignores capitals.</p>
+      <div class="form-actions"><button type="submit" class="btn btn-primary">Add</button></div>
+    </form>
+  </aside>
+</div>
+<%- include('../partials/foot') %>

@@ -71,7 +71,7 @@
                   <%- csrfField %>
                   <label class="field">
                     <span>Step</span>
-                    <input type="text" name="title" value="<%= step.title %>" required maxlength="500" autocomplete="off" data-1p-ignore data-lpignore="true">
+                    <input type="text" name="title" value="<%= step.title %>" required maxlength="500" autocomplete="off" data-1p-ignore data-lpignore="true" data-spell>
                   </label>
                   <label class="field">
                     <span>Stage <span class="muted">(optional)</span></span>
@@ -95,7 +95,7 @@
     <%- csrfField %>
     <label class="field field-grow">
       <span>New step</span>
-      <input type="text" name="title" required maxlength="500" autocomplete="off">
+      <input type="text" name="title" required maxlength="500" autocomplete="off" data-spell>
     </label>
     <label class="field">
       <span>Stage <span class="muted">(optional)</span></span>

@@ -63,7 +63,7 @@
     <div class="report-preview-head">
       <p class="muted small"><%- icon('edit') %> Preview. Click any line to edit it before copying. Edits are not saved; reload to start again.</p>
     </div>
-    <div class="report-preview" contenteditable="true" spellcheck="true" data-report-preview>
+    <div class="report-preview" contenteditable="true" spellcheck="true" data-spell data-report-preview>
       <% for (const day of report.days) { %>
         <div class="report-day" data-report-day>
           <% if (report.multiDay) { %><h2 class="report-day-title" data-report-day-title><%= day.label %></h2><% } %>
@@ -172,7 +172,7 @@
     </label>
     <div class="field">
       <span>Message <span class="muted">(click to edit)</span></span>
-      <div class="report-preview send-preview" contenteditable="true" spellcheck="true" data-send-preview>
+      <div class="report-preview send-preview" contenteditable="true" spellcheck="true" data-spell data-send-preview>
         <% for (const day of ownReport.days) { %>
           <div class="report-day" data-report-day>
             <% if (ownReport.multiDay) { %><h2 class="report-day-title" data-report-day-title><%= day.label %></h2><% } %>

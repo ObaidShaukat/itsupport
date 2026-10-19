@@ -1,10 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="en-GB">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <% if (locals.csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>"><% } %>
+  <% if (locals.currentUser && locals.spellVersion) { %><meta name="spell-version" content="<%= spellVersion %>"><% } %>
   <% if (locals.currentUser && locals.push && push.enabled) { %><meta name="push-key" content="<%= push.publicKey %>" data-wanted="<%= push.wanted ? '1' : '0' %>"><% } %>
   <title><%= locals.title ? title + ' · ' : '' %>Cleartwo IT Support</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -111,6 +112,7 @@
           <a href="/profile" class="menu-item <%= locals.nav === 'profile' ? 'is-active' : '' %>"><%- icon('users') %> My profile</a>
           <a href="/users" class="menu-item <%= locals.nav === 'users' ? 'is-active' : '' %>"><%- icon('users') %> Users</a>
           <a href="/activity" class="menu-item"><%- icon('clock') %> Activity log</a>
+          <a href="/settings/dictionary" class="menu-item <%= locals.nav === 'dictionary' ? 'is-active' : '' %>"><%- icon('book') %> Dictionary</a>
           <form method="post" action="/logout" class="menu-form">
             <%- locals.csrfField %>
             <button type="submit" class="menu-item"><%- icon('logout') %> Sign out</button>

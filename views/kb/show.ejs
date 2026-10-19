@@ -13,7 +13,7 @@
     <p class="crumbs"><a href="/articles">Articles</a> / <a href="/articles?category=<%= encodeURIComponent(article.category) %>" data-kb-crumb><%= article.category %></a></p>
     <div class="kb-title-wrap">
       <h1 class="kb-title" data-kb-title tabindex="0" title="Click to edit the title"><%= article.title %></h1>
-      <input type="text" class="kb-title-input" data-kb-title-input value="<%= article.title %>" maxlength="255" aria-label="Title" autocomplete="off" data-1p-ignore data-lpignore="true" hidden>
+      <input type="text" class="kb-title-input" data-spell data-kb-title-input value="<%= article.title %>" maxlength="255" aria-label="Title" autocomplete="off" data-1p-ignore data-lpignore="true" hidden>
     </div>
     <p class="field-error small" data-kb-title-error role="alert" hidden></p>
     <div class="kb-meta">

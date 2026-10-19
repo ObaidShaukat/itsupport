@@ -2,7 +2,7 @@
 
 Cleartwo IT support portal: clients, service checklists shown as a journey of stages, tutorials, tickets (board and list), Articles (known issues and fixes), an activity log and a Daily Report.
 
-Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads), marked (Markdown), exceljs (stock report Excel export), nodemailer (email) and sharp (profile pictures). It runs under PM2.
+Built with Express, EJS, MySQL (mysql2), express-session (sessions stored in MySQL), bcrypt, helmet, multer (uploads), marked (Markdown), exceljs (stock report Excel export), nodemailer (email), sharp (profile pictures) and nspell with dictionary-en-gb (the UK English spellchecker). It runs under PM2.
 
 ## Server setup
 
@@ -239,6 +239,15 @@ Known examples to check after a refresh: Simple Insurance Solutions = CS1-517164
 - **Send email:** To / CC are remembered. The subject is "CallSwitch One call charges: {Month YYYY}". The body has the editable intro, a Customer name | CS1 ID | Charge ex VAT table (one row per customer, no grand total), then your signature, plus an Excel attachment (Customer name | CS1 ID | Cost | Charge ex VAT, no total row). The review page shows each customer's own charge only; the one total kept is the raw total of every Salesprice, to check against the Cost on the CallSwitch dashboard. From and "Send me a copy" follow the Daily Report rules.
 - **History:** every month with totals, who uploaded it, and when and to whom it was sent; view, download Excel or resend.
 - Everything is logged in `/activity` (entity type `cs1`), never on the Daily Report.
+
+## Spellchecker (UK English)
+
+Free-text boxes (ticket titles, descriptions and comments, reminders, client service notes, Log work, articles, service steps, inventory notes, the Daily Report and Call Switch One email bodies) underline misspelt words with a red wavy line, using nspell and the `dictionary-en-gb` Hunspell files. Both come from npm and are served by the portal itself, so after updating run `npm install` (and `npm run migrate`, which creates the `dictionary_words` table). The checking runs in a background Web Worker; the browser caches the files for a year (the version is in their address).
+
+- Click (or right-click) an underlined word for up to 5 suggestions, **Ignore** (this box only) or **Add to dictionary** (everyone). Arrow keys and Enter work in the popup; Esc closes it.
+- Not checked: passwords, PINs, email addresses, URLs, phone numbers, serial numbers, IDs, search boxes and other one-word fields; words with digits, ALL-CAPS acronyms (RDP, VPN), @mentions, #numbers, file names and anything in `code`.
+- **Team dictionary:** avatar menu → **Dictionary** (`/settings/dictionary`) lists every added word with who added it and when; add, search and delete words there. Names of clients, portal users, services, categories, article categories, stock brands, models and categories and Call Switch One companies are accepted automatically. Browsers pick up changes every few minutes and on every page load. Additions and deletions are in the Activity log (never on the Daily Report).
+- Other text boxes keep the browser's own spellcheck, in UK English.
 
 ## Layout and navigation
 

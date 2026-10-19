@@ -32,7 +32,7 @@ const { pool } = require('../db');
 
 const ENTITY_TYPES = ['ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service', 'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report',
   'inv_person', 'inv_asset', 'inv_stock', 'inv_access', 'inv_shared', 'inv_setting',
-  'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'manual'];
+  'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'manual'];
 const ACTIONS = ['created', 'updated', 'status_changed', 'commented', 'step_done', 'closed', 'reopened', 'deleted', 'uploaded', 'completed', 'sent',
   'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced'];
 

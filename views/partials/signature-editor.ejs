@@ -16,7 +16,7 @@
     <button type="button" class="sig-tool sig-mode" data-sig-mode aria-pressed="false">Paste HTML</button>
   </div>
   <div class="sig-area" contenteditable="true" spellcheck="true" aria-label="Email signature" data-sig-area hidden></div>
-  <textarea name="email_signature" rows="6" maxlength="1000000" class="sig-source" data-sig-source
+  <textarea name="email_signature" data-spell="off" spellcheck="false" rows="6" maxlength="1000000" class="sig-source" data-sig-source
     placeholder="Type your signature, or paste HTML (e.g. copied from Outlook)"><%= locals.value || '' %></textarea>
   <div class="sig-preview-wrap" data-sig-preview-wrap hidden>
     <span class="muted small">Preview</span>

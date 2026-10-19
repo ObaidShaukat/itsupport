@@ -62,7 +62,7 @@
           <% if (shared) { %>
             <label class="field" data-options-field>
               <span class="small">Options <span class="muted">(one per line)</span></span>
-              <textarea name="options" rows="3"><%= field.options || '' %></textarea>
+              <textarea name="options" rows="3" data-spell="off" spellcheck="false"><%= field.options || '' %></textarea>
             </label>
           <% } %>
         </div>

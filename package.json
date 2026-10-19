@@ -23,6 +23,7 @@
   "homepage": "https://github.com/ObaidShaukat/itsupport#readme",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "dictionary-en-gb": "^3.0.0",
     "dotenv": "^18.0.5",
     "ejs": "^6.0.1",
     "exceljs": "^4.4.0",
@@ -35,6 +36,7 @@
     "mysql2": "^3.24.5",
     "node-cron": "^3.0.3",
     "nodemailer": "^10.0.15",
+    "nspell": "^2.1.5",
     "sanitize-html": "^2.18.0",
     "sharp": "^0.35.5",
     "web-push": "^3.6.7"

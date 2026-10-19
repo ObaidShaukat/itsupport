@@ -3390,3 +3390,47 @@ input[type="checkbox"]:not(.visually-hidden, .switch-field input, .user-check in
   a:hover svg.icon:has(> use[href="#i-arrow-right"]), button:hover svg.icon:has(> use[href="#i-arrow-right"]) { transform: none !important; }
   .toast-tick circle, .toast-tick path { animation: none !important; stroke-dashoffset: 0; }
 }
+
+/* ==========================================================================
+   Spellchecker (public/js/spell.js): underlines and the suggestion popup.
+   ========================================================================== */
+/* A layer on top of the field repeating its text (transparent) with the misspelt words
+   underlined; it ignores the mouse, so the field underneath works as normal. */
+.spell-layer {
+  position: absolute; z-index: 3; margin: 0; overflow: hidden; pointer-events: none;
+  color: transparent; background: transparent; border-color: transparent !important;
+  overflow-wrap: break-word; word-break: normal; scrollbar-width: none;
+}
+.spell-layer::-webkit-scrollbar { display: none; }
+/* (Two rules: a browser without ::highlight() would drop a combined selector list.) */
+.spell-bad {
+  color: transparent;
+  text-decoration: underline wavy var(--red);
+  text-decoration-thickness: 1.5px;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+::highlight(spell-error) {
+  text-decoration: underline wavy var(--red);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+}
+.spell-pop {
+  position: fixed; z-index: 3200; min-width: 180px; max-width: 280px; padding: 6px;
+  display: grid; gap: 2px; background: #FFFFFF; color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--radius-item); box-shadow: var(--shadow-lg);
+  animation: pop-in 0.16s ease-out both; transform-origin: top left;
+}
+.spell-pop-list { display: grid; gap: 2px; }
+.spell-pop-list .skeleton { margin: 6px 8px; }
+.spell-opt {
+  display: block; width: 100%; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+}
+.spell-opt:hover, .spell-opt:focus-visible { background: var(--surface-main); outline: none; }
+.spell-suggestion:hover, .spell-suggestion:focus-visible { font-weight: 700; }
+.spell-opt-action { color: var(--ink-2); font-weight: 600; }
+.spell-opt:disabled { opacity: 0.6; cursor: wait; }
+.spell-pop-sep { height: 1px; margin: 4px 2px; background: var(--border); }
+.spell-none { margin: 0; padding: 6px 10px; font-size: 13px; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { .spell-pop { animation: none; } }
