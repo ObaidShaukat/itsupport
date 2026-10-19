@@ -3542,3 +3542,24 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .cf-rdap-bar > span { animation: none; transition: width 0.4s ease-out; }
 .cf-unknown { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
 @media (prefers-reduced-motion: reduce) { .cf-rdap-bar > span { transition: none; } }
+
+/* ---- Microsoft > Email Services ---- */
+.m365-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.m365-table .m365-domain { width: 28%; }
+.m365-table .m365-status { width: 24%; }
+.m365-table .m365-managed { width: 12%; }
+.m365-table .m365-provider { width: 16%; }
+.m365-table .m365-checked { width: 110px; }
+.m365-records td { height: auto; padding-top: 10px; padding-bottom: 10px; white-space: normal; vertical-align: top; }
+.m365-records .m365-found, .m365-records .m365-expected { overflow-wrap: anywhere; font-size: 13px; }
+.m365-records tr.is-bad-row td:first-child { box-shadow: inset 3px 0 0 var(--led-urgent); }
+.m365-mark { font-size: 15px; line-height: 1; }
+.m365-hint { margin-top: 6px; padding: 6px 10px; border-radius: 10px; background: var(--surface-main); color: var(--ink-2); display: flex; gap: 6px; align-items: flex-start; }
+.m365-hint .icon { width: 14px; height: 14px; flex: none; margin-top: 2px; }
+.choice.is-disabled { opacity: 0.65; cursor: not-allowed; }
+.m365-event-issues .cf-event-dot, .m365-event-error .cf-event-dot { background: var(--led-urgent); border-color: var(--led-urgent); }
+.m365-event-healthy .cf-event-dot { background: var(--ink); border-color: var(--ink); }
+@media (max-width: 1023.98px) { .m365-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .m365-table { width: max(760px, 100%); } }
+.m365-records .m365-col-record { width: 150px; }
+.m365-records .m365-col-status { width: 72px; }
+.m365-records .m365-col-found { width: 32%; }

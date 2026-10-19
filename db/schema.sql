@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                    'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'cloudflare', 'manual') NOT NULL,
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'cloudflare', 'm365', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
               'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced') NOT NULL,
@@ -948,6 +948,77 @@ CREATE TABLE IF NOT EXISTS cf_settings (
   PRIMARY KEY (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Microsoft > Email Services (src/lib/m365, /microsoft/email-services): Microsoft 365 email
+-- health of domains, from public DNS. Domains are added by hand for now.
+CREATE TABLE IF NOT EXISTS m365_domains (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  domain VARCHAR(253) NOT NULL,
+  notes TEXT NULL,
+  -- auto = decide from DNS (detected_m365); yes / no = set by hand.
+  uses_m365 ENUM('auto', 'yes', 'no') NOT NULL DEFAULT 'auto',
+  detected_m365 TINYINT(1) NULL,
+  -- healthy, issues, not_m365, error; NULL = not checked yet.
+  status VARCHAR(20) NULL,
+  status_reason VARCHAR(255) NULL,
+  -- The core records that failed (mx,spf,autodiscover), for the list and the alerts.
+  issues VARCHAR(100) NULL,
+  nameservers TEXT NULL,
+  dns_provider VARCHAR(100) NULL,
+  -- "Us" when the domain is one of our Cloudflare domains, else "Customer".
+  managed_by VARCHAR(20) NULL,
+  last_checked DATETIME NULL,
+  last_status_change DATETIME NULL,
+  hidden_at DATETIME NULL,
+  hidden_by INT UNSIGNED NULL,
+  created_by INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_m365_domains_domain (domain),
+  CONSTRAINT fk_m365_domains_hidden_by FOREIGN KEY (hidden_by) REFERENCES users (id) ON DELETE SET NULL,
+  CONSTRAINT fk_m365_domains_created_by FOREIGN KEY (created_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- The latest result per record (mx, spf, autodiscover, dkim1, dkim2, dmarc, ms_verify).
+CREATE TABLE IF NOT EXISTS m365_checks (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  domain_id INT UNSIGNED NOT NULL,
+  record VARCHAR(20) NOT NULL,
+  ok TINYINT(1) NOT NULL DEFAULT 0,
+  found TEXT NULL,
+  expected VARCHAR(500) NULL,
+  checked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_m365_checks_record (domain_id, record),
+  CONSTRAINT fk_m365_checks_domain FOREIGN KEY (domain_id) REFERENCES m365_domains (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Status history (status_changed, added, override, error...). alerted_at: the alert for a
+-- Healthy <-> Issues change went out (or there is none for this event).
+CREATE TABLE IF NOT EXISTS m365_events (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  domain_id INT UNSIGNED NOT NULL,
+  type VARCHAR(30) NOT NULL,
+  old_status VARCHAR(20) NULL,
+  new_status VARCHAR(20) NULL,
+  details TEXT NULL,
+  user_id INT UNSIGNED NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  alerted_at DATETIME NULL,
+  PRIMARY KEY (id),
+  KEY idx_m365_events_domain (domain_id, created_at),
+  KEY idx_m365_events_alert (alerted_at),
+  CONSTRAINT fk_m365_events_domain FOREIGN KEY (domain_id) REFERENCES m365_domains (id) ON DELETE CASCADE,
+  CONSTRAINT fk_m365_events_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Email Services settings: alert_users ("all" or user ids), include_cloudflare ("0"; prepared,
+-- not available yet: would add every Cloudflare domain automatically).
+CREATE TABLE IF NOT EXISTS m365_settings (
+  name VARCHAR(50) NOT NULL,
+  value TEXT NULL,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Team spellchecker dictionary (src/lib/spell.js): words everyone's checker accepts.
 -- Matched case-insensitively; word is stored as typed (unique ignoring case).
 CREATE TABLE IF NOT EXISTS dictionary_words (
@@ -1012,7 +1083,7 @@ ALTER TABLE ticket_history
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                           'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'cloudflare', 'manual') NOT NULL;
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'cloudflare', 'm365', 'manual') NOT NULL;
 
 ALTER TABLE activity_log
   MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',

@@ -1,0 +1,131 @@
+<%- include('../partials/head') %>
+<%#
+  One Email Services domain (GET /microsoft/email-services/:id): status, managed by, DNS
+  provider, one row per record (found now, expected, how to fix), "Copy fix instructions"
+  (plain text for the customer, [data-copy-text] in app.js), the Uses Microsoft 365 override,
+  notes and the status history.
+%>
+<%
+  const page = `/microsoft/email-services/${domain.id}`;
+  const tone = { healthy: 'is-ok', issues: 'is-bad', not_m365: 'is-muted', error: 'is-bad', unchecked: 'is-info' };
+  const EVENT_LABELS = { status_changed: 'Status changed', added: 'Added', override: 'Uses Microsoft 365 changed' };
+  const USES = { auto: 'Auto (from DNS)', yes: 'Yes', no: 'No' };
+%>
+<header class="page-head reveal">
+  <div>
+    <p class="crumbs"><a href="/microsoft/email-services">Microsoft</a> / <a href="/microsoft/email-services">Email Services</a></p>
+    <h1><% if (domain.led) { %><span class="led led-<%= domain.led %>" aria-hidden="true"></span> <% } %><%= domain.domain %></h1>
+    <p class="cf-head-line">
+      <span class="status-pill <%= tone[domain.statusKey] %>"><%= domain.statusLabel %></span>
+      <% if (domain.hidden) { %><span class="status-pill is-muted">Hidden</span><% } %>
+      <span class="muted small">Managed by <strong><%= domain.managed_by || '—' %></strong> · DNS provider <strong title="<%= domain.nameserverList.join(', ') %>"><%= domain.dns_provider || '—' %></strong> · <%= domain.last_checked ? `checked ${fmtAgo(domain.last_checked)}` : 'not checked yet' %></span>
+    </p>
+  </div>
+  <div class="actions">
+    <form method="post" action="<%= page %>/hide" class="inline">
+      <%- csrfField %><input type="hidden" name="back" value="<%= page %>"><input type="hidden" name="hide" value="<%= domain.hidden ? '0' : '1' %>">
+      <button type="submit" class="btn btn-small btn-ghost"><%- icon(domain.hidden ? 'eye' : 'eye-off') %><span><%= domain.hidden ? 'Unhide' : 'Hide' %></span></button>
+    </form>
+    <form method="post" action="<%= page %>/check" class="inline" data-busy-label="Checking…">
+      <%- csrfField %><input type="hidden" name="back" value="<%= page %>">
+      <button type="submit" class="btn btn-small btn-primary"><%- icon('refresh') %><span>Check now</span></button>
+    </form>
+  </div>
+</header>
+<% if (domain.statusKey === 'error') { %><div class="flash flash-error" role="alert"><strong>The last check failed:</strong> <%= domain.status_reason %>. The records below are from the last check that worked.</div><% } %>
+<% if (domain.statusKey === 'not_m365') { %><div class="flash flash-info" role="status"><%= domain.uses_m365 === 'no' ? 'Set to not use Microsoft 365.' : 'Nothing in DNS points to Microsoft 365 (MX, SPF, Autodiscover or the MS=ms verification record).' %> Change "Uses Microsoft 365" below if that is wrong.</div><% } %>
+
+<div class="grid-2 grid-wide-left">
+  <div>
+    <section class="card reveal" aria-labelledby="m365-records">
+      <div class="card-head">
+        <h2 id="m365-records">Records</h2>
+        <% if (fixText) { %>
+          <button type="button" class="btn btn-small" data-copy-text="#m365-fix" data-copied="Copied. Paste it into your email to the customer."><%- icon('copy') %><span>Copy fix instructions</span></button>
+        <% } %>
+      </div>
+      <% if (!records.length) { %>
+        <p class="empty">Not checked yet: click Check now.</p>
+      <% } else { %>
+        <div class="table-wrap">
+          <table class="table m365-records">
+            <thead><tr><th class="m365-col-record">Record</th><th class="m365-col-status">Status</th><th class="m365-col-found">Found now</th><th>Expected and how to fix</th></tr></thead>
+            <tbody>
+              <% for (const r of records) { %>
+                <tr class="<%= r.ok ? '' : 'is-bad-row' %>">
+                  <td><strong><%= r.label %></strong><% if (!r.core) { %><br><span class="muted small">Information</span><% } %></td>
+                  <td><span class="m365-mark <%= r.ok ? 'is-ok' : (r.core ? 'is-bad' : 'is-info') %>" aria-label="<%= r.ok ? 'OK' : 'Not right' %>"><%= r.ok ? '✅' : '❌' %></span></td>
+                  <td class="m365-found" title="<%= r.found || 'Nothing found' %>"><%= r.found || 'Nothing found' %></td>
+                  <td class="m365-expected" title="<%= r.expected %>">
+                    <%= r.expected %>
+                    <% if (r.hint) { %><div class="m365-hint small"><%- icon('tool') %> <%= r.hint %></div><% } %>
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+        <p class="muted small">MX, SPF and Autodiscover decide the status. DKIM, DMARC and the Microsoft verification record are information only for now. Last looked up <%= fmtDate(records[0].checked_at) %> (1.1.1.1 / 8.8.8.8).</p>
+      <% } %>
+      <% if (fixText) { %><textarea id="m365-fix" hidden readonly data-spell="off"><%= fixText %></textarea><% } %>
+    </section>
+
+    <section class="card reveal" aria-labelledby="m365-history">
+      <h2 id="m365-history">History</h2>
+      <% if (!events.length) { %>
+        <p class="empty">Nothing yet.</p>
+      <% } else { %>
+        <ol class="cf-timeline">
+          <% for (const e of events) { let det = {}; try { det = JSON.parse(e.details || '{}') || {}; } catch (err) { det = {}; } %>
+            <li class="cf-event m365-event-<%= e.new_status || e.type %>">
+              <span class="cf-event-dot" aria-hidden="true"></span>
+              <div>
+                <strong><%= e.type === 'status_changed' ? `${e.old_status ? `${STATUS_LABELS[e.old_status] || e.old_status} → ` : ''}${STATUS_LABELS[e.new_status] || e.new_status}` : (EVENT_LABELS[e.type] || e.type) %></strong>
+                <span class="muted small"> · <%= fmtDate(e.created_at) %><%= e.user_name ? ` · ${e.user_name}` : '' %></span>
+                <% if (e.type === 'status_changed' && (det.issues || []).length) { %><div class="small muted">Not right: <%= det.issues.map((k) => LABELS[k] || k).join(', ') %></div><% } %>
+                <% if (det.reason) { %><div class="small muted"><%= det.reason %></div><% } %>
+                <% if (e.type === 'override') { %><div class="small muted"><%= USES[det.from] || det.from %> → <%= USES[det.to] || det.to %></div><% } %>
+              </div>
+            </li>
+          <% } %>
+        </ol>
+      <% } %>
+    </section>
+  </div>
+
+  <div>
+    <section class="card reveal" aria-labelledby="m365-uses">
+      <h2 id="m365-uses">Uses Microsoft 365</h2>
+      <form method="post" action="<%= page %>/uses" class="form" data-autosubmit>
+        <%- csrfField %>
+        <label class="field">
+          <span class="visually-hidden">Uses Microsoft 365</span>
+          <select name="uses_m365">
+            <% for (const [k, label] of Object.entries(USES)) { %><option value="<%= k %>" <%= domain.uses_m365 === k ? 'selected' : '' %>><%= label %></option><% } %>
+          </select>
+        </label>
+        <p class="muted small">Auto: decided from DNS<%= domain.uses_m365 === 'auto' && domain.detected_m365 !== null ? ` (now: ${domain.detected_m365 ? 'Microsoft 365 found' : 'not found'})` : '' %>. Yes or No overrides it.</p>
+        <noscript><button type="submit" class="btn btn-small">Save</button></noscript>
+      </form>
+    </section>
+
+    <section class="card reveal" id="notes" aria-labelledby="m365-notes">
+      <h2 id="m365-notes">Notes</h2>
+      <form method="post" action="<%= page %>/notes" class="form">
+        <%- csrfField %>
+        <label class="field">
+          <span class="visually-hidden">Notes</span>
+          <textarea name="notes" rows="4" maxlength="10000" data-autogrow><%= domain.notes || '' %></textarea>
+        </label>
+        <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save notes</button></div>
+      </form>
+    </section>
+
+    <section class="card reveal">
+      <h2>Remove</h2>
+      <p class="muted small">Stops checking this domain and deletes its records and history.</p>
+      <%- include('../partials/delete', { action: `${page}/delete`, confirm: `Remove ${domain.domain} from Email Services?`, text: 'Remove domain' }) %>
+    </section>
+  </div>
+</div>
+<%- include('../partials/foot') %>

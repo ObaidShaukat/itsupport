@@ -26,6 +26,7 @@ const { gdapConfig } = require('./src/lib/gdap/graph');
 const { cfConfig } = require('./src/lib/cloudflare/api');
 const { runChecks: runCloudflareChecks } = require('./src/lib/cloudflare/check');
 const { runRdapQueue } = require('./src/lib/cloudflare/rdap');
+const { runChecks: runM365Checks } = require('./src/lib/m365/check');
 const { syncCustomers: syncCs1Customers } = require('./src/lib/cs1/sync');
 const { cs1ApiConfig } = require('./src/lib/cs1/api');
 const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
@@ -86,7 +87,13 @@ app.locals.navItems = [
   { key: 'kb', href: '/articles', label: 'Articles', icon: 'book' },
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar', secondary: true },
   { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard', group: true },
-  { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield', secondary: true },
+  {
+    key: 'microsoft', href: '/microsoft/partner', label: 'Microsoft', icon: 'shield', group: true, secondary: true,
+    children: [
+      { href: '/microsoft/partner', label: 'Microsoft Partner', match: '/microsoft/partner' },
+      { href: '/microsoft/email-services', label: 'Email Services', match: '/microsoft/email-services' },
+    ],
+  },
   {
     key: 'cloudflare', href: '/cloudflare/domains', label: 'Cloudflare', icon: 'globe', group: true, secondary: true,
     children: [
@@ -190,6 +197,7 @@ const NAV_PREFIXES = [
   ['/inventory', 'inventory'],
   ['/call-switch-one', 'cs1'],
   ['/cloudflare', 'cloudflare'],
+  ['/microsoft', 'microsoft'],
   ['/settings', 'dictionary'],
 ];
 app.use((req, res, next) => {
@@ -245,7 +253,7 @@ app.use('/tickets', require('./src/routes/tickets'));
 app.use(require('./src/routes/services'));
 app.use(require('./src/routes/clients'));
 app.use('/articles', require('./src/routes/kb'));
-// Old addresses: /kb/... -> /articles/... (and /gdap/... -> /microsoft-partner/...), keeping
+// Old addresses: /kb/... -> /articles/... (and /gdap/..., /microsoft-partner/... -> /microsoft/partner/...), keeping
 // the method for forms posted from a page loaded before the rename.
 const moved = (to) => (req, res) => res.redirect(req.method === 'GET' || req.method === 'HEAD' ? 301 : 308, to + (req.url === '/' ? '' : req.url.startsWith('/?') ? req.url.slice(1) : req.url));
 app.use('/kb', moved('/articles'));
@@ -257,8 +265,10 @@ app.use('/activity', require('./src/routes/activity-log'));
 app.use('/reminders', require('./src/routes/reminders'));
 app.use('/notifications', require('./src/routes/notifications'));
 app.use('/push', require('./src/routes/push'));
-app.use('/microsoft-partner', require('./src/routes/gdap'));
-app.use('/gdap', moved('/microsoft-partner'));
+app.use('/microsoft/partner', require('./src/routes/gdap'));
+app.use('/microsoft/email-services', require('./src/routes/m365'));
+app.use('/microsoft-partner', moved('/microsoft/partner'));
+app.use('/gdap', moved('/microsoft/partner'));
 app.use('/cloudflare', require('./src/routes/cloudflare'));
 app.use('/call-switch-one', require('./src/routes/cs1'));
 app.use('/inventory', require('./src/routes/inventory'));
@@ -361,6 +371,25 @@ async function cloudflareCheck() {
   }
 }
 cron.schedule('15 0,6,12,18 * * *', cloudflareCheck, { timezone: 'Europe/London' });
+// Microsoft Email Services (src/lib/m365, public DNS only, no settings needed): at the same
+// times as the Cloudflare checks, and caught up after a restart when the last run is over 6h old.
+async function m365Check() {
+  try {
+    const result = await runM365Checks(null, { trigger: 'schedule' });
+    if (!result.ok) console.error('Email Services check failed:', result.error);
+  } catch (err) {
+    console.error('Email Services check failed:', err.message);
+  }
+}
+cron.schedule('15 0,6,12,18 * * *', m365Check, { timezone: 'Europe/London' });
+setTimeout(async () => {
+  try {
+    const [[row]] = await pool.query("SELECT value FROM m365_settings WHERE name = 'last_run'");
+    if (!row || !row.value || Date.now() - new Date(row.value).getTime() > 6 * 60 * 60 * 1000) await m365Check();
+  } catch (err) {
+    console.error('Email Services catch-up failed:', err.message);
+  }
+}, 100 * 1000).unref();
 if (!cfConfig().configured) console.warn(cfConfig().message);
 setTimeout(async () => {
   if (!cfConfig().configured) return;

@@ -170,7 +170,7 @@ Articles are edited straight on the article page (the **Edit page** button still
 
 ## Microsoft Partner (GDAP expiry monitoring)
 
-The **Microsoft Partner** page (`/microsoft-partner`; old `/gdap` links redirect) lists Cleartwo's granular delegated admin (GDAP) relationships with customers, read from Microsoft Graph. It is **read only**: the portal only ever reads `tenantRelationships/delegatedAdminRelationships` and never changes anything at Microsoft.
+The **Microsoft Partner** page (`/microsoft/partner`, under the top bar menu **Microsoft**; old `/microsoft/partner` and `/gdap` links redirect) lists Cleartwo's granular delegated admin (GDAP) relationships with customers, read from Microsoft Graph. It is **read only**: the portal only ever reads `tenantRelationships/delegatedAdminRelationships` and never changes anything at Microsoft.
 
 **Setting it up (once):**
 
@@ -189,6 +189,17 @@ The **Microsoft Partner** page (`/microsoft-partner`; old `/gdap` links redirect
 - **Clients:** customers are matched to portal clients by name (ignoring case, punctuation, "Ltd" and "Limited"). Use the link icon on a row to choose another client, no client, or automatic matching again. The client page shows a Microsoft Partner (GDAP) card with roles, end date and days left.
 - **Alerts:** 30, 14, 7 and 1 days before a relationship ends (the days can be changed in Settings) and when it has expired (can be turned off), once each per relationship (a new end date after renewal starts them again). They go to the people chosen in Settings (everyone by default), each by their own choice of popup, email and desktop notification. The email subject is "Microsoft Partner: GDAP expiring in {n} days: {customer}". Settings also has a **daily digest** email listing everything ending in the next 30 days.
 - Syncs, alerts, links and settings changes are in `/activity`, never on the Daily Report.
+
+## Microsoft Email Services (Microsoft 365 domain health)
+
+The top bar menu **Microsoft** has **Microsoft Partner** (`/microsoft/partner`) and **Email Services** (`/microsoft/email-services`). Email Services checks each domain's Microsoft 365 email records in public DNS (asked of 1.1.1.1 and 8.8.8.8; read only, nothing to configure). Run `npm run migrate` after updating: it creates `m365_domains`, `m365_checks`, `m365_events` and `m365_settings`, and adds the test domain foreversundays.com once.
+
+- **Domains** are added by hand for now: **Add domains**, paste one per line (addresses and "www." are tidied, duplicates skipped); new ones are checked straight away. Settings has a prepared (not yet available) "Include Cloudflare domains automatically".
+- **Checks** run every 6 hours with the Cloudflare checks (00:15, 06:15, 12:15, 18:15 UK; caught up after a restart), and **Check now** for all or one domain: MX (`*.mail.protection.outlook.com` or `*.mx.microsoft`), SPF (one `v=spf1` record including `spf.protection.outlook.com`; two or more SPF records are flagged), Autodiscover (CNAME to `autodiscover.outlook.com`), DKIM selector 1 and 2, DMARC (with its policy) and the `MS=ms…` verification record.
+- **Status:** a domain uses Microsoft 365 when MX, SPF, Autodiscover or the verification record points to Microsoft (or **Uses Microsoft 365** is set to Yes / No on its page). **Healthy** when MX, SPF and Autodiscover are all right, **Issues** when any of them is not, **Not Microsoft**, or **Error** with the reason (the domain does not exist, DNS time-out). DKIM and DMARC are information only for now.
+- **Managed by** is "Us" when the domain is in Cloudflare → Domains, otherwise "Customer"; the DNS provider comes from the nameservers.
+- **The domain page** shows every record (found now, expected, how to fix at the DNS provider), **Copy fix instructions** (plain text to send to the customer), the override, notes and the status history.
+- **Alerts** (popup, email, desktop, by each person's choices; once per change; never for hidden domains) when a domain goes from Healthy to Issues or back. Choose who gets them under Email Services → Settings. Checks and changes are in the Activity log, never on the Daily Report.
 
 ## Cloudflare (domain monitoring, read only)
 

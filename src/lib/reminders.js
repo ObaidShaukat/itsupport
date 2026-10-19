@@ -304,7 +304,7 @@ async function bellFor(user, fmtDate) {
   `, [todayStart, userId]);
   const [mentionRows] = await pool.query(`
     SELECT id, type, title, body, created_at, delivered_at FROM notifications
-    WHERE user_id = ? AND type IN ('mention', 'gdap', 'cs1', 'cloudflare') AND read_at IS NULL
+    WHERE user_id = ? AND type IN ('mention', 'gdap', 'cs1', 'cloudflare', 'm365') AND read_at IS NULL
     ORDER BY id DESC LIMIT 20
   `, [userId]);
 
@@ -324,8 +324,9 @@ async function bellFor(user, fmtDate) {
   const note = (m) => ({ id: m.id, title: m.title, body: m.body || '', time: fmtDate(m.created_at), link: `/notifications/${m.id}/open` });
   const mentions = mentionRows.filter((m) => m.type === 'mention').map(note);
   // Alerts: GDAP (expiring relationships, sync failures, client secret), Call Switch One sync
-  // failures and Cloudflare (nameservers changed, removed, expiring, account access lost).
-  const alerts = mentionRows.filter((m) => m.type === 'gdap' || m.type === 'cs1' || m.type === 'cloudflare').map(note);
+  // failures, Cloudflare (nameservers changed, removed, expiring, account access lost) and
+  // Microsoft Email Services (Healthy <-> Issues).
+  const alerts = mentionRows.filter((m) => ['gdap', 'cs1', 'cloudflare', 'm365'].includes(m.type)).map(note);
   return {
     count: due.length + missed.length + mentions.length + alerts.length, due, missed, upcoming, mentions, alerts, popup,
     sound: (popup && fresh.length > 0) || freshMentions.length > 0,

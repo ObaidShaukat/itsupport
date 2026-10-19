@@ -4180,3 +4180,29 @@ document.addEventListener('click', (e) => {
   for (const [k, v] of now) if (!target.searchParams.has(k)) target.searchParams.set(k, v);
   a.href = target.toString();
 });
+
+// Buttons that copy a block of text (e.g. Email Services "Copy fix instructions"):
+// button[data-copy-text="#id"] copies that element's text and says so in a toast.
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest && e.target.closest('button[data-copy-text]');
+  if (!btn) return;
+  const source = document.querySelector(btn.dataset.copyText);
+  if (!source) return;
+  const text = source.value !== undefined ? source.value : source.textContent;
+  const box = document.querySelector('[data-toasts]');
+  const toast = (msg, isError) => {
+    if (!box) return;
+    const t = document.createElement('div');
+    t.className = isError ? 'toast toast-error' : 'toast toast-saved';
+    t.setAttribute('role', isError ? 'alert' : 'status');
+    t.textContent = msg;
+    box.append(t);
+    setTimeout(() => { t.classList.add('is-leaving'); setTimeout(() => t.remove(), 300); }, 3500);
+  };
+  try {
+    await copyPlain(text);
+    toast(btn.dataset.copied || 'Copied.');
+  } catch (err) {
+    toast('Could not copy automatically. Select the text and copy it by hand.', true);
+  }
+});

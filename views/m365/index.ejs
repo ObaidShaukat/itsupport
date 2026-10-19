@@ -1,0 +1,136 @@
+<%- include('../partials/head') %>
+<%#
+  Microsoft > Email Services (src/routes/m365.js): Microsoft 365 email health of domains from
+  public DNS. Tiles, status / managed-by filters, search and sortable columns, all instant
+  ([data-list] in app.js); default order: issues first. Add domains (paste a list), Check now
+  for all and per row, Hide. Red LED = issues or a failed check.
+%>
+<%
+  const here = href({});
+  const tone = { healthy: 'is-ok', issues: 'is-bad', not_m365: 'is-muted', error: 'is-bad', unchecked: 'is-info' };
+  const sortHead = (key, label, cls = '') => {
+    const active = state.sort === key;
+    const dir = active && state.dir === 'asc' ? 'desc' : 'asc';
+    return `<th class="${cls}" aria-sort="${active ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><a href="${escapeFn(href({ sort: key, dir }))}" class="sort-link ${active ? 'is-sorted' : ''}" data-list-sort="${key}" data-list-dir="asc" ${active ? `data-list-current="${state.dir}"` : ''}>${escapeFn(label)}<span class="sort-arrow" aria-hidden="true">${active ? (state.dir === 'asc' ? '▲' : '▼') : '↕'}</span></a></th>`;
+  };
+  const anyFilter = state.managed || state.q || state.status !== 'all' || state.sort;
+%>
+<header class="page-head reveal">
+  <div>
+    <p class="crumbs">Microsoft</p>
+    <h1>Email Services</h1>
+    <p class="muted">Microsoft 365 email records of each domain, from public DNS (read only): MX, SPF and Autodiscover decide the status; DKIM, DMARC and the Microsoft verification record are shown too. Checked every 6 hours.</p>
+  </div>
+  <div class="actions">
+    <a href="/microsoft/email-services/settings" class="btn btn-small btn-ghost"><%- icon('sliders') %><span>Settings</span></a>
+    <details class="edit edit-right" id="add">
+      <summary class="btn btn-small"><%- icon('plus') %><span>Add domains</span></summary>
+      <div class="edit-panel">
+        <form method="post" action="/microsoft/email-services/add" class="form">
+          <%- csrfField %>
+          <label class="field">
+            <span>Domains (one per line)</span>
+            <textarea name="domains" rows="6" required maxlength="20000" placeholder="example.co.uk&#10;customer.com" data-spell="off" spellcheck="false" autocomplete="off" data-1p-ignore data-lpignore="true"></textarea>
+          </label>
+          <label class="field">
+            <span>Notes <span class="muted">(optional, for every domain added)</span></span>
+            <input type="text" name="notes" maxlength="2000" autocomplete="off" data-1p-ignore data-lpignore="true">
+          </label>
+          <p class="muted small">Addresses and "www." are tidied up; domains already in the list are skipped. New domains are checked straight away.</p>
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Add and check</span></button>
+            <button type="button" class="btn btn-ghost" data-cancel>Cancel</button>
+          </div>
+        </form>
+      </div>
+    </details>
+    <form method="post" action="/microsoft/email-services/check" class="inline" data-busy-label="Checking…">
+      <%- csrfField %><input type="hidden" name="back" value="<%= here %>" data-list-back>
+      <button type="submit" class="btn btn-small btn-primary" <%= total ? '' : 'disabled' %>><%- icon('refresh') %><span>Check now</span></button>
+    </form>
+  </div>
+</header>
+
+<p class="muted small cf-check-line"><% if (lastRun) { %><%- icon('check-circle') %> Last checked <strong title="<%= fmtDate(lastRun) %>"><%= fmtAgo(lastRun) %></strong> · checks run at 00:15, 06:15, 12:15 and 18:15 (UK)<% } else { %>Not checked yet<%= total ? ': click Check now.' : ': add a domain.' %><% } %></p>
+
+<div data-list>
+<div class="cf-tiles m365-tiles reveal">
+  <a href="/microsoft/email-services" class="tile cf-tile" data-list-set="status:all"><span class="tile-label">Microsoft 365 domains</span><span class="big-num" data-count="<%= summary.m365 %>"><%= summary.m365 %></span></a>
+  <a href="/microsoft/email-services?status=healthy" class="tile cf-tile" data-list-set="status:healthy"><span class="tile-label">Healthy</span><span class="big-num" data-count="<%= summary.healthy %>"><%= summary.healthy %></span></a>
+  <a href="/microsoft/email-services?status=issues" class="tile cf-tile <%= summary.issues ? 'has-problem' : '' %>" data-list-set="status:issues"><span class="tile-label"><% if (summary.issues) { %><span class="led led-urgent" aria-hidden="true"></span><% } %>Issues</span><span class="big-num" data-count="<%= summary.issues %>"><%= summary.issues %></span></a>
+  <a href="/microsoft/email-services?status=not_m365" class="tile cf-tile" data-list-set="status:not_m365"><span class="tile-label">Not Microsoft</span><span class="big-num" data-count="<%= summary.notM365 %>"><%= summary.notM365 %></span></a>
+</div>
+
+<section class="panel reveal" id="domains">
+  <form method="get" action="/microsoft/email-services" class="filter-row">
+    <% if (state.status !== 'all') { %><input type="hidden" name="status" value="<%= state.status %>"><% } %>
+    <nav class="filters" aria-label="Filter by status" data-list-group="status">
+      <% for (const [key, f] of Object.entries(filters)) { %>
+        <a href="<%= href({ status: key }) %>" class="<%= state.status === key ? 'active' : '' %>" data-list-value="<%= key %>" <%= key === 'all' ? 'data-list-default' : '' %>><%= f.label %> <span class="count"><%= counts[key] %></span></a>
+      <% } %>
+    </nav>
+    <label class="filter-field">
+      <span class="visually-hidden">Managed by</span>
+      <select name="managed" data-list-select="managed">
+        <option value="">Managed by anyone</option>
+        <option value="Us" <%= state.managed === 'Us' ? 'selected' : '' %>>Managed by us (in Cloudflare)</option>
+        <option value="Customer" <%= state.managed === 'Customer' ? 'selected' : '' %>>Managed by the customer</option>
+      </select>
+    </label>
+    <label class="search-field filter-search">
+      <%- icon('search') %>
+      <span class="visually-hidden">Search domains, statuses, DNS providers and notes</span>
+      <input type="search" name="q" value="<%= state.q %>" placeholder="Search" autocomplete="off" data-1p-ignore data-lpignore="true" data-list-search>
+    </label>
+    <a href="/microsoft/email-services" class="btn btn-ghost btn-small" data-list-clear <%= anyFilter ? '' : 'hidden' %>>Clear filters</a>
+    <span class="muted small"><span data-list-shown><%= rows.filter((d) => d.visible).length %></span> shown</span>
+  </form>
+
+  <% if (!total) { %>
+    <p class="empty">No domains yet: use Add domains to paste a list.</p>
+  <% } else { %>
+    <p class="empty" data-list-empty <%= rows.some((d) => d.visible) ? 'hidden' : '' %>>No domains match these filters.</p>
+    <div class="table-wrap">
+      <table class="table m365-table">
+        <thead>
+          <tr>
+            <th class="cf-led"><span class="visually-hidden">Problem</span></th>
+            <%- sortHead('domain', 'Domain', 'm365-domain') %>
+            <%- sortHead('status', 'Status', 'm365-status') %>
+            <%- sortHead('managed', 'Managed by', 'm365-managed') %>
+            <%- sortHead('provider', 'DNS provider', 'm365-provider') %>
+            <%- sortHead('checked', 'Last checked', 'm365-checked right') %>
+            <th class="cf-actions"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const d of rows) { %>
+            <tr class="<%= d.hidden ? 'is-hidden-row' : '' %>" data-list-item data-search="<%= d.search %>" data-tags="<%= d.tags %>" data-rank="<%= d.rank %>"
+                <% for (const [k, v] of Object.entries(d.sortValues)) { %>data-sort-<%= k %>="<%= v %>" <% } %><%= d.visible ? '' : 'hidden' %>>
+              <td class="cf-led"><% if (d.led) { %><span class="led led-<%= d.led %>" title="<%= d.statusKey === 'error' ? 'The check failed' : 'Email issues' %>"></span><% } %></td>
+              <td title="<%= d.domain %>"><a href="/microsoft/email-services/<%= d.id %>"><strong><%= d.domain %></strong></a><% if (d.notes) { %> <span class="muted" title="<%= d.notes %>"><%- icon('file') %></span><% } %></td>
+              <td title="<%= d.statusKey === 'issues' ? `Not right: ${d.issueLabels.join(', ')}` : (d.status_reason || '') %>">
+                <span class="status-pill <%= tone[d.statusKey] %>"><%= d.statusLabel %></span><% if (d.statusKey === 'issues') { %> <span class="muted small"><%= d.issueLabels.join(', ') %></span><% } %><% if (d.hidden) { %> <span class="status-pill is-muted">Hidden</span><% } %>
+              </td>
+              <td><%= d.managed_by || '—' %></td>
+              <td title="<%= d.nameserverList.join(', ') %>"><%= d.dns_provider || '—' %></td>
+              <td class="right muted" title="<%= d.last_checked ? fmtDate(d.last_checked) : '' %>"><%= d.last_checked ? fmtAgo(d.last_checked) : '—' %></td>
+              <td class="row-actions cf-actions">
+                <form method="post" action="/microsoft/email-services/<%= d.id %>/check" class="inline" data-busy-label="…">
+                  <%- csrfField %><input type="hidden" name="back" value="<%= here %>" data-list-back>
+                  <button type="submit" class="icon-btn" title="Check now" aria-label="Check <%= d.domain %> now"><%- icon('refresh') %></button>
+                </form>
+                <form method="post" action="/microsoft/email-services/<%= d.id %>/hide" class="inline">
+                  <%- csrfField %><input type="hidden" name="back" value="<%= here %>" data-list-back><input type="hidden" name="hide" value="<%= d.hidden ? '0' : '1' %>">
+                  <button type="submit" class="icon-btn" title="<%= d.hidden ? 'Unhide' : 'Hide (no counts, no alerts)' %>" aria-label="<%= d.hidden ? 'Unhide' : 'Hide' %> <%= d.domain %>"><%- icon(d.hidden ? 'eye' : 'eye-off') %></button>
+                </form>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+</div>
+<%- include('../partials/foot') %>

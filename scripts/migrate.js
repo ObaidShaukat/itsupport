@@ -178,6 +178,10 @@ const ONE_TIME_STEPS = [
     const [[idx]] = await conn.query("SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tickets' AND INDEX_NAME = 'idx_tickets_assigned'");
     if (!Number(idx.n)) await conn.query('ALTER TABLE tickets ADD KEY idx_tickets_assigned (assigned_to, status)');
   }],
+  // Email Services: one test domain to start with (checked at the next run or Check now).
+  ['m365_test_domain_v1', async (conn) => {
+    await conn.query("INSERT IGNORE INTO m365_domains (domain, notes) VALUES ('foreversundays.com', 'Test domain')");
+  }],
 ];
 
 async function main() {

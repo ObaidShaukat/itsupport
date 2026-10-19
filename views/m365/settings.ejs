@@ -1,0 +1,33 @@
+<%- include('../partials/head') %>
+<% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users || '').split(',').map(Number); %>
+<header class="page-head reveal">
+  <div>
+    <p class="crumbs"><a href="/microsoft/email-services">Microsoft</a> / <a href="/microsoft/email-services">Email Services</a></p>
+    <h1>Email Services settings</h1>
+    <p class="muted">Who is alerted when a domain's Microsoft 365 email goes from Healthy to Issues (or back).</p>
+  </div>
+</header>
+<% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+
+<form method="post" action="/microsoft/email-services/settings" class="card reveal form">
+  <%- csrfField %>
+  <fieldset class="field choice-group" data-alert-users>
+    <legend>Who gets Email Services alerts</legend>
+    <label class="choice"><input type="checkbox" name="alert_all" value="1" <%= everyone ? 'checked' : '' %> data-alert-all><span><strong>Everyone</strong> (all portal users, including people added later)</span></label>
+    <div class="gdap-user-list" data-alert-list>
+      <% for (const u of users) { %>
+        <label class="choice"><input type="checkbox" name="alert_user_ids" value="<%= u.id %>" <%= everyone || chosen.includes(u.id) ? 'checked' : '' %>><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %> <span class="muted small">(<%= String(u.notify_channels || '').split(',').filter(Boolean).join(', ') || 'no channels' %>)</span></span></label>
+      <% } %>
+    </div>
+    <small class="muted">Each person gets alerts the way they chose under My profile → Notifications (popup, email, desktop), once per change. Hidden domains never alert.</small>
+  </fieldset>
+  <label class="choice is-disabled" title="Not available yet">
+    <input type="checkbox" disabled <%= settings.include_cloudflare === '1' ? 'checked' : '' %>>
+    <span><strong>Include Cloudflare domains automatically</strong> <span class="badge badge-closed">Coming later</span><br><span class="muted small">Every domain in Cloudflare → Domains would be checked here too. Not available yet: add domains by hand for now.</span></span>
+  </label>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+    <a href="/microsoft/email-services" class="btn btn-ghost">Cancel</a>
+  </div>
+</form>
+<%- include('../partials/foot') %>

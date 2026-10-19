@@ -2,7 +2,7 @@
 <% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users).split(',').map(Number); %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/microsoft-partner">Microsoft Partner</a></p>
+    <p class="crumbs"><a href="/microsoft/partner">Microsoft Partner</a></p>
     <h1>Microsoft Partner settings</h1>
     <p class="muted">Who is alerted about expiring relationships, the Partner Center link and the client secret reminder.</p>
   </div>
@@ -10,7 +10,7 @@
 <% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
 <% if (!config.configured) { %><div class="flash flash-info" role="status"><%= config.message %></div><% } %>
 
-<form method="post" action="/microsoft-partner/settings" class="grid-2">
+<form method="post" action="/microsoft/partner/settings" class="grid-2">
   <%- csrfField %>
   <section class="card">
     <h2>Alerts</h2>
@@ -59,7 +59,7 @@
 
   <div class="form-actions grid-span">
     <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
-    <a href="/microsoft-partner" class="btn btn-ghost">Cancel</a>
+    <a href="/microsoft/partner" class="btn btn-ghost">Cancel</a>
   </div>
 </form>
 <%- include('../partials/foot') %>

@@ -9,70 +9,14 @@
 // Every alert sent is logged (entity_type 'cloudflare', action 'sent'), never on the Daily Report.
 const { pool } = require('../../db');
 const { logActivity } = require('../activity');
-const { channelsOf } = require('../notify');
-const { pushToUser } = require('../push');
 const { getSettings } = require('./data');
+const { chosenUsers, brandedEmail, deliver } = require('../alert-deliver');
 const { providersLabel } = require('./lookups');
 
-const mailer = () => require('../mailer'); // eslint-disable-line global-require
 const ukDay = (d) => require('../dates').formattersFor('d_mon_yyyy').fmtDay(d); // eslint-disable-line global-require
-const USER_SQL = "SELECT u.id, COALESCE(NULLIF(u.display_name, ''), u.username) AS name, u.username, u.notify_channels FROM users u";
 const ALERT_TYPES = new Set(['ns_changed', 'deleted', 'expiring', 'expired', 'access_lost']);
-
-async function alertUsers(db = pool) {
-  const s = await getSettings(db);
-  const [users] = await db.query(`${USER_SQL} ORDER BY name`);
-  if (String(s.alert_users || 'all') === 'all') return users;
-  const ids = new Set(String(s.alert_users).split(',').map(Number).filter(Boolean));
-  return users.filter((u) => ids.has(u.id));
-}
-
-// Black-and-white branded email.
-function alertEmail({ subject, heading, rows = [], link, buttonText = 'Open in the portal' }) {
-  const { escapeHtml: e, appUrl } = mailer();
-  const base = appUrl();
-  const url = base && link ? `${base}${link}` : '';
-  const font = 'font-family: Arial, Helvetica, sans-serif;';
-  const rowHtml = rows.map(([label, value]) => `<tr><td style="${font} padding: 5px 12px 5px 0; color: #5C5C66; font-size: 13px; vertical-align: top; white-space: nowrap;">${e(label)}</td>`
-    + `<td style="${font} padding: 5px 0; color: #0B0B0F; font-size: 14px;">${e(value)}</td></tr>`).join('');
-  const html = `<!doctype html><html><body style="margin: 0; padding: 0; background: #E7E8EC;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #E7E8EC; padding: 24px 12px;"><tr><td align="center">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background: #FFFFFF; border: 1px solid #E4E5EA; border-radius: 18px; overflow: hidden;">
-<tr><td style="${font} background: #0B0B0F; color: #FFFFFF; padding: 18px 24px; font-size: 16px; font-weight: bold;">Cleartwo <span style="color: #D5D6DC; font-weight: normal;">IT Support</span></td></tr>
-<tr><td style="padding: 24px;">
-<p style="${font} margin: 0 0 6px; color: #5C5C66; font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;">Cloudflare</p>
-<p style="${font} margin: 0 0 16px; color: #0B0B0F; font-size: 19px; font-weight: bold; line-height: 1.35;">${e(heading)}</p>
-${rowHtml ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin: 0 0 20px;">${rowHtml}</table>` : ''}
-${url ? `<a href="${e(url)}" style="${font} display: inline-block; background: #0B0B0F; color: #FFFFFF; text-decoration: none; font-weight: bold; font-size: 14px; padding: 12px 22px; border-radius: 999px;">${e(buttonText)}</a>` : ''}
-</td></tr></table>
-<p style="${font} color: #5C5C66; font-size: 12px; margin: 14px 0 0;">You get this because you receive Cloudflare alerts in the IT Support portal.</p>
-</td></tr></table></body></html>`;
-  const text = [heading, '', ...rows.map(([l, v]) => `${l}: ${v}`), url ? `\n${buttonText}: ${url}` : ''].join('\n');
-  return { subject: subject.replace(/\s+/g, ' ').slice(0, 200), html, text };
-}
-
-async function deliver(users, { title, body, link, email, tag }) {
-  const { mailStatus, sendMail, logSkipped, userEmail } = mailer();
-  const mailOn = mailStatus().enabled;
-  const reached = [];
-  for (const u of users) {
-    const ch = channelsOf(u);
-    let any = false;
-    if (ch.has('popup')) {
-      await pool.query("INSERT INTO notifications (user_id, channel, type, title, body, link) VALUES (?, 'portal', 'cloudflare', ?, ?, ?)",
-        [u.id, title.slice(0, 255), String(body || '').slice(0, 500), link]);
-      any = true;
-    }
-    if (ch.has('email') && email && mailOn) {
-      const to = userEmail(u);
-      const meta = { kind: 'cloudflare', userId: u.id };
-      if (to) { await sendMail({ to, ...email }, meta); any = true; } else await logSkipped({ to: u.username, ...email }, meta, 'This user has no email address (their username is not an email address).');
-    }
-    if (ch.has('desktop') && await pushToUser(u.id, { title, body, url: link, tag }).catch(() => 0)) any = true;
-    if (any) reached.push(u.name);
-  }
-  return reached;
-}
+// The users chosen in Cloudflare settings (default everyone).
+const alertUsers = async (db = pool) => chosenUsers((await getSettings(db)).alert_users, db);
 
 const parse = (t) => { try { return JSON.parse(t || '{}') || {}; } catch (err) { return {}; } };
 
@@ -126,8 +70,8 @@ async function sendEventAlerts() {
     if (claim.affectedRows !== 1) continue;
     if (!ALERT_TYPES.has(ev.type) || ev.hidden_at || !users.length) continue;
     const m = message(ev);
-    const email = alertEmail({ subject: `Cloudflare: ${m.title}`, heading: m.title, rows: m.rows, link: m.link, buttonText: ev.domain_id ? 'Open the domain' : 'Open Cloudflare accounts' });
-    const reached = await deliver(users, { title: `Cloudflare: ${m.title}`, body: m.rows.map(([l, v]) => `${l}: ${v}`).join(' · '), link: m.link, email, tag: `cf-${ev.id}` });
+    const email = brandedEmail({ section: 'Cloudflare', subject: `Cloudflare: ${m.title}`, heading: m.title, rows: m.rows, link: m.link, buttonText: ev.domain_id ? 'Open the domain' : 'Open Cloudflare accounts' });
+    const reached = await deliver(users, { type: 'cloudflare', title: `Cloudflare: ${m.title}`, body: m.rows.map(([l, v]) => `${l}: ${v}`).join(' · '), link: m.link, email, tag: `cf-${ev.id}` });
     sent += 1;
     await logActivity(null, null, {
       type: 'cloudflare', id: ev.domain_id, action: 'sent', subject: 'Cloudflare', clientId: ev.client_id, clientName: ev.client_name,

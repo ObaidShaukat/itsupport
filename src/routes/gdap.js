@@ -1,4 +1,4 @@
-// Microsoft Partner (formerly "GDAP", at /microsoft-partner; /gdap redirects): GDAP expiry monitoring (read only from Microsoft Graph): the list with summary cards,
+// Microsoft Partner (formerly "GDAP", at /microsoft/partner; /gdap redirects): GDAP expiry monitoring (read only from Microsoft Graph): the list with summary cards,
 // filters and search, Sync now, linking customers to clients, and settings (Partner
 // Center link, who gets alerts, daily digest, client secret expiry date).
 const express = require('express');
@@ -68,7 +68,7 @@ router.get('/', async (req, res) => {
   }
   const [clients] = await pool.query('SELECT id, name FROM clients ORDER BY name');
   res.render('gdap/index', {
-    title: 'Microsoft Partner', nav: 'gdap', config: gdapConfig(), sync: await lastSync(pool), settings, filter, filters: FILTERS, counts,
+    title: 'Microsoft Partner', nav: 'microsoft', config: gdapConfig(), sync: await lastSync(pool), settings, filter, filters: FILTERS, counts,
     summary, rows: list, clients, supersededCount, grouped,
   });
 });
@@ -80,7 +80,7 @@ router.post('/sync', async (req, res) => {
   } else {
     flash(req, 'error', result.error);
   }
-  res.redirect('/microsoft-partner');
+  res.redirect('/microsoft/partner');
 });
 
 // Link to client: a client id, "" for not linked, or "auto" for automatic matching.
@@ -90,7 +90,7 @@ router.post('/:id/link', async (req, res) => {
   const result = await setLink(req.user, id, choice === 'auto' ? { auto: true } : { clientId: toId(choice) });
   if (result.error) flash(req, 'error', result.error);
   else flash(req, 'saved', result.client ? `Saved. Linked to ${result.client.name}.` : 'Saved. Not linked to a client.');
-  res.redirect(backPath(req, `/microsoft-partner#gdap-${id}`));
+  res.redirect(backPath(req, `/microsoft/partner#gdap-${id}`));
 });
 
 const relLabel = (r) => `${r.customer_name || 'Unknown customer'} – ${r.display_name || r.relationship_id}`;
@@ -106,7 +106,7 @@ router.post('/:id/hide', async (req, res) => {
   `, [id]);
   if (!rel) {
     flash(req, 'error', 'That GDAP relationship no longer exists.');
-    return res.redirect('/microsoft-partner');
+    return res.redirect('/microsoft/partner');
   }
   if (Boolean(rel.hidden_at) !== hide) {
     if (hide) await pool.query('UPDATE gdap_relationships SET hidden_at = NOW(), hidden_by = ? WHERE id = ?', [req.user.id, id]);
@@ -117,7 +117,7 @@ router.post('/:id/hide', async (req, res) => {
     });
   }
   flash(req, 'saved', hide ? `Hidden: ${relLabel(rel)}. Find it under Hidden.` : `Unhidden: ${relLabel(rel)}.`);
-  res.redirect(backPath(req, '/microsoft-partner'));
+  res.redirect(backPath(req, '/microsoft/partner'));
 });
 
 // Hides every expired relationship whose customer has an active one.
@@ -134,13 +134,13 @@ router.post('/hide-superseded', async (req, res) => {
     }
   }
   flash(req, 'saved', targets.length ? `Hidden ${targets.length} superseded relationship${targets.length === 1 ? '' : 's'}. Find them under Hidden.` : 'No superseded relationships to hide.');
-  res.redirect(backPath(req, '/microsoft-partner'));
+  res.redirect(backPath(req, '/microsoft/partner'));
 });
 
 router.get('/settings', async (req, res) => {
   const settings = await getSettings(pool);
   const [users] = await pool.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name, notify_channels FROM users ORDER BY name");
-  res.render('gdap/settings', { title: 'Microsoft Partner settings', nav: 'gdap', settings, users, config: gdapConfig(), defaultUrl: DEFAULT_PARTNER_URL, error: null });
+  res.render('gdap/settings', { title: 'Microsoft Partner settings', nav: 'microsoft', settings, users, config: gdapConfig(), defaultUrl: DEFAULT_PARTNER_URL, error: null });
 });
 
 router.post('/settings', async (req, res) => {
@@ -163,7 +163,7 @@ router.post('/settings', async (req, res) => {
   if (error) {
     const [users] = await pool.query("SELECT id, COALESCE(NULLIF(display_name, ''), username) AS name, notify_channels FROM users ORDER BY name");
     const settings = { ...before, partner_center_url: url, alert_users: everyone ? 'all' : ids.join(','), digest, secret_expires_on: secret, alert_days: daysText, alert_expired: expiredAlert };
-    return res.status(400).render('gdap/settings', { title: 'Microsoft Partner settings', nav: 'gdap', settings, users, config: gdapConfig(), defaultUrl: DEFAULT_PARTNER_URL, error });
+    return res.status(400).render('gdap/settings', { title: 'Microsoft Partner settings', nav: 'microsoft', settings, users, config: gdapConfig(), defaultUrl: DEFAULT_PARTNER_URL, error });
   }
   const next = {
     partner_center_url: url, alert_users: everyone ? 'all' : ids.join(','), digest, secret_expires_on: secret, alert_days: days.join(','), alert_expired: expiredAlert,
@@ -175,7 +175,7 @@ router.post('/settings', async (req, res) => {
     await logActivity(null, req.user, { type: 'gdap', action: 'updated', subject: 'Microsoft Partner', summary: `Changed Microsoft Partner settings: ${changes.map((k) => labels[k]).join(', ')}`, changes });
   }
   flash(req, 'saved', changes.length ? 'Saved. Microsoft Partner settings updated.' : 'Saved. Nothing changed.');
-  res.redirect('/microsoft-partner/settings');
+  res.redirect('/microsoft/partner/settings');
 });
 
 module.exports = router;
