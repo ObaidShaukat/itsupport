@@ -5,17 +5,23 @@
 //   { type: 'add', word }            one word added to the team dictionary
 //   { type: 'check', id, words }     -> { type: 'checked', id, bad: [words not accepted] }
 //   { type: 'suggest', id, word }    -> { type: 'suggested', id, suggestions: [up to 5] }
-/* global nspell */
+// Suggestions: spell-suggest.js (nspell first, then an edit-distance fallback).
+/* global nspell, spellSuggester */
 const version = new URLSearchParams(self.location.search).get('v') || '0';
 let spell = null;
+let suggestFor = null;
+// Suggestion counts go to the console on a local development host only.
+const DEV = /^(localhost|127\.0\.0\.1|\[::1\])$|\.(localhost|test)$/.test(self.location.hostname);
 let team = new Set(); // lower case
 
 const ready = (async () => {
-  self.importScripts(`/spell/nspell.js?v=${encodeURIComponent(version)}`);
+  self.importScripts(`/spell/nspell.js?v=${encodeURIComponent(version)}`, `/js/spell-suggest.js?v=${encodeURIComponent(version)}`);
   const get = (name) => fetch(`/spell/${name}?v=${encodeURIComponent(version)}`, { credentials: 'same-origin' })
     .then((r) => { if (!r.ok) throw new Error(`${name}: HTTP ${r.status}`); return r.text(); });
   const [aff, dic] = await Promise.all([get('en-GB.aff'), get('en-GB.dic')]);
   spell = nspell(aff, dic);
+  suggestFor = spellSuggester(spell);
+  if (DEV) console.debug(`[spell] dictionary loaded: ${Object.keys(spell.data).length} word forms`);
 })();
 
 const norm = (w) => w.replace(/’/g, "'");
@@ -52,8 +58,10 @@ self.onmessage = async (event) => {
   } else if (msg.type === 'suggest') {
     const word = norm(String(msg.word || ''));
     let suggestions = [];
-    // Very long words make suggest() slow; nothing useful comes back for them anyway.
-    if (word.length <= 30) suggestions = spell.suggest(word).slice(0, 5);
+    // nspell's suggestions, topped up from the edit-distance search (spell-suggest.js). Very
+    // long words are skipped: slow, and nothing useful comes back for them.
+    if (word.length <= 30) suggestions = suggestFor(word);
+    if (DEV) console.debug(`[spell] ${suggestions.length} suggestion(s) for "${word}": ${suggestions.join(', ')}`);
     self.postMessage({ type: 'suggested', id: msg.id, suggestions });
   }
 };
