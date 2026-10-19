@@ -40,7 +40,7 @@
   <% } %>
 </div>
 
-<div class="gdap-cards">
+<div class="gdap-cards" data-live-part="gdap-cards">
   <a href="/microsoft-partner?f=active" class="gdap-card gdap-card-ok <%= filter === 'active' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.active %></span><span class="gdap-card-label">Active</span></a>
   <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-warn <%= filter === 'expiring30' ? 'is-active' : '' %>"><span class="gdap-card-value"><%= summary.soon30 %></span><span class="gdap-card-label">Expiring ≤ 30 days</span></a>
   <a href="/microsoft-partner?f=expiring30" class="gdap-card gdap-card-bad"><span class="gdap-card-value"><%= summary.soon7 %></span><span class="gdap-card-label">Expiring ≤ 7 days</span></a>
@@ -49,13 +49,14 @@
 
 <section class="card">
   <div class="ticket-filters">
-    <nav class="filters" aria-label="Filter GDAP relationships">
+    <nav class="filters" aria-label="Filter GDAP relationships" data-live-part="gdap-pills">
       <% for (const [key, f] of Object.entries(filters)) { %>
         <a href="/microsoft-partner<%= key === 'all' ? '' : `?f=${key}` %>" class="<%= filter === key ? 'active' : '' %>"><%= f.label %> <span class="count"><%= counts[key] %></span></a>
       <% } %>
     </nav>
     <%- include('../partials/search', { target: '#gdap-rows', placeholder: 'Search customer, client, relationship or role' }) %>
   </div>
+  <div data-live-part="gdap-results">
   <% if (supersededCount) { %>
     <div class="gdap-bulk">
       <span class="muted small"><%= supersededCount %> expired relationship<%= supersededCount === 1 ? '' : 's' %> where the customer already has an active one.</span>
@@ -140,6 +141,7 @@
         <% } %>
       </tbody>
     </table>
+  </div>
   </div>
 </section>
 <%- include('../partials/foot') %>

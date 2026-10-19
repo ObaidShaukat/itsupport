@@ -86,22 +86,73 @@ function providersLabel(list) {
   return names.length ? names.join(' + ') : 'None';
 }
 
-// RDAP (https://rdap.org redirects to the registry): { ok, expiresOn: 'YYYY-MM-DD' | null,
-// registrar } or { ok: false, note } (no RDAP for this TLD, not found, time-out).
+// ---- RDAP (expiry date and registrar) ----
+// The registry's own RDAP server comes from the IANA bootstrap file (data.iana.org/rdap/dns.json,
+// cached for a day): .com / .net -> Verisign, .uk / .co.uk -> Nominet, .org -> PIR, and so on.
+// Redirects are followed. Only when the bootstrap file cannot be read is rdap.org used (it
+// redirects to the same servers). Registries refuse requests without a User-Agent.
+const BOOTSTRAP_URL = 'https://data.iana.org/rdap/dns.json';
+const RDAP_HEADERS = { Accept: 'application/rdap+json, application/json', 'User-Agent': 'Cleartwo-IT-Support/1.0 (domain expiry check)' };
+let bootstrap = null; // { at, servers: Map(tld -> base URL ending in "/") }
+
+async function rdapServers() {
+  if (bootstrap && Date.now() - bootstrap.at < 24 * 60 * 60 * 1000) return bootstrap.servers;
+  try {
+    const res = await fetch(BOOTSTRAP_URL, { headers: RDAP_HEADERS, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    const servers = new Map();
+    for (const [tlds, urls] of body.services || []) {
+      const base = (urls || []).find((u) => /^https:\/\//i.test(u)) || (urls || [])[0];
+      if (!base) continue;
+      for (const tld of tlds || []) servers.set(String(tld).toLowerCase(), base.endsWith('/') ? base : `${base}/`);
+    }
+    if (!servers.size) throw new Error('empty bootstrap file');
+    bootstrap = { at: Date.now(), servers };
+  } catch (err) {
+    console.error('RDAP bootstrap file could not be read:', err.message);
+    if (!bootstrap) return null; // rdap.org is used instead
+    bootstrap.at = Date.now() - 23 * 60 * 60 * 1000; // try again within the hour
+  }
+  return bootstrap.servers;
+}
+
+// The registry server for a name: the longest matching suffix ("co.uk" before "uk").
+function serverFor(servers, name) {
+  const labels = String(name).toLowerCase().split('.');
+  for (let i = 1; i < labels.length; i += 1) {
+    const suffix = labels.slice(i).join('.');
+    if (servers.has(suffix)) return servers.get(suffix);
+  }
+  return null;
+}
+
+// { ok: true, expiresOn: 'YYYY-MM-DD' | null, registrar } or { ok: false, note, noRdap
+// (no RDAP for the TLD / domain unknown to the registry: skip for a day), rateLimited, retryAfter }.
 async function rdapLookup(name) {
+  const tld = String(name).split('.').pop();
+  const servers = await rdapServers();
+  // Not in the IANA file (some country TLDs): rdap.org knows a few more (e.g. .fr).
+  let url = `https://rdap.org/domain/${encodeURIComponent(name)}`;
+  const base = servers ? serverFor(servers, name) : null;
+  const fallback = !base;
+  if (base) url = `${base}domain/${encodeURIComponent(name)}`;
   let res;
   try {
-    res = await fetch(`https://rdap.org/domain/${encodeURIComponent(name)}`, {
-      // rdap.org (behind Cloudflare) refuses requests without a User-Agent.
-      method: 'GET', headers: { Accept: 'application/rdap+json, application/json', 'User-Agent': 'Cleartwo-IT-Support/1.0 (domain expiry check)' }, redirect: 'follow', signal: AbortSignal.timeout(15000),
-    });
+    res = await fetch(url, { method: 'GET', headers: RDAP_HEADERS, redirect: 'follow', signal: AbortSignal.timeout(20000) });
   } catch (err) {
-    return { ok: false, note: `RDAP lookup failed (${err.name === 'TimeoutError' ? 'timed out' : err.message})` };
+    return { ok: false, note: `RDAP lookup failed: ${err.name === 'TimeoutError' ? 'timed out' : err.message}` };
   }
-  if (res.status === 404) return { ok: false, noRdap: true, note: 'No RDAP for this domain or its TLD' };
-  if (!res.ok) return { ok: false, note: `RDAP lookup failed (HTTP ${res.status})` };
+  if (res.status === 429) {
+    return { ok: false, rateLimited: true, retryAfter: Math.min(300, Number(res.headers.get('retry-after')) || 60), note: 'RDAP lookup rate limited by the registry (HTTP 429): tried again later' };
+  }
+  if (res.status === 404) {
+    return { ok: false, noRdap: true, note: fallback && servers ? `The .${tld} registry has no RDAP service` : 'The registry has no record of this domain (RDAP HTTP 404)' };
+  }
+  if (!res.ok) return { ok: false, note: `RDAP lookup failed (HTTP ${res.status} from ${new URL(res.url || url).host})` };
   const body = await res.json().catch(() => null);
-  if (!body) return { ok: false, note: 'RDAP reply could not be read' };
+  if (!body) return { ok: false, note: 'The RDAP reply could not be read' };
+  // The "expiration" event ("registration expiration" on some registries).
   const expiry = (body.events || []).find((e) => /expiration/i.test(String(e.eventAction || '')));
   const date = expiry && expiry.eventDate ? new Date(expiry.eventDate) : null;
   const registrarEntity = (body.entities || []).find((e) => (e.roles || []).includes('registrar'));
@@ -109,12 +160,14 @@ async function rdapLookup(name) {
   if (registrarEntity) {
     const card = Array.isArray(registrarEntity.vcardArray) ? registrarEntity.vcardArray[1] || [] : [];
     const fn = card.find((p) => p[0] === 'fn');
-    registrar = (fn && fn[3]) || registrarEntity.handle || null;
+    registrar = (fn && fn[3]) || (registrarEntity.publicIds || []).map((p) => p.identifier).find(Boolean) || registrarEntity.handle || null;
   }
+  const expiresOn = date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : null;
   return {
     ok: true,
-    expiresOn: date && !Number.isNaN(date.getTime()) ? date.toISOString().slice(0, 10) : null,
+    expiresOn,
     registrar: registrar ? String(registrar).slice(0, 255) : null,
+    note: expiresOn ? null : 'The registry does not publish an expiry date for this domain',
   };
 }
 

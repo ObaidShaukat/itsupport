@@ -216,12 +216,13 @@ const normalise = (text) => text.toLowerCase().replace(/\s+/g, ' ').trim();
 const searchText = (el) => normalise(el.dataset.search ?? el.textContent);
 
 document.querySelectorAll('input[data-filter]').forEach((input) => {
-  const scope = document.querySelector(input.dataset.filter);
-  if (!scope) return;
-  const groups = scope.querySelectorAll('[data-filter-group]');
-  const empty = scope.querySelector('[data-filter-empty]');
-
+  if (!document.querySelector(input.dataset.filter)) return;
+  // The list is looked up each time: live filtering may have swapped it for a new one.
   const apply = () => {
+    const scope = document.querySelector(input.dataset.filter);
+    if (!scope) return;
+    const groups = scope.querySelectorAll('[data-filter-group]');
+    const empty = scope.querySelector('[data-filter-empty]');
     const query = normalise(input.value);
     let visible = 0;
 
@@ -249,7 +250,10 @@ document.querySelectorAll('input[data-filter]').forEach((input) => {
     if (empty) empty.hidden = !query || visible > 0;
   };
 
-  input.addEventListener('input', apply);
+  // As you type (250ms after the last key); the search is kept in the address (?q=).
+  let timer = null;
+  input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(apply, 250); });
+  input.addEventListener('live:apply', apply);
   // Browsers may restore the box's text on back/forward navigation.
   if (input.value) apply();
 });
@@ -1035,7 +1039,8 @@ document.querySelectorAll('[data-sortable-list]').forEach((list) => {
 
 // Selects marked data-autosubmit submit their form when changed (e.g. Daily Report View).
 document.querySelectorAll('select[data-autosubmit]').forEach((select) => {
-  select.addEventListener('change', () => select.form && select.form.submit());
+  // Live filter forms update in place instead ("Live search and filters").
+  select.addEventListener('change', () => select.form && !select.form.matches('[data-live-form]') && select.form.submit());
 });
 
 // ---- Searchable dropdown (combobox) ----
@@ -3157,7 +3162,9 @@ document.querySelectorAll('[data-focus-note]').forEach((link) => link.addEventLi
 // ---- Ticket board: drag a card to another column to change its status ----
 // Posts /tickets/:id/status (the same route as the status dropdown, so it is logged the same
 // way), moves the card and the count chips straight away and puts it back if saving fails.
-document.querySelectorAll('[data-board]').forEach((board) => {
+// Delegated from the document, so a board swapped in by live filtering keeps working.
+(() => {
+  const board = document;
   const token = document.querySelector('meta[name="csrf-token"]')?.content || '';
   let dragged = null;
   let from = null;
@@ -3201,7 +3208,7 @@ document.querySelectorAll('[data-board]').forEach((board) => {
     cards.insertBefore(card, first || more || null);
   };
   board.addEventListener('dragstart', (e) => {
-    const card = e.target.closest && e.target.closest('.tcard[data-ticket-id]');
+    const card = e.target.closest && e.target.closest('[data-board] .tcard[data-ticket-id]');
     if (!card) return;
     dragged = card;
     from = card.closest('[data-board-col]');
@@ -3215,7 +3222,7 @@ document.querySelectorAll('[data-board]').forEach((board) => {
     dragged = null;
   });
   board.addEventListener('dragover', (e) => {
-    const col = e.target.closest && e.target.closest('[data-board-col]');
+    const col = e.target.closest && e.target.closest('[data-board] [data-board-col]');
     if (!dragged || !col) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
@@ -3223,11 +3230,11 @@ document.querySelectorAll('[data-board]').forEach((board) => {
     col.classList.add('is-over');
   });
   board.addEventListener('dragleave', (e) => {
-    const col = e.target.closest && e.target.closest('[data-board-col]');
+    const col = e.target.closest && e.target.closest('[data-board] [data-board-col]');
     if (col && !col.contains(e.relatedTarget)) col.classList.remove('is-over');
   });
   board.addEventListener('drop', async (e) => {
-    const col = e.target.closest && e.target.closest('[data-board-col]');
+    const col = e.target.closest && e.target.closest('[data-board] [data-board-col]');
     if (!dragged || !col) return;
     e.preventDefault();
     col.classList.remove('is-over');
@@ -3265,7 +3272,7 @@ document.querySelectorAll('[data-board]').forEach((board) => {
       card.classList.remove('is-saving');
     }
   });
-});
+})();
 
 // ---- Call Switch One: "Replace" only for a month that is already calculated ----
 document.querySelectorAll('form[data-cs1-upload]').forEach((form) => {
@@ -3908,4 +3915,161 @@ document.addEventListener('keydown', (e) => {
       el.classList.remove('is-saving');
     }
   });
+})();
+
+// ---- Live search and filters ----
+// Server-filtered lists (Tickets, Cloudflare domains, CS1 customers, Microsoft Partner):
+// form[data-live-form] fields (typing 250ms after the last key; dropdowns and ticks at once)
+// and same-page links inside [data-live-part] (filter pills, sort headers, Clear, Board / List)
+// load the new address in the background and swap in every [data-live-part="name"] with
+// the same name from the reply, so the box you type in keeps its focus. The address is
+// updated with history.replaceState, so refresh and back / forward still work. Without
+// JavaScript the forms and links work as before (full page loads).
+(() => {
+  const forms = [...document.querySelectorAll('form[data-live-form]')];
+  if (!forms.length && !document.querySelector('[data-live-part]')) return;
+  let controller = null;
+
+  const urlFor = (form) => {
+    const url = new URL(form.getAttribute('action') || location.pathname, location.href);
+    const params = new URLSearchParams();
+    for (const [k, v] of new FormData(form)) if (String(v).trim() !== '' && k !== '_csrf') params.append(k, v);
+    url.search = params.toString();
+    return url;
+  };
+
+  async function load(url) {
+    if (controller) controller.abort();
+    controller = new AbortController();
+    const parts = [...document.querySelectorAll('[data-live-part]')];
+    parts.forEach((p) => p.classList.add('is-live-loading'));
+    try {
+      const res = await fetch(url, { headers: { Accept: 'text/html', 'X-Live': '1' }, credentials: 'same-origin', signal: controller.signal });
+      if (!res.ok || res.redirected) throw new Error(`HTTP ${res.status}`);
+      const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+      for (const part of parts) {
+        const next = doc.querySelector(`[data-live-part="${part.dataset.livePart}"]`);
+        if (next) part.replaceWith(document.importNode(next, true));
+        else part.remove();
+      }
+      // The document title (counts) and the address.
+      if (doc.title) document.title = doc.title;
+      history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+      // Lists filtered in the browser too (data-filter search boxes) re-apply to the new rows.
+      document.querySelectorAll('input[data-filter]').forEach((input) => { if (input.value) input.dispatchEvent(new Event('live:apply')); });
+      // Dropdowns that came back with the new parts get the searchable dropdown again.
+      document.querySelectorAll('[data-combobox]').forEach(enhanceCombobox);
+      document.dispatchEvent(new CustomEvent('live:updated'));
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      window.location.href = url.toString(); // fall back to a normal page load
+    } finally {
+      document.querySelectorAll('.is-live-loading').forEach((p) => p.classList.remove('is-live-loading'));
+    }
+  }
+
+  forms.forEach((form) => {
+    let timer = null;
+    const go = () => load(urlFor(form));
+    form.addEventListener('submit', (e) => { e.preventDefault(); clearTimeout(timer); go(); });
+    form.addEventListener('input', (e) => {
+      if (!e.target.matches('input[type="search"], input[type="text"]') || e.target.closest('.combobox')) return;
+      clearTimeout(timer);
+      timer = setTimeout(go, 250);
+    });
+    form.addEventListener('change', (e) => {
+      if (e.target.matches('select, input[type="checkbox"], input[type="radio"]')) { clearTimeout(timer); go(); }
+    });
+  });
+
+  // Same-page links inside a live part: filter pills, sort headers, Clear, Board / List.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest && e.target.closest('[data-live-part] a[href]');
+    if (!a || a.target || a.hasAttribute('download') || a.hasAttribute('data-no-live') || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin || url.pathname !== location.pathname) return;
+    e.preventDefault();
+    // Keep the form's text box in step (e.g. Clear empties it).
+    // A search box filtered in the browser (data-filter) keeps its text in the address too.
+    const browserBox = document.querySelector('input[data-filter]');
+    if (browserBox && browserBox.value.trim() && !url.searchParams.has('q')) url.searchParams.set('q', browserBox.value.trim());
+    const q = url.searchParams.get('q') || '';
+    forms.forEach((form) => { const box = form.querySelector('input[type="search"][name="q"]'); if (box && box.value !== q) box.value = q; });
+    load(url);
+  });
+})();
+
+// ---- Search boxes filtered in the browser keep their text in the address (?q=) ----
+// (data-filter lists and the inventory grids), so refresh and back / forward keep it.
+(() => {
+  const boxes = [...document.querySelectorAll('input[data-filter], input[data-grid-search]')];
+  if (boxes.length !== 1) return; // one search per page: ?q= is unambiguous
+  const box = boxes[0];
+  const start = new URLSearchParams(location.search).get('q');
+  if (start && !box.value) {
+    box.value = start;
+    box.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  let timer = null;
+  box.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const url = new URL(location.href);
+      if (box.value.trim()) url.searchParams.set('q', box.value.trim());
+      else url.searchParams.delete('q');
+      history.replaceState(history.state, '', `${url.pathname}${url.search}${url.hash}`);
+    }, 250);
+  });
+})();
+
+// ---- A × to clear every search box (instead of a Search button) ----
+// The browser's own clear button is hidden (CSS) so there is one, in every browser.
+(() => {
+  const add = (input) => {
+    if (input.dataset.clearReady) return;
+    input.dataset.clearReady = '1';
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'search-clear';
+    btn.setAttribute('aria-label', 'Clear search');
+    btn.title = 'Clear';
+    btn.textContent = '×';
+    const sync = () => { btn.hidden = !input.value; };
+    btn.addEventListener('click', () => {
+      input.value = '';
+      sync();
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    });
+    input.addEventListener('input', sync);
+    input.after(btn);
+    sync();
+  };
+  const scan = () => document.querySelectorAll('input[type="search"]').forEach((input) => {
+    if (input.closest('.search-field, .search, .search-pop-form, .list-search, .grid-search')) add(input);
+  });
+  scan();
+  document.addEventListener('live:updated', scan);
+})();
+
+// ---- Cloudflare expiry lookups: progress while the background queue runs ----
+(() => {
+  const box = document.querySelector('[data-rdap-progress][data-running="1"]');
+  if (!box) return;
+  const text = box.querySelector('[data-rdap-text]');
+  const bar = box.querySelector('[data-rdap-bar]');
+  const tick = async () => {
+    try {
+      const res = await fetch('/cloudflare/rdap-progress', { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
+      const p = await res.json();
+      if (!p.running) { window.location.reload(); return; }
+      if (text) text.innerHTML = '';
+      if (text) text.append('Looking up expiry dates: ', Object.assign(document.createElement('strong'), { textContent: String(p.done) }), ` of ${p.total}${p.current ? ` (${p.current})` : ''}`);
+      if (bar) bar.style.setProperty('--w', `${p.total ? Math.round((p.done / p.total) * 100) : 0}%`);
+    } catch (err) {
+      // Try again on the next tick.
+    }
+    setTimeout(tick, 3000);
+  };
+  setTimeout(tick, 3000);
 })();

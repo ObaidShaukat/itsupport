@@ -25,6 +25,7 @@ const { runDailyChecks } = require('./src/lib/gdap/alerts');
 const { gdapConfig } = require('./src/lib/gdap/graph');
 const { cfConfig } = require('./src/lib/cloudflare/api');
 const { runChecks: runCloudflareChecks } = require('./src/lib/cloudflare/check');
+const { runRdapQueue } = require('./src/lib/cloudflare/rdap');
 const { syncCustomers: syncCs1Customers } = require('./src/lib/cs1/sync');
 const { cs1ApiConfig } = require('./src/lib/cs1/api');
 const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
@@ -370,6 +371,11 @@ setTimeout(async () => {
     console.error('Cloudflare catch-up failed:', err.message);
   }
 }, 150 * 1000).unref();
+// Domain expiry dates (RDAP, src/lib/cloudflare/rdap.js): straight after a start (so a deploy
+// fills in every domain), then every hour for anything due or failed; at most one lookup a
+// second, each domain once a day.
+setTimeout(() => { runRdapQueue().catch((err) => console.error('RDAP queue failed:', err.message)); }, 45 * 1000).unref();
+cron.schedule('40 * * * *', () => { runRdapQueue().catch((err) => console.error('RDAP queue failed:', err.message)); }, { timezone: 'Europe/London' });
 
 // Call Switch One customers: read from the CallSwitch One API (read only) every day at
 // 06:30 UK (src/lib/cs1/sync.js), caught up after a restart when the last good sync is

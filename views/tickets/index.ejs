@@ -2,16 +2,17 @@
 <%#
   Tickets: List (the default; the user's last choice is remembered) or Board (drag a card to
   another column to change its status). One filter row: priority pills, client, person (assigned to) and search, kept in
-  the links (controls.href).
+  the links (controls.href). Live: the form and the links in [data-live-part] update the page in
+  place ("Live search and filters" in app.js); the address keeps the filters.
 %>
 <% const filtered = Boolean(state.status || state.priority || state.client || state.person || state.q); %>
 <header class="page-head reveal">
   <div>
     <h1>Tickets</h1>
-    <p class="muted"><%= tickets.length %> ticket<%= tickets.length === 1 ? '' : 's' %><%= filtered ? ' match the filters' : '' %></p>
+    <p class="muted" data-live-part="count"><%= tickets.length %> ticket<%= tickets.length === 1 ? '' : 's' %><%= filtered ? ' match the filters' : '' %></p>
   </div>
   <div class="actions">
-    <nav class="segmented" aria-label="View">
+    <nav class="segmented" aria-label="View" data-live-part="views">
       <a href="<%= controls.href({ view: 'list' }) %>" class="<%= state.view === 'list' ? 'is-active' : '' %>" <%- state.view === 'list' ? 'aria-current="page"' : '' %>><%- icon('menu') %><span>List</span></a>
       <a href="<%= controls.href({ view: 'board' }) %>" class="<%= state.view === 'board' ? 'is-active' : '' %>" <%- state.view === 'board' ? 'aria-current="page"' : '' %>><%- icon('layers') %><span>Board</span></a>
     </nav>
@@ -20,25 +21,28 @@
 </header>
 
 <section class="panel reveal view-swap" id="ticket-list">
-  <form method="get" action="/tickets" class="filter-row" data-filter-form>
-    <input type="hidden" name="view" value="<%= state.view %>">
-    <% if (state.status) { %><input type="hidden" name="status" value="<%= state.status %>"><% } %>
-    <% if (state.sort) { %><input type="hidden" name="sort" value="<%= state.sort %>"><input type="hidden" name="dir" value="<%= state.dir %>"><% } %>
-    <nav class="filters filters-priority" aria-label="Filter by priority">
+  <form method="get" action="/tickets" class="filter-row" data-filter-form data-live-form>
+    <span data-live-part="state" hidden>
+      <input type="hidden" name="view" value="<%= state.view %>">
+      <% if (state.status) { %><input type="hidden" name="status" value="<%= state.status %>"><% } %>
+      <% if (state.priority) { %><input type="hidden" name="priority" value="<%= state.priority %>"><% } %>
+      <% if (state.sort) { %><input type="hidden" name="sort" value="<%= state.sort %>"><input type="hidden" name="dir" value="<%= state.dir %>"><% } %>
+    </span>
+    <nav class="filters filters-priority" aria-label="Filter by priority" data-live-part="priority">
       <% for (const f of controls.priorityFilters) { %>
         <a href="<%= f.href %>" class="<%= f.active ? 'active' : '' %>" <%= f.key ? '' : 'title="Any priority"' %>>
           <% if (f.key) { %><span class="led led-<%= f.key %>" aria-hidden="true"></span><% } %><%= f.label %> <span class="count"><%= f.count %></span>
         </a>
       <% } %>
     </nav>
-    <label class="filter-field">
+    <label class="filter-field" data-live-part="client">
       <span class="visually-hidden">Client</span>
       <select name="client" data-autosubmit data-combobox>
         <option value="">All clients</option>
         <% for (const c of clients) { %><option value="<%= c.id %>" <%= Number(state.client) === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
       </select>
     </label>
-    <label class="filter-field">
+    <label class="filter-field" data-live-part="person">
       <span class="visually-hidden">Assigned to</span>
       <select name="person" data-autosubmit>
         <option value="">Anyone</option>
@@ -51,9 +55,9 @@
       <span class="visually-hidden">Search tickets</span>
       <input type="search" name="q" value="<%= state.q %>" placeholder="Search" autocomplete="off" data-1p-ignore data-lpignore="true">
     </label>
-    <button type="submit" class="btn btn-secondary btn-small">Search</button>
-    <% if (filtered) { %><a href="/tickets?view=<%= state.view %>" class="btn btn-ghost btn-small">Clear</a><% } %>
+    <span data-live-part="clear"><% if (filtered) { %><a href="/tickets?view=<%= state.view %>" class="btn btn-ghost btn-small">Clear filters</a><% } %></span>
   </form>
+  <div data-live-part="results">
 
   <% if (state.view === 'board') { %>
     <% if (state.status) { %><p class="muted small">The board shows every status; the <strong><%= ticketStatuses[state.status] %></strong> filter applies to the List.</p><% } %>
@@ -69,5 +73,6 @@
     </nav>
     <%- include('../partials/ticket-table', { tickets, controls, filtered }) %>
   <% } %>
+  </div>
 </section>
 <%- include('../partials/foot') %>

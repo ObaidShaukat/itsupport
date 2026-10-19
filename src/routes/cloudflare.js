@@ -11,6 +11,7 @@ const {
   listDomains, getDomain, defaultOrder, listAccounts, getSettings, saveSetting, lastCheck, inheritClients, autoLink,
 } = require('../lib/cloudflare/data');
 const { runChecks, checkDomain } = require('../lib/cloudflare/check');
+const { rdapProgress, runRdapQueue } = require('../lib/cloudflare/rdap');
 const { providersLabel } = require('../lib/cloudflare/lookups');
 
 const router = express.Router();
@@ -90,7 +91,7 @@ router.get('/domains', async (req, res) => {
   const [accounts] = await pool.query('SELECT id, name FROM cf_accounts ORDER BY name');
   res.render('cloudflare/domains', {
     title: 'Cloudflare domains', nav: 'cloudflare', config: cfConfig(), check: await lastCheck(pool), summary, counts, filters: STATUS_FILTERS,
-    state, rows, href, clients, accounts, total: all.length,
+    state, rows, href, clients, accounts, total: all.length, rdap: await rdapProgress(),
   });
 });
 
@@ -108,6 +109,21 @@ router.get('/domains/:id', async (req, res) => {
   res.render('cloudflare/domain', {
     title: domain.name, nav: 'cloudflare', config: cfConfig(), domain, events: shaped, clients, account,
   });
+});
+
+// Expiry lookups progress (polled by the Domains page while they run).
+router.get('/rdap-progress', async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.json(await rdapProgress());
+});
+
+// Look up expiry dates now (only the domains that are due; in the background).
+router.post('/rdap', async (req, res) => {
+  if (cfConfig().configured || (await rdapProgress()).domains) {
+    runRdapQueue().catch((err) => console.error('RDAP queue failed:', err.message));
+    flash(req, 'saved', 'Looking up expiry dates in the background.');
+  }
+  res.redirect('/cloudflare/domains');
 });
 
 router.post('/check', async (req, res) => {

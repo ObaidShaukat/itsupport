@@ -55,6 +55,8 @@ function shapeDomain(d) {
     hidden: Boolean(d.hidden_at),
     provider: current.length ? providersLabel(current) : (d.nameservers_ok === null ? 'Not checked' : 'None'),
     assignedProvider: assigned.length ? providersLabel(assigned) : '',
+    // Why the expiry is not known (tooltip on "Unknown").
+    expiryReason: d.expires_on ? '' : d.rdap_note || (d.rdap_checked_at ? 'The registry did not give an expiry date' : 'Not looked up yet'),
     daysLabel: days === null ? '' : expired ? `expired ${-days} day${days === -1 ? '' : 's'} ago` : days === 0 ? 'expires today' : `${days} day${days === 1 ? '' : 's'} left`,
   };
 }

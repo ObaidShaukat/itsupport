@@ -8,35 +8,21 @@
 //   3. Public DNS (1.1.1.1, 8.8.8.8): a domain whose nameservers no longer match Cloudflare's
 //      gets nameservers_ok = 0 and an ns_changed event, before Cloudflare marks it "moved";
 //      back on Cloudflare's: back_to_cloudflare.
-//   4. RDAP once a (UK) day per domain: expiry date and registrar; expiring (30 / 14 / 7 days)
-//      and expired events, once per threshold and expiry date.
+//   4. Then the expiry lookups (rdap.js: RDAP, throttled, once a day per domain) run in the
+//      background; Check now on one domain looks it up straight away.
 // Every run is in cf_check_log and the activity log (entity_type 'cloudflare'); events are
 // in domain_events and the activity log, then alerts go out (src/lib/cloudflare/alerts.js).
 const { pool } = require('../../db');
-const { logActivity, londonDate, londonDayStart } = require('../activity');
 const api = require('./api');
-const { publicNameservers, sameNs, nsList, rdapLookup, providersLabel } = require('./lookups');
-const { autoLink, parseList, daysUntil } = require('./data');
+const { publicNameservers, sameNs, nsList, providersLabel } = require('./lookups');
+const { autoLink, parseList } = require('./data');
+const { addEvent, log } = require('./events');
+const { runRdapQueue, lookupDomain } = require('./rdap');
 const { sendEventAlerts } = require('./alerts');
 
 let running = false;
 
-const log = (user, entry) => logActivity(null, user, { type: 'cloudflare', subject: 'Cloudflare', ...entry }).catch((err) => console.error('Cloudflare log failed:', err.message));
 const json = (v) => JSON.stringify(v);
-
-// Records an event (once per dedupe key, when given). Returns true when it is new.
-async function addEvent(db, { domain = null, accountId = null, type, details = {}, key = null }, user = null) {
-  const [r] = await db.query(
-    'INSERT IGNORE INTO domain_events (domain_id, cf_account_id, type, details, dedupe_key) VALUES (?, ?, ?, ?, ?)',
-    [domain ? domain.id : null, accountId, type, json(details), key]
-  );
-  if (r.affectedRows !== 1) return false;
-  await log(user, {
-    id: domain ? domain.id : null, action: 'updated', clientId: domain ? domain.client_id : null,
-    summary: `Cloudflare: ${type.replace(/_/g, ' ')}${domain ? ` on ${domain.name}` : ''}${details.text ? `: ${details.text}` : ''}`,
-  });
-  return true;
-}
 
 // ---- Accounts ----
 async function syncAccounts(user) {
@@ -159,39 +145,6 @@ async function checkNameservers(d, user) {
   return 0;
 }
 
-// ---- Expiry (RDAP) ----
-async function checkExpiry(d, user, { force = false } = {}) {
-  if (d.deleted_at) return 0;
-  const todayStart = londonDayStart(londonDate());
-  if (!force && d.rdap_checked_at && new Date(d.rdap_checked_at) >= todayStart) return expiryEvents(d, user);
-  const r = await rdapLookup(d.name);
-  if (r.ok) {
-    await pool.query('UPDATE domains SET expires_on = ?, registrar = ?, rdap_checked_at = NOW(), rdap_note = NULL WHERE id = ?', [r.expiresOn, r.registrar, d.id]);
-    d.expires_on = r.expiresOn;
-  } else if (r.noRdap) {
-    // No RDAP for this TLD: skipped until tomorrow.
-    await pool.query('UPDATE domains SET rdap_checked_at = NOW(), rdap_note = ? WHERE id = ?', [r.note.slice(0, 255), d.id]);
-  } else {
-    // A time-out or rate limit: noted, and tried again at the next check.
-    await pool.query('UPDATE domains SET rdap_note = ? WHERE id = ?', [r.note.slice(0, 255), d.id]);
-  }
-  return expiryEvents(d, user);
-}
-
-async function expiryEvents(d, user) {
-  if (!d.expires_on) return 0;
-  const day = String(d.expires_on instanceof Date ? d.expires_on.toISOString() : d.expires_on).slice(0, 10);
-  const days = daysUntil(day);
-  if (days === null || days > 30) return 0;
-  if (days < 0) {
-    return (await addEvent(pool, { domain: d, type: 'expired', key: `expired:${d.id}:${day}`, details: { expires_on: day, text: `expired on ${day}` } }, user)) ? 1 : 0;
-  }
-  const threshold = [7, 14, 30].find((t) => days <= t);
-  return (await addEvent(pool, {
-    domain: d, type: 'expiring', key: `expiring:${d.id}:${threshold}:${day}`, details: { expires_on: day, days, threshold, text: `expires in ${days} day${days === 1 ? '' : 's'} (${day})` },
-  }, user)) ? 1 : 0;
-}
-
 // Runs fn over items, a few at a time (DNS / RDAP lookups).
 async function eachLimited(items, limit, fn) {
   let i = 0;
@@ -249,8 +202,7 @@ async function runChecks(user = null, { trigger = 'schedule' } = {}) {
     for (const account of listed) events += await detectDeleted(account, allZoneIds, user);
     const [domains] = await pool.query('SELECT * FROM domains WHERE deleted_at IS NULL');
     events += await eachLimited(domains, 5, (d) => checkNameservers(d, user));
-    const [fresh] = await pool.query('SELECT * FROM domains WHERE deleted_at IS NULL');
-    events += await eachLimited(fresh, 2, (d) => checkExpiry(d, user));
+    const fresh = domains;
     const alerts = await sendEventAlerts();
     const summary = { accounts: accounts.length, domains: fresh.length, events };
     await finishLog(logId, 'ok', { ...summary, error: problems.length ? problems.join('; ') : null });
@@ -258,6 +210,8 @@ async function runChecks(user = null, { trigger = 'schedule' } = {}) {
       action: 'synced',
       summary: `Cloudflare check (${trigger}): ${accounts.length} account${accounts.length === 1 ? '' : 's'}, ${fresh.length} domain${fresh.length === 1 ? '' : 's'}, ${events} event${events === 1 ? '' : 's'}, ${alerts} alert${alerts === 1 ? '' : 's'}${problems.length ? `; problems: ${problems.join('; ')}` : ''}`,
     });
+    // Expiry dates: in the background, at most one lookup a second.
+    runRdapQueue().catch((err) => console.error('RDAP queue failed:', err.message));
     return { ok: true, ...summary, alerts, problems };
   } catch (err) {
     await finishLog(logId, 'failed', { error: err.message });
@@ -296,7 +250,7 @@ async function checkDomain(user, id) {
     const [[now]] = await pool.query('SELECT * FROM domains WHERE id = ?', [id]);
     events += await checkNameservers(now, user);
     const [[after]] = await pool.query('SELECT * FROM domains WHERE id = ?', [id]);
-    events += await checkExpiry(after, user, { force: true });
+    events += await lookupDomain(after, user);
     const alerts = await sendEventAlerts();
     await finishLog(logId, 'ok', { accounts: null, domains: 1, events });
     await log(user, { id, action: 'synced', clientId: d.client_id, summary: `Cloudflare check of ${d.name}: ${events} event${events === 1 ? '' : 's'}` });

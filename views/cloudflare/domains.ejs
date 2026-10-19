@@ -2,7 +2,9 @@
 <%#
   Cloudflare > Domains (src/routes/cloudflare.js): summary tiles, status filters, client /
   account filters, search, sortable columns (default: problems first, then A-Z), Check now
-  and Hide per row. Red LED = a problem, amber = expiring within 30 days.
+  and Hide per row. Red LED = a problem, amber = expiring within 30 days. Live: the form and the
+  links in [data-live-part] update the page in place ("Live search and filters" in app.js).
+  No Client column: clients are linked on the Accounts page (and shown on the client page).
 %>
 <%
   const last = check.last;
@@ -31,8 +33,9 @@
 </header>
 
 <%- include('_status-banner', { config, check }) %>
+<%- include('_rdap-progress', { rdap }) %>
 
-<div class="cf-tiles reveal">
+<div class="cf-tiles reveal" data-live-part="tiles">
   <a href="/cloudflare/domains" class="tile cf-tile"><span class="tile-label">Total</span><span class="big-num" data-count="<%= summary.total %>"><%= summary.total %></span></a>
   <a href="/cloudflare/domains?status=healthy" class="tile cf-tile"><span class="tile-label">Healthy</span><span class="big-num" data-count="<%= summary.healthy %>"><%= summary.healthy %></span></a>
   <a href="/cloudflare/domains?status=ns_changed" class="tile cf-tile <%= summary.nsChanged ? 'has-problem' : '' %>"><span class="tile-label"><% if (summary.nsChanged) { %><span class="led led-urgent" aria-hidden="true"></span><% } %>Nameservers changed</span><span class="big-num" data-count="<%= summary.nsChanged %>"><%= summary.nsChanged %></span></a>
@@ -41,22 +44,24 @@
 </div>
 
 <section class="panel reveal" id="domains">
-  <form method="get" action="/cloudflare/domains" class="filter-row">
-    <% if (state.status !== 'all') { %><input type="hidden" name="status" value="<%= state.status %>"><% } %>
-    <% if (state.sort) { %><input type="hidden" name="sort" value="<%= state.sort %>"><input type="hidden" name="dir" value="<%= state.dir %>"><% } %>
-    <nav class="filters" aria-label="Filter by status">
+  <form method="get" action="/cloudflare/domains" class="filter-row" data-live-form>
+    <span data-live-part="state" hidden>
+      <% if (state.status !== 'all') { %><input type="hidden" name="status" value="<%= state.status %>"><% } %>
+      <% if (state.sort) { %><input type="hidden" name="sort" value="<%= state.sort %>"><input type="hidden" name="dir" value="<%= state.dir %>"><% } %>
+    </span>
+    <nav class="filters" aria-label="Filter by status" data-live-part="pills">
       <% for (const [key, f] of Object.entries(filters)) { %>
         <a href="<%= href({ status: key }) %>" class="<%= state.status === key ? 'active' : '' %>"><%= f.label %> <span class="count"><%= counts[key] %></span></a>
       <% } %>
     </nav>
-    <label class="filter-field">
+    <label class="filter-field" data-live-part="client">
       <span class="visually-hidden">Client</span>
       <select name="client" data-autosubmit data-combobox>
         <option value="">All clients</option>
         <% for (const c of clients) { %><option value="<%= c.id %>" <%= state.client === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
       </select>
     </label>
-    <label class="filter-field">
+    <label class="filter-field" data-live-part="account">
       <span class="visually-hidden">Cloudflare account</span>
       <select name="account" data-autosubmit>
         <option value="">All accounts</option>
@@ -68,10 +73,10 @@
       <span class="visually-hidden">Search domains, clients, accounts and providers</span>
       <input type="search" name="q" value="<%= state.q %>" placeholder="Search" autocomplete="off" data-1p-ignore data-lpignore="true">
     </label>
-    <button type="submit" class="btn btn-secondary btn-small">Search</button>
-    <% if (state.client || state.account || state.q || state.status !== 'all' || state.sort) { %><a href="/cloudflare/domains" class="btn btn-ghost btn-small">Clear</a><% } %>
+    <span data-live-part="clear"><% if (state.client || state.account || state.q || state.status !== 'all' || state.sort) { %><a href="/cloudflare/domains" class="btn btn-ghost btn-small">Clear filters</a><% } %></span>
   </form>
 
+  <div data-live-part="results">
   <% if (!rows.length) { %>
     <p class="empty"><%= total ? 'No domains match these filters.' : (config.configured ? 'No domains yet: click Check now to read them from Cloudflare.' : 'No domains yet.') %></p>
   <% } else { %>
@@ -81,7 +86,6 @@
           <tr>
             <th class="cf-led"><span class="visually-hidden">Problem</span></th>
             <%- sortHead('domain', 'Domain', 'cf-domain') %>
-            <%- sortHead('client', 'Client', 'cf-client') %>
             <%- sortHead('account', 'Cloudflare account', 'cf-account') %>
             <%- sortHead('status', 'Status', 'cf-status') %>
             <%- sortHead('ns', 'Nameservers', 'cf-ns') %>
@@ -95,12 +99,11 @@
             <tr class="<%= d.hidden ? 'is-hidden-row' : '' %>">
               <td class="cf-led"><% if (d.led) { %><span class="led led-<%= d.led %>" title="<%= d.problem ? 'Needs attention' : 'Expiring soon' %>"></span><% } %></td>
               <td title="<%= d.name %>"><a href="/cloudflare/domains/<%= d.id %>"><strong><%= d.name %></strong></a><% if (d.notes) { %> <span class="muted" title="Has notes"><%- icon('file') %></span><% } %></td>
-              <td title="<%= d.client_name || '' %>"><% if (d.client_name) { %><a href="/clients/<%= d.client_id %>"><%= d.client_name %></a><% } else { %><span class="muted">—</span><% } %></td>
               <td title="<%= d.account_name || '' %>"><%= d.account_name || '—' %><% if (d.account_lost) { %> <span class="status-pill is-bad">No access</span><% } %></td>
               <td><%- include('_status-pill', { d }) %></td>
               <td title="<%= d.current.length ? d.current.join(', ') : (d.ns_checked_at ? 'No nameservers found' : 'Not checked yet') %><%= d.assigned.length ? `\nCloudflare's: ${d.assigned.join(', ')}` : '' %>"><%= d.provider %></td>
-              <td title="<%= d.registrar ? `Registrar: ${d.registrar}` : (d.rdap_note || '') %>">
-                <% if (d.expires_on) { %><%= fmtDay(d.expires_on) %> <span class="small <%= d.expired ? 'is-error' : 'muted' %>"><%= d.daysLabel %></span><% } else { %><span class="muted">—</span><% } %>
+              <td title="<%= d.expires_on ? (d.registrar ? `Registrar: ${d.registrar}` : '') : d.expiryReason %>">
+                <% if (d.expires_on) { %><%= fmtDay(d.expires_on) %> <span class="small <%= d.expired ? 'is-error' : 'muted' %>"><%= d.daysLabel %></span><% } else if (d.deleted_at) { %><span class="muted">—</span><% } else { %><span class="muted cf-unknown" title="<%= d.expiryReason %>">Unknown</span><% } %>
               </td>
               <td class="right muted" title="<%= d.last_checked ? fmtDate(d.last_checked) : '' %>"><%= d.last_checked ? fmtAgo(d.last_checked) : '—' %></td>
               <td class="row-actions cf-actions">
@@ -119,5 +122,6 @@
       </table>
     </div>
   <% } %>
+  </div>
 </section>
 <%- include('../partials/foot') %>

@@ -43,7 +43,7 @@
         <dt>Registrar</dt><dd><%= domain.registrar || '—' %></dd>
         <dt>Expiry</dt>
         <dd>
-          <% if (domain.expires_on) { %><%= fmtDay(domain.expires_on) %> <span class="small <%= domain.expired ? 'is-error' : 'muted' %>"><%= domain.daysLabel %></span><% } else { %><span class="muted"><%= domain.rdap_note || 'Not known' %></span><% } %>
+          <% if (domain.expires_on) { %><%= fmtDay(domain.expires_on) %> <span class="small <%= domain.expired ? 'is-error' : 'muted' %>"><%= domain.daysLabel %></span><% } else { %><span class="muted" title="<%= domain.expiryReason %>">Unknown</span> <span class="muted small">(<%= domain.expiryReason %>)</span><% } %>
           <% if (domain.rdap_checked_at) { %><br><span class="muted small">RDAP checked <%= fmtAgo(domain.rdap_checked_at) %></span><% } %>
         </dd>
         <dt>Plan</dt><dd><%= domain.plan || '—' %></dd>

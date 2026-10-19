@@ -1,0 +1,19 @@
+<%#
+  Expiry lookups (src/lib/cloudflare/rdap.js): a progress bar while the background queue runs
+  ("Cloudflare expiry lookups" in app.js polls /cloudflare/rdap-progress and reloads the list
+  when it finishes), otherwise how many domains have no known expiry and a button to look up.
+%>
+<% if (rdap && rdap.domains) { %>
+  <div class="cf-rdap <%= rdap.running ? 'is-running' : '' %>" data-rdap-progress data-running="<%= rdap.running ? '1' : '0' %>">
+    <% if (rdap.running) { %>
+      <span class="cf-rdap-text" data-rdap-text>Looking up expiry dates: <strong><%= rdap.done %></strong> of <%= rdap.total %><%= rdap.current ? ` (${rdap.current})` : '' %></span>
+      <span class="progress cf-rdap-bar" role="progressbar" aria-label="Expiry lookups" aria-valuemin="0" aria-valuemax="<%= rdap.total %>" aria-valuenow="<%= rdap.done %>"><span data-rdap-bar style="--w: <%= rdap.total ? Math.round((rdap.done / rdap.total) * 100) : 0 %>%"></span></span>
+    <% } else if (rdap.unknown) { %>
+      <span class="cf-rdap-text muted small"><%= rdap.unknown %> domain<%= rdap.unknown === 1 ? '' : 's' %> without a known expiry date<%= rdap.never ? ` (${rdap.never} not looked up yet)` : '' %>. Expiry dates are looked up in the background, about one a second, once a day each.</span>
+      <form method="post" action="/cloudflare/rdap" class="inline">
+        <%- csrfField %>
+        <button type="submit" class="btn btn-small btn-ghost"><%- icon('calendar') %><span>Look up now</span></button>
+      </form>
+    <% } %>
+  </div>
+<% } %>
