@@ -1,0 +1,118 @@
+<%- include('../partials/head') %>
+<%#
+  One domain (GET /cloudflare/domains/:id): every field, the event timeline (domain_events),
+  the client link (from the Cloudflare account or set by hand), notes, Check now and Hide.
+%>
+<%
+  const EVENT_LABELS = { ns_changed: 'Nameservers changed', moved: 'Moved', deleted: 'Removed from Cloudflare', re_added: 'Back in Cloudflare', back_to_cloudflare: "Back on Cloudflare's nameservers", expiring: 'Expiring', expired: 'Expired', access_lost: 'Account access lost' };
+  const ALERTING = ['ns_changed', 'deleted', 'expiring', 'expired', 'access_lost'];
+  const page = `/cloudflare/domains/${domain.id}`;
+%>
+<header class="page-head reveal">
+  <div>
+    <p class="crumbs"><a href="/cloudflare/domains">Cloudflare</a> / <a href="/cloudflare/domains">Domains</a></p>
+    <h1><% if (domain.led) { %><span class="led led-<%= domain.led %>" aria-hidden="true"></span> <% } %><%= domain.name %></h1>
+    <p class="cf-head-line"><%- include('_status-pill', { d: domain }) %> <span class="muted small"><%= domain.account_name ? `Cloudflare account ${domain.account_name}` : 'No Cloudflare account' %><%= domain.plan ? ` · ${domain.plan}` : '' %></span></p>
+  </div>
+  <div class="actions">
+    <form method="post" action="<%= page %>/hide" class="inline">
+      <%- csrfField %><input type="hidden" name="back" value="<%= page %>"><input type="hidden" name="hide" value="<%= domain.hidden ? '0' : '1' %>">
+      <button type="submit" class="btn btn-small btn-ghost"><%- icon(domain.hidden ? 'eye' : 'eye-off') %><span><%= domain.hidden ? 'Unhide' : 'Hide' %></span></button>
+    </form>
+    <form method="post" action="<%= page %>/check" class="inline" data-busy-label="Checking…">
+      <%- csrfField %><input type="hidden" name="back" value="<%= page %>">
+      <button type="submit" class="btn btn-small btn-primary" <%= config.configured ? '' : 'disabled' %>><%- icon('refresh') %><span>Check now</span></button>
+    </form>
+  </div>
+</header>
+<% if (domain.hidden) { %><div class="flash flash-info" role="status">Hidden<%= domain.hidden_by_name ? ` by ${domain.hidden_by_name}` : '' %> on <%= fmtDate(domain.hidden_at) %>: left out of the counts and never alerts.</div><% } %>
+
+<div class="grid-2 grid-wide-left">
+  <div>
+    <section class="card reveal" aria-labelledby="cf-details">
+      <h2 id="cf-details">Details</h2>
+      <dl class="cf-fields">
+        <dt>Status</dt><dd><%= domain.statusLabel %><% if (domain.cf_status) { %> <span class="muted small">(Cloudflare: <%= domain.cf_status %><%= domain.cf_type && domain.cf_type !== 'full' ? `, ${domain.cf_type} setup` : '' %>)</span><% } %></dd>
+        <dt>Nameservers now</dt>
+        <dd>
+          <% if (domain.current.length) { %><strong><%= domain.provider %></strong><br><span class="muted small"><%= domain.current.join(', ') %></span><% } else { %><span class="muted"><%= domain.ns_checked_at ? 'None found in public DNS' : 'Not checked yet' %></span><% } %>
+          <% if (domain.ns_checked_at) { %><br><span class="muted small">Looked up <%= fmtAgo(domain.ns_checked_at) %> (1.1.1.1 / 8.8.8.8)</span><% } %>
+        </dd>
+        <dt>Cloudflare's nameservers</dt><dd><%= domain.assigned.length ? domain.assigned.join(', ') : '—' %></dd>
+        <dt>Nameservers OK</dt><dd><%= domain.nameservers_ok === null ? 'Not known yet' : domain.nameservers_ok ? 'Yes, on Cloudflare' : (domain.cf_status === 'pending' ? 'Not yet (zone pending)' : 'No, they changed') %></dd>
+        <dt>Registrar</dt><dd><%= domain.registrar || '—' %></dd>
+        <dt>Expiry</dt>
+        <dd>
+          <% if (domain.expires_on) { %><%= fmtDay(domain.expires_on) %> <span class="small <%= domain.expired ? 'is-error' : 'muted' %>"><%= domain.daysLabel %></span><% } else { %><span class="muted"><%= domain.rdap_note || 'Not known' %></span><% } %>
+          <% if (domain.rdap_checked_at) { %><br><span class="muted small">RDAP checked <%= fmtAgo(domain.rdap_checked_at) %></span><% } %>
+        </dd>
+        <dt>Plan</dt><dd><%= domain.plan || '—' %></dd>
+        <dt>Zone id</dt><dd><code><%= domain.zone_id || '—' %></code></dd>
+        <dt>First seen</dt><dd><%= fmtDate(domain.first_seen) %></dd>
+        <dt>Last checked</dt><dd><%= domain.last_checked ? fmtDate(domain.last_checked) : '—' %></dd>
+        <% if (domain.deleted_at) { %><dt>Removed</dt><dd><%= fmtDate(domain.deleted_at) %><%= domain.deleted_by ? ` by ${domain.deleted_by}` : '' %></dd><% } %>
+      </dl>
+    </section>
+
+    <section class="card reveal" aria-labelledby="cf-events">
+      <h2 id="cf-events">Events</h2>
+      <% if (!events.length) { %>
+        <p class="empty">Nothing has happened to this domain since it was first seen.</p>
+      <% } else { %>
+        <ol class="cf-timeline">
+          <% for (const e of events) { %>
+            <li class="cf-event cf-event-<%= e.type %>">
+              <span class="cf-event-dot" aria-hidden="true"></span>
+              <div>
+                <strong><%= EVENT_LABELS[e.type] || e.type %></strong>
+                <span class="muted small"> · <%= fmtDate(e.detected_at) %></span>
+                <% if (e.type === 'ns_changed' || e.type === 'back_to_cloudflare') { %>
+                  <div class="small">Now: <strong><%= e.newProvider || 'none' %></strong> <span class="muted">(<%= (e.details.new || []).join(', ') || 'no nameservers found' %>)</span></div>
+                  <% if ((e.details.old || []).length) { %><div class="small muted">Before: <%= e.details.old.join(', ') %></div><% } %>
+                <% } else if (e.details.text) { %>
+                  <div class="small muted"><%= e.details.text %></div>
+                <% } %>
+                <div class="muted small"><%= !ALERTING.includes(e.type) ? 'No alert for this kind of event' : !e.alerted_at ? 'Alert pending' : domain.hidden ? 'No alert (hidden)' : `Alert sent ${fmtAgo(e.alerted_at)}` %></div>
+              </div>
+            </li>
+          <% } %>
+        </ol>
+      <% } %>
+    </section>
+  </div>
+
+  <div>
+    <section class="card reveal" aria-labelledby="cf-client">
+      <h2 id="cf-client">Client</h2>
+      <p>
+        <% if (domain.client_name) { %><a href="/clients/<%= domain.client_id %>"><strong><%= domain.client_name %></strong></a><% } else { %><span class="muted">Not linked to a client</span><% } %>
+        <span class="muted small">· <%= domain.client_manual ? 'set by hand' : `from the Cloudflare account${account && account.client_name ? ` (${account.client_name})` : ''}` %></span>
+      </p>
+      <form method="post" action="<%= page %>/client" class="form">
+        <%- csrfField %><input type="hidden" name="back" value="<%= page %>">
+        <label class="field">
+          <span>Link to client</span>
+          <select name="client_id" data-combobox>
+            <option value="auto" <%= domain.client_manual ? '' : 'selected' %>>Same as the Cloudflare account</option>
+            <option value="" <%= domain.client_manual && !domain.client_id ? 'selected' : '' %>>Not linked</option>
+            <% for (const c of clients) { %><option value="<%= c.id %>" <%= domain.client_manual && domain.client_id === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+          </select>
+        </label>
+        <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save</button></div>
+      </form>
+    </section>
+
+    <section class="card reveal" id="notes" aria-labelledby="cf-notes">
+      <h2 id="cf-notes">Notes</h2>
+      <form method="post" action="<%= page %>/notes" class="form">
+        <%- csrfField %>
+        <label class="field">
+          <span class="visually-hidden">Notes</span>
+          <textarea name="notes" rows="5" maxlength="10000" placeholder="e.g. Registrar login is with the customer; DNS moved to Cloudflare on 3 Oct" data-autogrow><%= domain.notes || '' %></textarea>
+        </label>
+        <div class="form-actions"><button type="submit" class="btn btn-small btn-primary">Save notes</button></div>
+      </form>
+    </section>
+  </div>
+</div>
+<%- include('../partials/foot') %>

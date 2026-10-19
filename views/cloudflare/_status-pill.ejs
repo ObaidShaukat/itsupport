@@ -1,0 +1,3 @@
+<%# A domain's status as a greyscale pill (d: shaped by shapeDomain). %>
+<% const tone = { active: 'is-ok', pending: 'is-info', ns_changed: 'is-warn', moved: 'is-bad', deactivated: 'is-bad', deleted: 'is-muted' }[d.status] || 'is-muted'; %>
+<span class="status-pill <%= tone %>" title="<%= d.cf_status ? `Cloudflare: ${d.cf_status}` : '' %><%= d.deleted_at ? ` · removed ${fmtDate(d.deleted_at)}${d.deleted_by ? ` by ${d.deleted_by}` : ''}` : '' %>"><%= d.statusLabel %></span><% if (d.hidden) { %> <span class="status-pill is-muted">Hidden</span><% } %>

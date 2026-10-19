@@ -3458,3 +3458,66 @@ input[type="checkbox"]:not(.visually-hidden, .switch-field input, .user-check in
 .report-preview li.is-error { box-shadow: 0 0 0 2px var(--red); }
 @keyframes saved-tick { 0% { opacity: 0; transform: translateY(-50%) scale(0.8); } 12% { opacity: 1; transform: translateY(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .report-preview li.is-saved::after { animation: none; } }
+
+/* ==========================================================================
+   Cloudflare (views/cloudflare): tiles, domains table, domain page, accounts.
+   Status pills are greyscale; red LED = a problem, amber = expiring within 30 days.
+   ========================================================================== */
+.cf-check-line { display: flex; align-items: center; gap: 6px; margin: -8px 0 16px; }
+.cf-check-line .icon { width: 14px; height: 14px; }
+.cf-tiles { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+.cf-tile { min-height: 120px; background: #FFFFFF; }
+.cf-tile .tile-label { display: inline-flex; align-items: center; gap: 8px; }
+.cf-tile.has-problem { border-color: var(--border-strong); }
+.cf-table .cf-led { width: 30px; padding-right: 0; text-overflow: clip; }
+.cf-table .cf-domain { width: 21%; }
+.cf-table .cf-client { width: 15%; }
+.cf-table .cf-account { width: 14%; }
+.cf-table .cf-status { width: 118px; }
+.cf-table .cf-ns { width: 13%; }
+.cf-table .cf-expiry { width: 16%; }
+.cf-table .cf-checked { width: 104px; }
+.cf-table th.cf-actions, .cf-table td.cf-actions { width: 80px; }
+.cf-table td.cf-actions { display: table-cell; text-align: right; padding-right: 6px; white-space: nowrap; }
+.cf-table td.cf-actions form { display: inline-flex; }
+.cf-table td.cf-actions .icon-btn { width: 30px; height: 30px; }
+.cf-table td .icon { width: 13px; height: 13px; vertical-align: -2px; }
+.cf-table tr.is-hidden-row td { color: var(--muted); }
+.cf-head-line { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 6px 0 0; }
+.page-head h1 .led { vertical-align: middle; margin-right: 4px; }
+.cf-fields { display: grid; grid-template-columns: minmax(140px, max-content) minmax(0, 1fr); gap: 10px 20px; margin: 0; }
+.cf-fields dt { color: var(--muted); font-weight: 700; font-size: 13px; }
+.cf-fields dd { margin: 0; overflow-wrap: anywhere; }
+.cf-timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 14px; position: relative; }
+.cf-timeline::before { content: ""; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 2px; background: var(--border); }
+.cf-event { position: relative; display: grid; grid-template-columns: 12px minmax(0, 1fr); gap: 12px; align-items: start; }
+.cf-event-dot { width: 12px; height: 12px; margin-top: 4px; border-radius: 50%; background: #FFFFFF; border: 2px solid var(--ink-2); position: relative; z-index: 1; }
+.cf-event-ns_changed .cf-event-dot, .cf-event-deleted .cf-event-dot, .cf-event-expired .cf-event-dot, .cf-event-moved .cf-event-dot { background: var(--led-urgent); border-color: var(--led-urgent); }
+.cf-event-expiring .cf-event-dot { background: var(--led-high); border-color: var(--led-high); }
+.cf-event-back_to_cloudflare .cf-event-dot, .cf-event-re_added .cf-event-dot { background: var(--ink); border-color: var(--ink); }
+.cf-link-cell { overflow: visible; }
+.cf-link-form { display: block; margin: 0; }
+.cf-link-form select, .cf-link-form .combobox-input { min-height: 34px; height: 34px; font-size: 13px; }
+.cf-accounts-table td { height: auto; padding-top: 8px; padding-bottom: 8px; }
+.cf-problems { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.cf-client-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cf-client-list li { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 10px; border-radius: var(--radius-item); background: var(--surface-main); }
+.cf-led-space { display: inline-block; width: 10px; }
+/* Dashboard: the small Domains tile next to the greeting. */
+.dash-head .mini-tile { margin-left: auto; margin-right: 8px; }
+.mini-tile {
+  display: grid; grid-template-columns: auto auto; grid-template-areas: "label label" "value sub"; align-items: baseline; gap: 2px 8px;
+  min-width: 150px; padding: 10px 16px; border-radius: var(--radius); border: 1px solid var(--border); background: #FFFFFF; color: var(--ink);
+  transition: transform 0.22s, box-shadow 0.22s;
+}
+.mini-tile:hover { color: var(--ink); transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+.mini-tile-label { grid-area: label; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.mini-tile-value { grid-area: value; font-family: var(--font-head); font-weight: 700; font-size: 26px; line-height: 1; }
+.mini-tile-sub { grid-area: sub; font-size: 12.5px; color: var(--muted); font-weight: 600; }
+@media (max-width: 1279.98px) { .cf-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1023.98px) {
+  .cf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-head .mini-tile { margin-left: 0; }
+  .cf-table { width: max(900px, 100%); }
+}
+@media (prefers-reduced-motion: reduce) { .mini-tile:hover { transform: none; } }

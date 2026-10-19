@@ -1,6 +1,7 @@
 const express = require('express');
 const { attachmentNames, removeTicketFiles } = require('../lib/ticket-files');
 const { listRelationships: gdapRelationships } = require('../lib/gdap/data');
+const { listDomains: cfDomains, defaultOrder: cfOrder } = require('../lib/cloudflare/data');
 const { pool, transaction } = require('../db');
 const {
   str, requireId, toId, flash, notFound, backPath,
@@ -153,9 +154,11 @@ router.get('/clients/:id', async (req, res) => {
 
   // GDAP relationships linked to this client (not removed ones).
   const { rows: gdap } = await gdapRelationships(pool, { clientId: id });
+  // Cloudflare domains linked to this client (hidden ones left out), problems first.
+  const domains = cfOrder((await cfDomains(pool, { clientId: id })).filter((d) => !d.hidden));
 
   res.render('clients/show', {
-    title: client.name, client, clientMeta, activity, clientServices, tickets, ticketState, ticketControls, serviceGroups, gdap,
+    title: client.name, client, clientMeta, activity, clientServices, tickets, ticketState, ticketControls, serviceGroups, gdap, domains,
   });
 });
 

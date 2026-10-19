@@ -91,6 +91,7 @@ async function knownNames(db = pool) {
     'SELECT DISTINCT model AS t FROM stock_items WHERE model IS NOT NULL',
     'SELECT name AS t FROM stock_categories',
     'SELECT name AS t FROM cs1_customers',
+    'SELECT name AS t FROM cf_accounts',
   ];
   const names = new Set();
   for (const sql of queries) {

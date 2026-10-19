@@ -29,6 +29,7 @@
 </section>
 
 <% if (gdap.length) { %><%- include('../partials/gdap-card', { gdap }) %><% } %>
+<% if (locals.domains && domains.length) { %><%- include('../partials/cf-domains-card', { domains, clientId: client.id }) %><% } %>
 
 <section class="section" id="services">
   <div class="section-head">

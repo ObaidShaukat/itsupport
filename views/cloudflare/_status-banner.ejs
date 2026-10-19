@@ -1,0 +1,12 @@
+<%# Not configured / last check failed, and when the last good check ran. %>
+<% const last = check.last; %>
+<% if (!config.configured) { %>
+  <div class="flash flash-error" role="alert"><strong>Cloudflare not configured.</strong> Add CLOUDFLARE_API_TOKEN to .env and restart the portal (see the README, Cloudflare, for the read-only token permissions).</div>
+<% } else if (last && last.status === 'failed' && last.trigger_type !== 'domain') { %>
+  <div class="flash flash-error" role="alert"><strong>The last Cloudflare check failed</strong> (<%= fmtDate(last.started_at) %>): <%= last.error %><% if (check.lastOkAt) { %><br><span class="small">Showing data from the last good check, <%= fmtDate(check.lastOkAt) %>.</span><% } %></div>
+<% } else if (last && last.status === 'ok' && last.error) { %>
+  <div class="flash flash-info" role="status"><strong>Some Cloudflare accounts could not be read in the last check:</strong> <%= last.error %></div>
+<% } %>
+<p class="muted small cf-check-line">
+  <% if (check.lastOkAt) { %><%- icon('check-circle') %> Last checked <strong title="<%= fmtDate(check.lastOkAt) %>"><%= fmtAgo(check.lastOkAt) %></strong> · checks run at 00:15, 06:15, 12:15 and 18:15 (UK)<% } else if (last && last.status === 'running') { %>A check is running (started <%= fmtAgo(last.started_at) %>).<% } else { %>Not checked yet<%= config.configured ? ': click Check now.' : '.' %><% } %>
+</p>

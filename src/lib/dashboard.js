@@ -110,6 +110,16 @@ async function recentUpdates(db) {
   };
 }
 
+// Cloudflare: domains with problems (not hidden), for the small Domains tile. null when
+// Cloudflare is not set up and there are no domains.
+async function domainProblems(db) {
+  const { listDomains } = require('./cloudflare/data'); // eslint-disable-line global-require
+  const { cfConfig } = require('./cloudflare/api'); // eslint-disable-line global-require
+  const domains = (await listDomains(db)).filter((d) => !d.hidden);
+  if (!domains.length && !cfConfig().configured) return null;
+  return { problems: domains.filter((d) => d.problem).length, expiring: domains.filter((d) => !d.problem && d.expiring).length, total: domains.length };
+}
+
 async function dashboardData(user) {
   const week = ukWeek();
   const chart = await weekChart(pool, week);
@@ -134,6 +144,7 @@ async function dashboardData(user) {
   `);
   const [[unassigned]] = await pool.query("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'closed' AND assigned_to IS NULL");
   const updates = await recentUpdates(pool);
+  const domains = await domainProblems(pool);
   return {
     week,
     chart,
@@ -143,6 +154,7 @@ async function dashboardData(user) {
     people: people.map((p) => ({ id: p.id, name: p.name, count: Number(p.open_count) })),
     unassigned: Number(unassigned.n),
     updates,
+    domains,
   };
 }
 

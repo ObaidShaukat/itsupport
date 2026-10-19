@@ -20,6 +20,13 @@
     <p class="dash-date"><%= week.longDay %></p>
     <h1><%= hello %>, <%= firstName(currentUser.name || currentUser.username) %></h1>
   </div>
+  <% if (locals.domains) { %>
+    <a href="/cloudflare/domains<%= domains.problems ? '?status=problems' : '' %>" class="mini-tile" title="Cloudflare domains: <%= domains.total %> monitored">
+      <span class="mini-tile-label"><% if (domains.problems) { %><span class="led led-urgent" aria-hidden="true"></span><% } else if (domains.expiring) { %><span class="led led-high" aria-hidden="true"></span><% } %>Domains</span>
+      <span class="mini-tile-value" data-count="<%= domains.problems %>"><%= domains.problems %></span>
+      <span class="mini-tile-sub"><%= domains.problems === 1 ? 'problem' : 'problems' %><%= domains.expiring ? ` · ${domains.expiring} expiring` : '' %></span>
+    </a>
+  <% } %>
   <div class="dash-people" aria-label="Open tickets per person">
     <span class="dash-people-label">Open per person</span>
     <div class="avatar-stack avatar-row">

@@ -1,0 +1,30 @@
+<%- include('../partials/head') %>
+<% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users || '').split(',').map(Number); %>
+<header class="page-head reveal">
+  <div>
+    <p class="crumbs"><a href="/cloudflare/domains">Cloudflare</a></p>
+    <h1>Cloudflare settings</h1>
+    <p class="muted">Who is alerted when a domain stops using Cloudflare's nameservers, is removed from Cloudflare or is about to expire, or an account can no longer be read.</p>
+  </div>
+</header>
+<% if (error) { %><div class="flash flash-error" role="alert"><%= error %></div><% } %>
+<% if (!config.configured) { %><div class="flash flash-info" role="status"><%= config.message %></div><% } %>
+
+<form method="post" action="/cloudflare/settings" class="card reveal form">
+  <%- csrfField %>
+  <fieldset class="field choice-group" data-alert-users>
+    <legend>Who gets Cloudflare alerts</legend>
+    <label class="choice"><input type="checkbox" name="alert_all" value="1" <%= everyone ? 'checked' : '' %> data-alert-all><span><strong>Everyone</strong> (all portal users, including people added later)</span></label>
+    <div class="gdap-user-list" data-alert-list>
+      <% for (const u of users) { %>
+        <label class="choice"><input type="checkbox" name="alert_user_ids" value="<%= u.id %>" <%= everyone || chosen.includes(u.id) ? 'checked' : '' %>><%- avatar({ id: u.id, name: u.name }, 'xs') %><span><%= u.name %> <span class="muted small">(<%= String(u.notify_channels || '').split(',').filter(Boolean).join(', ') || 'no channels' %>)</span></span></label>
+      <% } %>
+    </div>
+    <small class="muted">Each person gets alerts the way they chose under My profile → Notifications (popup, email, desktop), once per event. Hidden domains never alert.</small>
+  </fieldset>
+  <div class="form-actions">
+    <button type="submit" class="btn btn-primary"><%- icon('check') %><span>Save</span></button>
+    <a href="/cloudflare/domains" class="btn btn-ghost">Cancel</a>
+  </div>
+</form>
+<%- include('../partials/foot') %>

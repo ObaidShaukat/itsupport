@@ -23,6 +23,8 @@ const cron = require('node-cron');
 const { syncGdap } = require('./src/lib/gdap/sync');
 const { runDailyChecks } = require('./src/lib/gdap/alerts');
 const { gdapConfig } = require('./src/lib/gdap/graph');
+const { cfConfig } = require('./src/lib/cloudflare/api');
+const { runChecks: runCloudflareChecks } = require('./src/lib/cloudflare/check');
 const { syncCustomers: syncCs1Customers } = require('./src/lib/cs1/sync');
 const { cs1ApiConfig } = require('./src/lib/cs1/api');
 const { DATE_FORMATS, formattersFor } = require('./src/lib/dates');
@@ -84,6 +86,13 @@ app.locals.navItems = [
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar', secondary: true },
   { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard', group: true },
   { key: 'gdap', href: '/microsoft-partner', label: 'Microsoft Partner', icon: 'shield', secondary: true },
+  {
+    key: 'cloudflare', href: '/cloudflare/domains', label: 'Cloudflare', icon: 'globe', group: true, secondary: true,
+    children: [
+      { href: '/cloudflare/domains', label: 'Domains', match: '/cloudflare/domains' },
+      { href: '/cloudflare/accounts', label: 'Accounts', match: '/cloudflare/accounts' },
+    ],
+  },
   {
     key: 'cs1', href: '/call-switch-one/billing', label: 'Call Switch One', icon: 'phone', group: true, secondary: true,
     children: [
@@ -179,6 +188,7 @@ const NAV_PREFIXES = [
   ['/report', 'report'], ['/log-work', 'report'], ['/activity', 'report'],
   ['/inventory', 'inventory'],
   ['/call-switch-one', 'cs1'],
+  ['/cloudflare', 'cloudflare'],
   ['/settings', 'dictionary'],
 ];
 app.use((req, res, next) => {
@@ -248,6 +258,7 @@ app.use('/notifications', require('./src/routes/notifications'));
 app.use('/push', require('./src/routes/push'));
 app.use('/microsoft-partner', require('./src/routes/gdap'));
 app.use('/gdap', moved('/microsoft-partner'));
+app.use('/cloudflare', require('./src/routes/cloudflare'));
 app.use('/call-switch-one', require('./src/routes/cs1'));
 app.use('/inventory', require('./src/routes/inventory'));
 app.use('/settings/dictionary', require('./src/routes/dictionary'));
@@ -335,6 +346,30 @@ setTimeout(async () => {
     console.error('GDAP catch-up failed:', err.message);
   }
 }, 90 * 1000).unref();
+
+// Cloudflare (read only, src/lib/cloudflare): accounts, zones, public DNS nameservers and
+// (once a day per domain) RDAP expiry, every 6 hours at 00:15 / 06:15 / 12:15 / 18:15 UK,
+// then the alerts. After a restart, a check more than 6 hours old is caught up.
+async function cloudflareCheck() {
+  if (!cfConfig().configured) return;
+  try {
+    const result = await runCloudflareChecks(null, { trigger: 'schedule' });
+    if (!result.ok) console.error('Cloudflare check failed:', result.error);
+  } catch (err) {
+    console.error('Cloudflare check failed:', err.message);
+  }
+}
+cron.schedule('15 0,6,12,18 * * *', cloudflareCheck, { timezone: 'Europe/London' });
+if (!cfConfig().configured) console.warn(cfConfig().message);
+setTimeout(async () => {
+  if (!cfConfig().configured) return;
+  try {
+    const [[row]] = await pool.query("SELECT MAX(finished_at) AS last FROM cf_check_log WHERE status = 'ok' AND trigger_type <> 'domain'");
+    if (!row.last || Date.now() - new Date(row.last).getTime() > 6 * 60 * 60 * 1000) await cloudflareCheck();
+  } catch (err) {
+    console.error('Cloudflare catch-up failed:', err.message);
+  }
+}, 150 * 1000).unref();
 
 // Call Switch One customers: read from the CallSwitch One API (read only) every day at
 // 06:30 UK (src/lib/cs1/sync.js), caught up after a restart when the last good sync is

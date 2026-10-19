@@ -190,6 +190,27 @@ The **Microsoft Partner** page (`/microsoft-partner`; old `/gdap` links redirect
 - **Alerts:** 30, 14, 7 and 1 days before a relationship ends (the days can be changed in Settings) and when it has expired (can be turned off), once each per relationship (a new end date after renewal starts them again). They go to the people chosen in Settings (everyone by default), each by their own choice of popup, email and desktop notification. The email subject is "Microsoft Partner: GDAP expiring in {n} days: {customer}". Settings also has a **daily digest** email listing everything ending in the next 30 days.
 - Syncs, alerts, links and settings changes are in `/activity`, never on the Daily Report.
 
+## Cloudflare (domain monitoring, read only)
+
+The top bar menu **Cloudflare** has **Domains** (`/cloudflare/domains`) and **Accounts** (`/cloudflare/accounts`). The portal only ever reads from Cloudflare (GET requests to the Cloudflare API v4); it never changes anything there.
+
+**Setup**
+
+1. In the Cloudflare dashboard: My Profile → API Tokens → Create Token → Custom token. Permissions: **Account → Account Settings → Read** and **Zone → Zone → Read**, plus (optional, to show who deleted a zone) **Account → Account Audit Logs → Read**. Account resources: **All accounts** (or every customer account); Zone resources: **All zones**.
+2. Put the token in `.env` as `CLOUDFLARE_API_TOKEN`, then run `npm run migrate` (creates `cf_accounts`, `domains`, `domain_events`, `cf_check_log` and `cf_settings`) and `pm2 restart itsupport`.
+3. Open Cloudflare → Domains and click **Check now**. Without a token the pages say "Cloudflare not configured"; a wrong or expired token shows "Token rejected".
+
+**What is checked** (every 6 hours at 00:15, 06:15, 12:15 and 18:15 UK time, plus **Check now** for everything or one domain; a check older than 6 hours is caught up after a restart):
+
+- Every account the token can see and every zone in it: status (active, pending, moved, deactivated), plan and Cloudflare's assigned nameservers. Rate limits are respected (the portal waits and retries).
+- Each domain's nameservers in public DNS (asked of 1.1.1.1 and 8.8.8.8). If they no longer match Cloudflare's, the domain shows **NS changed** straight away, before Cloudflare marks it "moved". The provider is shown in plain words (GoDaddy, 123-reg, Cloudflare...), with the full list on hover.
+- A zone missing from an account we can still see is marked **Deleted** (the record is kept), with who and when from the account's audit log when the token can read it. A whole account that disappears is marked **Access lost**; its domains are left as they were.
+- Once a day per domain: the expiry date and registrar from RDAP (rdap.org). Domains whose TLD has no RDAP are skipped.
+
+**Pages**: Domains has summary tiles, filters (status, client, account, expiring, hidden), search and sortable columns (problems first by default); red LED = a problem, amber = expiring within 30 days. Each domain has a page with all fields, an event timeline, its client and notes. Accounts are linked to clients automatically by name (capitals, punctuation and Ltd / Limited ignored), or by hand; domains follow their account's client unless set on the domain page. Client pages show a **Domains** card, and the dashboard a small Domains tile with the number of problems.
+
+**Alerts** (popup, email and desktop, by each person's notification choices; once per event; never for hidden domains): nameservers changed, removed from Cloudflare, expiring in 30 / 14 / 7 days, expired, and lost access to an account. Choose who gets them under Cloudflare → Settings (default everyone). Checks, events, alerts and changes are in the Activity log, never on the Daily Report.
+
 ## Call Switch One (customers and monthly call charges)
 
 The top bar menu **Call Switch One** has **Customers** (`/call-switch-one/customers`) and **Billing** (`/call-switch-one/billing`). Run `npm run migrate` after updating: it creates the `cs1_*` tables (including `cs1_sync_log`), adds the new customer columns, and once clears names that were really CS1 IDs. Email uses the same SMTP settings as the Daily Report.

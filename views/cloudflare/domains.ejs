@@ -1,0 +1,123 @@
+<%- include('../partials/head') %>
+<%#
+  Cloudflare > Domains (src/routes/cloudflare.js): summary tiles, status filters, client /
+  account filters, search, sortable columns (default: problems first, then A-Z), Check now
+  and Hide per row. Red LED = a problem, amber = expiring within 30 days.
+%>
+<%
+  const last = check.last;
+  const failed = last && last.status === 'failed' && last.trigger_type !== 'domain';
+  const here = href({});
+  const sortHead = (key, label, cls = '') => {
+    const active = state.sort === key;
+    const dir = active && state.dir === 'asc' ? 'desc' : 'asc';
+    return `<th class="${cls}" aria-sort="${active ? (state.dir === 'asc' ? 'ascending' : 'descending') : 'none'}"><a href="${escapeFn(href({ sort: key, dir }))}" class="sort-link ${active ? 'is-sorted' : ''}">${escapeFn(label)}<span class="sort-arrow" aria-hidden="true">${active ? (state.dir === 'asc' ? '▲' : '▼') : '↕'}</span></a></th>`;
+  };
+%>
+<header class="page-head reveal">
+  <div>
+    <p class="crumbs">Cloudflare</p>
+    <h1>Domains</h1>
+    <p class="muted">Every zone in the Cloudflare accounts the token can see (read only), checked every 6 hours: status, nameservers in public DNS and expiry.</p>
+  </div>
+  <div class="actions">
+    <a href="/cloudflare/settings" class="btn btn-small btn-ghost"><%- icon('sliders') %><span>Settings</span></a>
+    <form method="post" action="/cloudflare/check" class="inline" data-busy-label="Checking…">
+      <%- csrfField %>
+      <input type="hidden" name="back" value="<%= here %>">
+      <button type="submit" class="btn btn-small btn-primary" <%= config.configured ? '' : 'disabled' %>><%- icon('refresh') %><span>Check now</span></button>
+    </form>
+  </div>
+</header>
+
+<%- include('_status-banner', { config, check }) %>
+
+<div class="cf-tiles reveal">
+  <a href="/cloudflare/domains" class="tile cf-tile"><span class="tile-label">Total</span><span class="big-num" data-count="<%= summary.total %>"><%= summary.total %></span></a>
+  <a href="/cloudflare/domains?status=healthy" class="tile cf-tile"><span class="tile-label">Healthy</span><span class="big-num" data-count="<%= summary.healthy %>"><%= summary.healthy %></span></a>
+  <a href="/cloudflare/domains?status=ns_changed" class="tile cf-tile <%= summary.nsChanged ? 'has-problem' : '' %>"><span class="tile-label"><% if (summary.nsChanged) { %><span class="led led-urgent" aria-hidden="true"></span><% } %>Nameservers changed</span><span class="big-num" data-count="<%= summary.nsChanged %>"><%= summary.nsChanged %></span></a>
+  <a href="/cloudflare/domains?status=moved" class="tile cf-tile <%= summary.movedDeleted ? 'has-problem' : '' %>"><span class="tile-label"><% if (summary.movedDeleted) { %><span class="led led-urgent" aria-hidden="true"></span><% } %>Moved / deleted</span><span class="big-num" data-count="<%= summary.movedDeleted %>"><%= summary.movedDeleted %></span></a>
+  <a href="/cloudflare/domains?status=expiring" class="tile cf-tile"><span class="tile-label"><% if (summary.expiring) { %><span class="led led-high" aria-hidden="true"></span><% } %>Expiring in 30 days</span><span class="big-num" data-count="<%= summary.expiring %>"><%= summary.expiring %></span></a>
+</div>
+
+<section class="panel reveal" id="domains">
+  <form method="get" action="/cloudflare/domains" class="filter-row">
+    <% if (state.status !== 'all') { %><input type="hidden" name="status" value="<%= state.status %>"><% } %>
+    <% if (state.sort) { %><input type="hidden" name="sort" value="<%= state.sort %>"><input type="hidden" name="dir" value="<%= state.dir %>"><% } %>
+    <nav class="filters" aria-label="Filter by status">
+      <% for (const [key, f] of Object.entries(filters)) { %>
+        <a href="<%= href({ status: key }) %>" class="<%= state.status === key ? 'active' : '' %>"><%= f.label %> <span class="count"><%= counts[key] %></span></a>
+      <% } %>
+    </nav>
+    <label class="filter-field">
+      <span class="visually-hidden">Client</span>
+      <select name="client" data-autosubmit data-combobox>
+        <option value="">All clients</option>
+        <% for (const c of clients) { %><option value="<%= c.id %>" <%= state.client === c.id ? 'selected' : '' %>><%= c.name %></option><% } %>
+      </select>
+    </label>
+    <label class="filter-field">
+      <span class="visually-hidden">Cloudflare account</span>
+      <select name="account" data-autosubmit>
+        <option value="">All accounts</option>
+        <% for (const a of accounts) { %><option value="<%= a.id %>" <%= state.account === a.id ? 'selected' : '' %>><%= a.name %></option><% } %>
+      </select>
+    </label>
+    <label class="search-field filter-search">
+      <%- icon('search') %>
+      <span class="visually-hidden">Search domains, clients, accounts and providers</span>
+      <input type="search" name="q" value="<%= state.q %>" placeholder="Search" autocomplete="off" data-1p-ignore data-lpignore="true">
+    </label>
+    <button type="submit" class="btn btn-secondary btn-small">Search</button>
+    <% if (state.client || state.account || state.q || state.status !== 'all' || state.sort) { %><a href="/cloudflare/domains" class="btn btn-ghost btn-small">Clear</a><% } %>
+  </form>
+
+  <% if (!rows.length) { %>
+    <p class="empty"><%= total ? 'No domains match these filters.' : (config.configured ? 'No domains yet: click Check now to read them from Cloudflare.' : 'No domains yet.') %></p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table cf-table">
+        <thead>
+          <tr>
+            <th class="cf-led"><span class="visually-hidden">Problem</span></th>
+            <%- sortHead('domain', 'Domain', 'cf-domain') %>
+            <%- sortHead('client', 'Client', 'cf-client') %>
+            <%- sortHead('account', 'Cloudflare account', 'cf-account') %>
+            <%- sortHead('status', 'Status', 'cf-status') %>
+            <%- sortHead('ns', 'Nameservers', 'cf-ns') %>
+            <%- sortHead('expiry', 'Expiry', 'cf-expiry') %>
+            <%- sortHead('checked', 'Last checked', 'cf-checked right') %>
+            <th class="cf-actions"><span class="visually-hidden">Actions</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% for (const d of rows) { %>
+            <tr class="<%= d.hidden ? 'is-hidden-row' : '' %>">
+              <td class="cf-led"><% if (d.led) { %><span class="led led-<%= d.led %>" title="<%= d.problem ? 'Needs attention' : 'Expiring soon' %>"></span><% } %></td>
+              <td title="<%= d.name %>"><a href="/cloudflare/domains/<%= d.id %>"><strong><%= d.name %></strong></a><% if (d.notes) { %> <span class="muted" title="Has notes"><%- icon('file') %></span><% } %></td>
+              <td title="<%= d.client_name || '' %>"><% if (d.client_name) { %><a href="/clients/<%= d.client_id %>"><%= d.client_name %></a><% } else { %><span class="muted">—</span><% } %></td>
+              <td title="<%= d.account_name || '' %>"><%= d.account_name || '—' %><% if (d.account_lost) { %> <span class="status-pill is-bad">No access</span><% } %></td>
+              <td><%- include('_status-pill', { d }) %></td>
+              <td title="<%= d.current.length ? d.current.join(', ') : (d.ns_checked_at ? 'No nameservers found' : 'Not checked yet') %><%= d.assigned.length ? `\nCloudflare's: ${d.assigned.join(', ')}` : '' %>"><%= d.provider %></td>
+              <td title="<%= d.registrar ? `Registrar: ${d.registrar}` : (d.rdap_note || '') %>">
+                <% if (d.expires_on) { %><%= fmtDay(d.expires_on) %> <span class="small <%= d.expired ? 'is-error' : 'muted' %>"><%= d.daysLabel %></span><% } else { %><span class="muted">—</span><% } %>
+              </td>
+              <td class="right muted" title="<%= d.last_checked ? fmtDate(d.last_checked) : '' %>"><%= d.last_checked ? fmtAgo(d.last_checked) : '—' %></td>
+              <td class="row-actions cf-actions">
+                <form method="post" action="/cloudflare/domains/<%= d.id %>/check" class="inline" data-busy-label="…">
+                  <%- csrfField %><input type="hidden" name="back" value="<%= here %>">
+                  <button type="submit" class="icon-btn" title="Check now" aria-label="Check <%= d.name %> now" <%= config.configured ? '' : 'disabled' %>><%- icon('refresh') %></button>
+                </form>
+                <form method="post" action="/cloudflare/domains/<%= d.id %>/hide" class="inline">
+                  <%- csrfField %><input type="hidden" name="back" value="<%= here %>"><input type="hidden" name="hide" value="<%= d.hidden ? '0' : '1' %>">
+                  <button type="submit" class="icon-btn" title="<%= d.hidden ? 'Unhide' : 'Hide (no counts, no alerts)' %>" aria-label="<%= d.hidden ? 'Unhide' : 'Hide' %> <%= d.name %>"><%- icon(d.hidden ? 'eye' : 'eye-off') %></button>
+                </form>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</section>
+<%- include('../partials/foot') %>

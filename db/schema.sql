@@ -280,7 +280,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
   client_name VARCHAR(200) NULL,
   entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                    'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'manual') NOT NULL,
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'cloudflare', 'manual') NOT NULL,
   entity_id INT UNSIGNED NULL,
   action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',
               'reopened', 'deleted', 'uploaded', 'completed', 'sent', 'assigned', 'returned', 'viewed', 'copied', 'exported', 'synced') NOT NULL,
@@ -845,6 +845,109 @@ CREATE TABLE IF NOT EXISTS user_sessions (
   CONSTRAINT fk_user_sessions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- Cloudflare monitoring (READ ONLY; src/lib/cloudflare, /cloudflare). One Cloudflare account
+-- per customer: every account the token can see, and every zone in them.
+CREATE TABLE IF NOT EXISTS cf_accounts (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  account_id VARCHAR(64) NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  client_id INT UNSIGNED NULL,
+  -- 1 = linked (or unlinked) by hand: the automatic name match leaves it alone.
+  link_manual TINYINT(1) NOT NULL DEFAULT 0,
+  first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_seen DATETIME NULL,
+  -- The token no longer sees this account (its domains are kept as they were).
+  access_lost TINYINT(1) NOT NULL DEFAULT 0,
+  access_lost_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_cf_accounts_account (account_id),
+  CONSTRAINT fk_cf_accounts_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Domains we monitor. Generic: Cloudflare zones today (zone_id, cf_*), other checks
+-- (e.g. Microsoft 365 DNS health) can add their own columns or tables later.
+CREATE TABLE IF NOT EXISTS domains (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(253) NOT NULL,
+  zone_id VARCHAR(64) NULL,
+  cf_account_id INT UNSIGNED NULL,
+  -- Inherited from the Cloudflare account unless client_manual = 1 (set on the domain page).
+  client_id INT UNSIGNED NULL,
+  client_manual TINYINT(1) NOT NULL DEFAULT 0,
+  -- Cloudflare's zone status: active, pending, moved, deactivated (deleted is ours: deleted_at).
+  cf_status VARCHAR(20) NULL,
+  cf_type VARCHAR(20) NULL,
+  plan VARCHAR(100) NULL,
+  -- JSON arrays of host names (lower case, no trailing dot).
+  assigned_ns TEXT NULL,
+  current_ns TEXT NULL,
+  -- NULL = not checked yet (or the lookup failed), 1 = on Cloudflare's, 0 = changed.
+  nameservers_ok TINYINT(1) NULL,
+  ns_checked_at DATETIME NULL,
+  registrar VARCHAR(255) NULL,
+  expires_on DATE NULL,
+  rdap_checked_at DATETIME NULL,
+  rdap_note VARCHAR(255) NULL,
+  first_seen DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_checked DATETIME NULL,
+  deleted_at DATETIME NULL,
+  deleted_by VARCHAR(255) NULL,
+  hidden_at DATETIME NULL,
+  hidden_by INT UNSIGNED NULL,
+  notes TEXT NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_domains_name (name),
+  KEY idx_domains_zone (zone_id),
+  KEY idx_domains_client (client_id),
+  CONSTRAINT fk_domains_account FOREIGN KEY (cf_account_id) REFERENCES cf_accounts (id) ON DELETE SET NULL,
+  CONSTRAINT fk_domains_client FOREIGN KEY (client_id) REFERENCES clients (id) ON DELETE SET NULL,
+  CONSTRAINT fk_domains_hidden_by FOREIGN KEY (hidden_by) REFERENCES users (id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- What the checks found: ns_changed, moved, deleted, re_added, back_to_cloudflare,
+-- expiring, expired, access_lost (account; domain_id NULL). details is JSON (old / new
+-- nameservers, days, who...). dedupe_key makes each event (and so each alert) happen once;
+-- alerted_at is set when its alert went out (or was skipped: hidden, not an alert type).
+CREATE TABLE IF NOT EXISTS domain_events (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  domain_id INT UNSIGNED NULL,
+  cf_account_id INT UNSIGNED NULL,
+  type VARCHAR(30) NOT NULL,
+  details TEXT NULL,
+  dedupe_key VARCHAR(191) NULL,
+  detected_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  alerted_at DATETIME NULL,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_domain_events_key (dedupe_key),
+  KEY idx_domain_events_domain (domain_id, detected_at),
+  KEY idx_domain_events_alert (alerted_at),
+  CONSTRAINT fk_domain_events_domain FOREIGN KEY (domain_id) REFERENCES domains (id) ON DELETE CASCADE,
+  CONSTRAINT fk_domain_events_account FOREIGN KEY (cf_account_id) REFERENCES cf_accounts (id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One row per Cloudflare check run (every 6 hours, Check now).
+CREATE TABLE IF NOT EXISTS cf_check_log (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  finished_at DATETIME NULL,
+  status ENUM('running', 'ok', 'failed') NOT NULL DEFAULT 'running',
+  trigger_type ENUM('schedule', 'manual', 'domain') NOT NULL DEFAULT 'schedule',
+  user_id INT UNSIGNED NULL,
+  accounts INT UNSIGNED NULL,
+  domains INT UNSIGNED NULL,
+  events INT UNSIGNED NULL,
+  error TEXT NULL,
+  PRIMARY KEY (id),
+  KEY idx_cf_check_log_started (started_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Cloudflare settings: alert_users ("all" or a comma list of user ids).
+CREATE TABLE IF NOT EXISTS cf_settings (
+  name VARCHAR(50) NOT NULL,
+  value TEXT NULL,
+  PRIMARY KEY (name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- Team spellchecker dictionary (src/lib/spell.js): words everyone's checker accepts.
 -- Matched case-insensitively; word is stored as typed (unique ignoring case).
 CREATE TABLE IF NOT EXISTS dictionary_words (
@@ -909,7 +1012,7 @@ ALTER TABLE ticket_history
 ALTER TABLE activity_log
   MODIFY entity_type ENUM('ticket', 'ticket_comment', 'client_service', 'step', 'note', 'service',
                           'kb_article', 'tutorial', 'client', 'user', 'setting', 'task', 'reminder', 'report', 'inv_person', 'inv_asset', 'inv_stock',
-                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'manual') NOT NULL;
+                   'inv_access', 'inv_shared', 'inv_setting', 'inv_record', 'inv_item', 'inv_config', 'inv_secret', 'gdap', 'cs1', 'dictionary', 'cloudflare', 'manual') NOT NULL;
 
 ALTER TABLE activity_log
   MODIFY action ENUM('created', 'updated', 'status_changed', 'commented', 'step_done', 'closed',

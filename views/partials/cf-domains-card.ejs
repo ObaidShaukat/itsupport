@@ -1,0 +1,17 @@
+<%# Client page: the client's Cloudflare domains (shaped by shapeDomain; hidden ones left out). %>
+<section class="card cf-client-card" id="domains">
+  <div class="card-head">
+    <h2><%- icon('globe') %> Domains</h2>
+    <a href="/cloudflare/domains?client=<%= clientId %>" class="link-more small">Cloudflare</a>
+  </div>
+  <ul class="cf-client-list">
+    <% for (const d of domains) { %>
+      <li>
+        <% if (d.led) { %><span class="led led-<%= d.led %>" aria-hidden="true"></span><% } else { %><span class="cf-led-space" aria-hidden="true"></span><% } %>
+        <a href="/cloudflare/domains/<%= d.id %>"><strong><%= d.name %></strong></a>
+        <%- include('../cloudflare/_status-pill', { d }) %>
+        <span class="muted small"><%= d.provider %><%= d.expires_on ? ` · expires ${fmtDay(d.expires_on)}` : '' %></span>
+      </li>
+    <% } %>
+  </ul>
+</section>
