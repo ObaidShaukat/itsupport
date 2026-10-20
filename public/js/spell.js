@@ -200,11 +200,28 @@
       el.spellcheck = true;
     };
     // The flagged word under a point (click / right-click), from the layer's underlines.
+    // rectOf() gives the word's box now (the layer's underline span), so the popup follows the
+    // word when the page, a dialog or the textarea scrolls; null once it is out of view.
     state.issueAt = (x, y) => {
       const marks = [...layer.querySelectorAll('.spell-bad')];
       for (let i = 0; i < marks.length; i += 1) {
-        for (const r of marks[i].getClientRects()) {
-          if (x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1) return { issue: state.issues[i], rect: r };
+        const rects = [...marks[i].getClientRects()];
+        for (let k = 0; k < rects.length; k += 1) {
+          const r = rects[k];
+          if (x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1) {
+            const mark = marks[i];
+            return {
+              issue: state.issues[i],
+              rectOf: () => {
+                if (!mark.isConnected) return null;
+                const now = mark.getClientRects()[k] || mark.getBoundingClientRect();
+                const box = el.getBoundingClientRect();
+                // Scrolled out of the textarea.
+                if (now.bottom < box.top || now.top > box.bottom || now.right < box.left || now.left > box.right) return null;
+                return now;
+              },
+            };
+          }
         }
       }
       return null;
@@ -236,7 +253,7 @@
       const hit = state.issueAt(event.clientX, event.clientY);
       if (!hit) return;
       if (viaMenu) event.preventDefault();
-      showPopup(state, hit.issue, hit.rect);
+      showPopup(state, hit.issue, hit.rectOf);
     };
     el.addEventListener('click', (e) => open(e, false));
     el.addEventListener('contextmenu', (e) => open(e, true));
@@ -288,8 +305,15 @@
     };
     state.issueAt = (x, y) => {
       for (const item of ceRanges.get(state) || []) {
-        for (const r of item.range.getClientRects()) {
-          if (x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1) return { issue: item, rect: r };
+        const rects = [...item.range.getClientRects()];
+        for (let k = 0; k < rects.length; k += 1) {
+          const r = rects[k];
+          if (x >= r.left - 1 && x <= r.right + 1 && y >= r.top - 1 && y <= r.bottom + 1) {
+            return {
+              issue: item,
+              rectOf: () => (item.node.isConnected ? item.range.getClientRects()[k] || item.range.getBoundingClientRect() : null),
+            };
+          }
         }
       }
       return null;
@@ -315,13 +339,13 @@
       const sel = window.getSelection();
       if (sel && !sel.isCollapsed) return;
       const hit = state.issueAt(e.clientX, e.clientY);
-      if (hit) showPopup(state, hit.issue, hit.rect);
+      if (hit) showPopup(state, hit.issue, hit.rectOf);
     });
     el.addEventListener('contextmenu', (e) => {
       const hit = state.issueAt(e.clientX, e.clientY);
       if (!hit) return;
       e.preventDefault();
-      showPopup(state, hit.issue, hit.rect);
+      showPopup(state, hit.issue, hit.rectOf);
     });
     return state;
   }
@@ -329,15 +353,18 @@
   // ---- The popup ----
   let pop = null;
   let popState = null;
+  let placePop = null; // repositions the open popup from its word (scroll / resize)
   function closePopup(refocus) {
     if (!pop) return;
+    try { if (pop.matches(':popover-open')) pop.hidePopover(); } catch (err) { /* not a popover */ }
     pop.remove();
+    placePop = null;
     pop = null;
     if (refocus && popState) popState.focus();
     popState = null;
   }
 
-  function showPopup(state, issue, rect) {
+  function showPopup(state, issue, rectOf) {
     closePopup(false);
     popState = state;
     pop = document.createElement('div');
@@ -360,21 +387,38 @@
     add.setAttribute('role', 'menuitem');
     add.textContent = 'Add to dictionary';
     pop.append(list, sep, ignore, add);
-    // Inside an open <dialog> the popup must be in the dialog to show above it.
-    const host = state.el.closest('dialog[open]') || document.body;
-    host.appendChild(pop);
+    // On <body>, shown in the browser's top layer (popover API), so it sits above an open
+    // modal and no parent transform (e.g. a dialog's scale-in) can move it. Older browsers
+    // without popovers: inside the open dialog, else on <body>.
+    const topLayer = typeof pop.showPopover === 'function';
+    if (topLayer) {
+      pop.setAttribute('popover', 'manual');
+      document.body.appendChild(pop);
+      pop.showPopover();
+    } else {
+      (state.el.closest('dialog[open]') || document.body).appendChild(pop);
+    }
 
+    // Just below the word (6px), left edges aligned; above it when there is no room below;
+    // kept inside the window. Closed when the word scrolls out of view.
     const position = () => {
+      const rect = rectOf();
+      if (!rect || rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) {
+        closePopup(false);
+        return;
+      }
       const w = pop.offsetWidth;
       const h = pop.offsetHeight;
-      let left = Math.min(Math.max(8, rect.left), window.innerWidth - w - 8);
+      const left = Math.min(Math.max(8, rect.left), window.innerWidth - w - 8);
       let top = rect.bottom + 6;
-      if (top + h > window.innerHeight - 8 && rect.top - h - 6 > 8) top = rect.top - h - 6;
-      left = Math.round(left);
-      pop.style.left = `${left}px`;
+      if (top + h > window.innerHeight - 8) top = rect.top - h - 6 >= 8 ? rect.top - h - 6 : Math.max(8, window.innerHeight - h - 8);
+      pop.style.left = `${Math.round(left)}px`;
       pop.style.top = `${Math.round(top)}px`;
+      pop.classList.toggle('is-above', top < rect.top);
     };
+    placePop = position;
     position();
+    if (!pop) return;
 
     const items = () => [...pop.querySelectorAll('.spell-opt')];
     const focusItem = (i) => { const all = items(); if (all.length) all[(i + all.length) % all.length].focus(); };
@@ -455,8 +499,15 @@
     }
   }, true);
   document.addEventListener('mousedown', (e) => { if (pop && !pop.contains(e.target)) closePopup(false); }, true);
-  window.addEventListener('scroll', (e) => { if (pop && !pop.contains(e.target)) closePopup(false); }, true);
-  window.addEventListener('resize', () => closePopup(false));
+  // Page, dialog or textarea scrolls and window resizes move the popup with its word.
+  let framed = false;
+  const follow = (e) => {
+    if (!pop || !placePop || (e && e.target instanceof Node && pop.contains(e.target)) || framed) return;
+    framed = true;
+    requestAnimationFrame(() => { framed = false; if (placePop) placePop(); });
+  };
+  window.addEventListener('scroll', follow, true);
+  window.addEventListener('resize', follow);
 
   // ---- Which fields ----
   function eligible(el) {

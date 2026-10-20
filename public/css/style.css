@@ -3563,3 +3563,7 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .m365-records .m365-col-record { width: 150px; }
 .m365-records .m365-col-status { width: 72px; }
 .m365-records .m365-col-found { width: 32%; }
+/* The spelling popup is shown in the top layer (popover API): undo the browser's popover
+   defaults (centred, inset 0); its top / left come from the word's own box. */
+.spell-pop[popover] { inset: auto; margin: 0; overflow: visible; width: auto; height: auto; }
+.spell-pop.is-above { transform-origin: bottom left; }
