@@ -15,7 +15,8 @@
 // mixed-case names (iPhone), URLs, email addresses, @mentions, #numbers, file names, paths
 // and anything inside `code`.
 // Click (or right-click) a flagged word: up to 5 suggestions, "Ignore" (this field only) and
-// "Add to dictionary" (everyone, POST /spell/words). Arrow keys + Enter, Esc closes.
+// "Add to dictionary" (everyone, POST /spell/words). Arrow keys + Enter, Esc closes; the field
+// keeps focus while the popup is open.
 (() => {
   const versionMeta = document.querySelector('meta[name="spell-version"]');
   if (!versionMeta || !window.Worker) return;
@@ -351,22 +352,115 @@
   }
 
   // ---- The popup ----
+  // The field keeps focus the whole time: pressing on the popup is preventDefault-ed (no blur,
+  // so the Daily Report lines and popovers stay as they are), the arrow keys move a highlight
+  // in the popup while typing stays in the field, and Enter runs the highlighted item. Clicks
+  // inside the popup never reach the page's click-outside handlers (inline popovers, menus).
   let pop = null;
   let popState = null;
+  let popIssue = null;
   let placePop = null; // repositions the open popup from its word (scroll / resize)
-  function closePopup(refocus) {
+  let active = -1; // the highlighted item (keyboard)
+  function closePopup() {
     if (!pop) return;
     try { if (pop.matches(':popover-open')) pop.hidePopover(); } catch (err) { /* not a popover */ }
     pop.remove();
     placePop = null;
     pop = null;
-    if (refocus && popState) popState.focus();
     popState = null;
+    popIssue = null;
+    active = -1;
+  }
+
+  // A small toast in the page's toast area (foot.ejs [data-toasts]).
+  function toast(text, isError) {
+    const box = document.querySelector('[data-toasts]');
+    if (!box) return;
+    const t = document.createElement('div');
+    t.className = isError ? 'toast toast-error' : 'toast toast-saved';
+    t.setAttribute('role', isError ? 'alert' : 'status');
+    if (!isError) t.innerHTML = '<span class="toast-icon toast-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M7.5 12.5l3 3 6-6.5"></path></svg></span>';
+    const span = document.createElement('span');
+    span.textContent = text;
+    t.append(span);
+    box.append(t);
+    setTimeout(() => { t.classList.add('is-leaving'); setTimeout(() => t.remove(), 300); }, isError ? 5000 : 2500);
+  }
+
+  // A suggestion in the flagged word's capitalisation: "teh" -> "the", "Teh" -> "The", "TEH" -> "THE".
+  function matchCase(word, s) {
+    if (word.length > 1 && word === word.toUpperCase() && word !== word.toLowerCase()) return s.toUpperCase();
+    const first = word.charAt(0);
+    if (first && first === first.toUpperCase() && first !== first.toLowerCase()) return s.charAt(0).toUpperCase() + s.slice(1);
+    return s;
+  }
+
+  // The field gets the focus back if it lost it (the caret stays where it was).
+  const keepFocus = (state) => {
+    const a = document.activeElement;
+    if (!a || a === document.body || (a !== state.el && !state.el.contains(a))) state.focus();
+  };
+
+  // The actions, the same for a click and for Enter.
+  function runAction(btn) {
+    if (!btn || !pop || btn.disabled) return;
+    const state = popState;
+    const issue = popIssue;
+    if (btn.dataset.suggestion !== undefined) {
+      closePopup();
+      state.replace(issue, matchCase(issue.word, btn.dataset.suggestion));
+    } else if (btn.dataset.action === 'ignore') {
+      closePopup();
+      state.ignored.add(issue.word.toLowerCase());
+      keepFocus(state);
+      state.check();
+    } else if (btn.dataset.action === 'add') {
+      addWord(btn, issue);
+    }
+  }
+
+  async function addWord(btn, issue) {
+    btn.disabled = true;
+    btn.textContent = 'Adding…';
+    try {
+      const res = await fetch('/spell/words', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: csrfToken, word: issue.word }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) throw new Error(data.error || 'The word could not be added to the dictionary.');
+      if (worker) worker.postMessage({ type: 'add', word: data.word || issue.word });
+      // Every spelling of it (any case) is fine now, in every field on the page.
+      const lower = issue.word.toLowerCase();
+      verdict.set(issue.word, true);
+      [...verdict.keys()].forEach((w) => { if (w.toLowerCase() === lower) verdict.set(w, true); });
+      const state = popState;
+      if (popIssue === issue) closePopup();
+      if (state) keepFocus(state);
+      fields.forEach((f) => f.check());
+      toast(`Added "${issue.word}" to the dictionary.`);
+      loadWords();
+    } catch (err) {
+      if (btn.isConnected) { btn.disabled = false; btn.textContent = 'Add to dictionary'; }
+      toast(err.message && err.message !== 'Failed to fetch' ? err.message : 'Could not reach the portal. The word was not added.', true);
+    }
+  }
+
+  const items = () => (pop ? [...pop.querySelectorAll('.spell-opt')] : []);
+  function highlightItem(i) {
+    const all = items();
+    if (!all.length) return;
+    active = (i + all.length) % all.length;
+    all.forEach((b, k) => b.classList.toggle('is-active', k === active));
+    all[active].scrollIntoView({ block: 'nearest' });
   }
 
   function showPopup(state, issue, rectOf) {
-    closePopup(false);
+    closePopup();
     popState = state;
+    popIssue = issue;
     pop = document.createElement('div');
     pop.className = 'spell-pop';
     pop.setAttribute('role', 'menu');
@@ -376,27 +470,37 @@
     list.innerHTML = '<span class="skeleton"></span><span class="skeleton skeleton-short"></span>';
     const sep = document.createElement('div');
     sep.className = 'spell-pop-sep';
-    const ignore = document.createElement('button');
-    ignore.type = 'button';
-    ignore.className = 'spell-opt spell-opt-action';
-    ignore.setAttribute('role', 'menuitem');
-    ignore.textContent = 'Ignore';
-    const add = document.createElement('button');
-    add.type = 'button';
-    add.className = 'spell-opt spell-opt-action';
-    add.setAttribute('role', 'menuitem');
-    add.textContent = 'Add to dictionary';
-    pop.append(list, sep, ignore, add);
-    // On <body>, shown in the browser's top layer (popover API), so it sits above an open
-    // modal and no parent transform (e.g. a dialog's scale-in) can move it. Older browsers
-    // without popovers: inside the open dialog, else on <body>.
-    const topLayer = typeof pop.showPopover === 'function';
-    if (topLayer) {
+    const action = (label, key) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.tabIndex = -1;
+      b.className = 'spell-opt spell-opt-action';
+      b.setAttribute('role', 'menuitem');
+      b.dataset.action = key;
+      b.textContent = label;
+      return b;
+    };
+    pop.append(list, sep, action('Ignore', 'ignore'), action('Add to dictionary', 'add'));
+    // Pressing on the popup keeps the focus (and the caret) in the field; the click itself
+    // runs the action and goes no further, so no click-outside handler closes what is behind.
+    pop.addEventListener('pointerdown', (e) => e.preventDefault());
+    pop.addEventListener('mousedown', (e) => e.preventDefault());
+    pop.addEventListener('click', (e) => {
+      e.stopPropagation();
+      runAction(e.target.closest('.spell-opt'));
+    });
+    pop.addEventListener('mousemove', (e) => {
+      const b = e.target.closest('.spell-opt');
+      if (b) highlightItem(items().indexOf(b));
+    });
+    // In the browser's top layer (popover API), so it sits above everything and no parent
+    // transform (e.g. a dialog's scale-in) can move it. Inside an open modal dialog it is put
+    // in that dialog: everything outside a modal dialog is inert and could not be clicked.
+    const host = state.el.closest('dialog[open]') || document.body;
+    host.appendChild(pop);
+    if (typeof pop.showPopover === 'function') {
       pop.setAttribute('popover', 'manual');
-      document.body.appendChild(pop);
       pop.showPopover();
-    } else {
-      (state.el.closest('dialog[open]') || document.body).appendChild(pop);
     }
 
     // Just below the word (6px), left edges aligned; above it when there is no room below;
@@ -404,7 +508,7 @@
     const position = () => {
       const rect = rectOf();
       if (!rect || rect.bottom < 0 || rect.top > window.innerHeight || rect.right < 0 || rect.left > window.innerWidth) {
-        closePopup(false);
+        closePopup();
         return;
       }
       const w = pop.offsetWidth;
@@ -420,48 +524,9 @@
     position();
     if (!pop) return;
 
-    const items = () => [...pop.querySelectorAll('.spell-opt')];
-    const focusItem = (i) => { const all = items(); if (all.length) all[(i + all.length) % all.length].focus(); };
-
-    ignore.addEventListener('click', () => {
-      state.ignored.add(issue.word.toLowerCase());
-      closePopup(true);
-      state.check();
-    });
-    add.addEventListener('click', async () => {
-      add.disabled = true;
-      try {
-        const res = await fetch('/spell/words', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ _csrf: csrfToken, word: issue.word }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.ok) throw new Error(data.error || 'The word could not be added.');
-        worker.postMessage({ type: 'add', word: data.word });
-        verdict.set(issue.word, true);
-        closePopup(true);
-        fields.forEach((f) => f.check());
-      } catch (err) {
-        add.disabled = false;
-        add.textContent = err.message;
-      }
-    });
-    pop.addEventListener('keydown', (e) => {
-      const all = items();
-      const i = all.indexOf(document.activeElement);
-      if (e.key === 'ArrowDown') { e.preventDefault(); focusItem(i + 1); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); focusItem(i - 1); }
-      else if (e.key === 'Home') { e.preventDefault(); focusItem(0); }
-      else if (e.key === 'End') { e.preventDefault(); focusItem(all.length - 1); }
-      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopup(true); }
-      else if (e.key === 'Tab') { closePopup(false); }
-    });
-
     if (!startWorker()) return;
     ask({ type: 'suggest', word: issue.word }).then((reply) => {
-      if (!pop || popState !== state) return;
+      if (!pop || popIssue !== issue) return;
       list.replaceChildren();
       const suggestions = reply.suggestions || [];
       if (!suggestions.length) {
@@ -473,32 +538,48 @@
       suggestions.forEach((s) => {
         const b = document.createElement('button');
         b.type = 'button';
+        b.tabIndex = -1;
         b.className = 'spell-opt spell-suggestion';
         b.setAttribute('role', 'menuitem');
-        b.textContent = s;
-        b.addEventListener('click', () => { closePopup(false); state.replace(issue, s); });
+        b.dataset.suggestion = s;
+        b.textContent = matchCase(issue.word, s);
         list.appendChild(b);
       });
+      // The highlight moves with the items (it was on Ignore / Add while loading).
+      if (active >= 0) highlightItem(active + suggestions.length);
       position();
     });
   }
-  // While the popup is open, arrow keys in the field move into it, Esc closes it and any other
-  // key closes it (the person carries on typing). The field keeps focus after a click.
+  // While the popup is open (focus stays in the field): Down / Up highlight an item, Enter runs
+  // the highlighted one, Esc closes, and any other key closes it (the person carries on typing).
   document.addEventListener('keydown', (e) => {
     if (!pop || !popState || e.target !== popState.el) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      const all = [...pop.querySelectorAll('.spell-opt')];
-      if (all.length) all[e.key === 'ArrowDown' ? 0 : all.length - 1].focus();
+      e.stopPropagation();
+      highlightItem(active < 0 ? (e.key === 'ArrowDown' ? 0 : -1) : active + (e.key === 'ArrowDown' ? 1 : -1));
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      runAction(items()[active]);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      closePopup(false);
+      closePopup();
     } else if (!['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
-      closePopup(false);
+      closePopup();
     }
   }, true);
-  document.addEventListener('mousedown', (e) => { if (pop && !pop.contains(e.target)) closePopup(false); }, true);
+  // A press anywhere else closes it; the popup and everything in it count as inside.
+  document.addEventListener('pointerdown', (e) => {
+    if (pop && !(e.target instanceof Node && pop.contains(e.target))) closePopup();
+  }, true);
+  // The field losing focus closes it too, unless the focus is going into the popup.
+  document.addEventListener('focusout', (e) => {
+    if (!pop || !popState || e.target !== popState.el) return;
+    if (e.relatedTarget instanceof Node && pop.contains(e.relatedTarget)) return;
+    setTimeout(() => { if (pop && popState && document.activeElement !== popState.el && !pop.contains(document.activeElement)) closePopup(); }, 0);
+  }, true);
   // Page, dialog or textarea scrolls and window resizes move the popup with its word.
   let framed = false;
   const follow = (e) => {
