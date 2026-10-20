@@ -46,6 +46,9 @@
           <button type="button" class="btn btn-small" data-copy-text="#m365-fix" data-copied="Copied. Paste it into your email to the customer."><%- icon('copy') %><span>Copy fix instructions</span></button>
         <% } %>
       </div>
+      <% if (domain.statusKey === 'issues' && domain.reasonLines.length) { %>
+        <div class="m365-reasons" role="status"><strong>Not right:</strong><ul><% for (const line of domain.reasonLines) { %><li><%= line %></li><% } %></ul></div>
+      <% } %>
       <% if (!records.length) { %>
         <p class="empty">Not checked yet: click Check now.</p>
       <% } else { %>
@@ -55,7 +58,7 @@
             <tbody>
               <% for (const r of records) { %>
                 <tr class="<%= r.ok ? '' : 'is-bad-row' %>">
-                  <td><strong><%= r.label %></strong><% if (r.where) { %><span class="m365-where"><%= r.where %></span><% } %><% if (!r.core) { %><span class="muted small">Information</span><% } %></td>
+                  <td><strong><%= r.label %></strong><% if (r.where) { %><span class="m365-where"><%= r.where %></span><% } %><% if (!r.ok && r.problem) { %><span class="m365-problem"><%= r.label %> <%= r.problem %></span><% } %><% if (!r.core) { %><span class="muted small">Information</span><% } %></td>
                   <td><span class="m365-mark <%= r.ok ? 'is-ok' : (r.core ? 'is-bad' : 'is-info') %>" aria-label="<%= r.ok ? 'OK' : 'Not right' %>"><%= r.ok ? '✅' : '❌' %></span></td>
                   <td class="m365-found" title="<%= r.found || 'Nothing found' %>"><%= r.found || 'Nothing found' %><% if (r.byProvider) { %><br><span class="m365-by"><%= r.byProvider %></span><% } %></td>
                   <td class="m365-expected" title="<%= r.expected %>">
@@ -67,7 +70,7 @@
             </tbody>
           </table>
         </div>
-        <p class="muted small">MX, SPF and Autodiscover decide the status. DKIM, DMARC and the Microsoft verification record are information only for now. Last looked up <%= fmtDate(records[0].checked_at) %> (1.1.1.1 / 8.8.8.8).</p>
+        <p class="muted small">Healthy only when MX, SPF, Autodiscover, DKIM selector1 and selector2 and DMARC (one record, p=quarantine or p=reject) are all right. The Microsoft verification record is information only. Last looked up <%= fmtDate(records[0].checked_at) %> (1.1.1.1 / 8.8.8.8).</p>
       <% } %>
       <% if (fixText) { %><textarea id="m365-fix" hidden readonly data-spell="off"><%= fixText %></textarea><% } %>
     </section>
@@ -84,7 +87,7 @@
               <div>
                 <strong><%= e.type === 'status_changed' ? `${e.old_status ? `${STATUS_LABELS[e.old_status] || e.old_status} → ` : ''}${STATUS_LABELS[e.new_status] || e.new_status}` : (EVENT_LABELS[e.type] || e.type) %></strong>
                 <span class="muted small"> · <%= fmtDate(e.created_at) %><%= e.user_name ? ` · ${e.user_name}` : '' %></span>
-                <% if (e.type === 'status_changed' && (det.issues || []).length) { %><div class="small muted">Not right: <%= det.issues.map((k) => LABELS[k] || k).join(', ') %></div><% } %>
+                <% if (e.type === 'status_changed' && (det.reasons || []).length) { %><div class="small muted">Not right: <%= det.reasons.map((x) => `${LABELS[x.r] || x.r} ${x.p}`).join(', ') %></div><% } else if (e.type === 'status_changed' && (det.issues || []).length) { %><div class="small muted">Not right: <%= det.issues.map((k) => LABELS[k] || k).join(', ') %></div><% } %>
                 <% if (det.reason) { %><div class="small muted"><%= det.reason %></div><% } %>
                 <% if (e.type === 'override') { %><div class="small muted"><%= USES[det.from] || det.from %> → <%= USES[det.to] || det.to %></div><% } %>
               </div>

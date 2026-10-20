@@ -72,6 +72,8 @@ const ADDED_COLUMNS = [
   ['users', 'ticket_view', 'VARCHAR(10) NULL AFTER report_view'],
   ['service_steps', 'stage', 'VARCHAR(100) NULL AFTER title'],
   ['client_service_steps', 'stage', 'VARCHAR(100) NULL AFTER title'],
+  ['m365_domains', 'issue_reasons', 'TEXT NULL AFTER issues'],
+  ['m365_checks', 'problem', 'VARCHAR(255) NULL AFTER expected'],
 ];
 
 // The old inventory (people, assets, stock, access, shared accounts, offboarding, custom
@@ -187,6 +189,12 @@ const ONE_TIME_STEPS = [
   // check them all again as soon as it starts, so they show Issues instead of Not Microsoft.
   ['m365_manual_yes_v1', async (conn) => {
     await conn.query("UPDATE m365_domains SET uses_m365 = 'yes' WHERE uses_m365 = 'auto'");
+    await conn.query("DELETE FROM m365_settings WHERE name = 'last_run'");
+  }],
+  // Email Services: stricter health rule (DKIM selector1 + selector2 and DMARC with p=quarantine
+  // or p=reject are now required). Forgetting last_run makes the app re-check every domain when
+  // it starts; alerts go only where the status really changes (healthy <-> issues).
+  ['m365_strict_rule_v1', async (conn) => {
     await conn.query("DELETE FROM m365_settings WHERE name = 'last_run'");
   }],
 ];

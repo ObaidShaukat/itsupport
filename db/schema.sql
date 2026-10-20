@@ -960,8 +960,10 @@ CREATE TABLE IF NOT EXISTS m365_domains (
   -- healthy, issues, not_m365, error; NULL = not checked yet.
   status VARCHAR(20) NULL,
   status_reason VARCHAR(255) NULL,
-  -- The core records that failed (mx,spf,autodiscover), for the list and the alerts.
+  -- The required records that failed (mx,spf,autodiscover,dkim1,dkim2,dmarc), for the list and the alerts.
   issues VARCHAR(100) NULL,
+  -- JSON [{ r: record, p: problem }] ("DMARC policy is none" = { r: dmarc, p: policy is none }).
+  issue_reasons TEXT NULL,
   nameservers TEXT NULL,
   dns_provider VARCHAR(100) NULL,
   -- "Us" when the domain is one of our Cloudflare domains, else "Customer".
@@ -986,6 +988,8 @@ CREATE TABLE IF NOT EXISTS m365_checks (
   ok TINYINT(1) NOT NULL DEFAULT 0,
   found TEXT NULL,
   expected VARCHAR(500) NULL,
+  -- What is wrong when ok = 0: "missing", "policy is none", "not pointing to Microsoft"...
+  problem VARCHAR(255) NULL,
   checked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_m365_checks_record (domain_id, record),

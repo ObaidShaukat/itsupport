@@ -42,7 +42,7 @@ function prepareRows(all) {
   const ranked = defaultOrder(all);
   for (const [i, d] of ranked.entries()) {
     d.rank = i;
-    d.search = [d.domain, d.statusLabel, d.managed_by, d.dns_provider, d.notes, ...d.issueLabels].filter(Boolean).join(' ').toLowerCase();
+    d.search = [d.domain, d.statusLabel, d.managed_by, d.dns_provider, d.notes, ...d.issueLabels, ...d.reasonLines].filter(Boolean).join(' ').toLowerCase();
     d.tags = [
       ...Object.entries(STATUS_FILTERS).filter(([, f]) => f.test(d)).map(([k]) => `status:${k}`),
       d.managed_by ? `managed:${encodeURIComponent(d.managed_by)}` : '',
@@ -216,12 +216,12 @@ router.get('/:id', async (req, res) => {
   const coreBad = records.filter((r) => r.core && !r.ok);
   const infoBad = records.filter((r) => !r.core && !r.ok && r.record !== 'ms_verify');
   const at = domain.dns_provider && !/^(None|Unknown)$/i.test(domain.dns_provider) ? ` (DNS hosted at ${domain.dns_provider})` : '';
-  const line = (r, i) => `${i + 1}. ${r.label} (${r.where}): ${r.hint}\n   Expected: ${r.expected}${r.found ? `\n   Found now: ${r.found}${r.byProvider ? ` (${r.byProvider})` : ''}` : '\n   Found now: nothing'}`;
+  const line = (r, i) => `${i + 1}. ${r.label}${r.problem ? ` ${r.problem}` : ''} (${r.where}): ${r.hint}\n   Expected: ${r.expected}${r.found ? `\n   Found now: ${r.found}${r.byProvider ? ` (${r.byProvider})` : ''}` : '\n   Found now: nothing'}`;
   const fixText = coreBad.length || infoBad.length ? [
     `Microsoft 365 email DNS records for ${domain.domain}${at}`,
     '',
     ...(missingSummary ? [missingSummary, ''] : []),
-    ...(coreBad.length ? ['Needed for email to work:', ...coreBad.map(line), ''] : []),
+    ...(coreBad.length ? ['Needed for Microsoft 365 email to be healthy:', ...coreBad.map(line), ''] : []),
     ...(infoBad.length ? ['Recommended (email security):', ...infoBad.map(line), ''] : []),
   ].join('\n').trim() : '';
   res.render('m365/domain', {

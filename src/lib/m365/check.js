@@ -4,15 +4,18 @@
 //   - the records in dns.js are looked up and saved (m365_checks, the latest per record);
 //   - Microsoft 365 or not: uses_m365 yes / no, or auto = detected when MX, SPF,
 //     Autodiscover or the MS=ms verification record points to Microsoft;
-//   - status: not_m365; healthy when MX, SPF and Autodiscover are all right; issues when any
-//     of them is not; error (with the reason) when the domain cannot be looked up;
+//   - status: not_m365; healthy only when every required record (MX, SPF, Autodiscover, DKIM
+//     selector1 and selector2, DMARC with p=quarantine / p=reject) is right; issues when any is
+//     not, with one reason per failing record (issue_reasons, e.g. "DMARC policy is none"); error (with the reason) when the domain cannot be looked up;
 //   - DNS provider (from the nameservers) and managed by: "Us" when the domain is one of our
 //     Cloudflare domains, else "Customer";
 //   - a status change is an m365_events row; Healthy <-> Issues changes are alerted once
 //     (sendStatusAlerts), never for hidden domains. Everything is logged (entity_type 'm365').
 const { pool } = require('../../db');
 const { logActivity } = require('../activity');
-const { checkDns, CORE, LABELS } = require('./dns');
+const {
+  checkDns, CORE, reasonsList, reasonsSummary, parseReasons,
+} = require('./dns');
 const { getSettings, saveSetting } = require('./data');
 const { providersLabel } = require('../cloudflare/lookups');
 const { chosenUsers, brandedEmail, deliver } = require('../alert-deliver');
@@ -28,6 +31,7 @@ async function checkOne(d, user = null) {
   let status;
   let reason = null;
   let issues = null;
+  let reasons = [];
   let detected = d.detected_m365;
   if (r.error) {
     status = 'error';
@@ -35,9 +39,9 @@ async function checkOne(d, user = null) {
   } else {
     for (const [record, v] of Object.entries(r.records)) {
       await pool.query(`
-        INSERT INTO m365_checks (domain_id, record, ok, found, expected, checked_at) VALUES (?, ?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE ok = VALUES(ok), found = VALUES(found), expected = VALUES(expected), checked_at = NOW()
-      `, [d.id, record, v.ok ? 1 : 0, String(v.found || '').slice(0, 5000), String(v.expected || '').slice(0, 500)]);
+        INSERT INTO m365_checks (domain_id, record, ok, found, expected, problem, checked_at) VALUES (?, ?, ?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE ok = VALUES(ok), found = VALUES(found), expected = VALUES(expected), problem = VALUES(problem), checked_at = NOW()
+      `, [d.id, record, v.ok ? 1 : 0, String(v.found || '').slice(0, 5000), String(v.expected || '').slice(0, 500), v.ok ? null : String(v.problem || 'not right').slice(0, 255)]);
     }
     detected = r.detected ? 1 : 0;
     const uses = d.uses_m365 === 'yes' || (d.uses_m365 === 'auto' && r.detected);
@@ -45,23 +49,24 @@ async function checkOne(d, user = null) {
     if (!uses) status = 'not_m365';
     else status = failing.length ? 'issues' : 'healthy';
     issues = uses && failing.length ? failing.join(',') : null;
+    reasons = issues ? failing.map((k) => ({ r: k, p: r.records[k].problem || 'not right' })) : [];
   }
   const provider = r.nameservers ? providersLabel(r.nameservers) : d.dns_provider;
   const changed = (d.status || null) !== status;
   await pool.query(`
-    UPDATE m365_domains SET detected_m365 = ?, status = ?, status_reason = ?, issues = ?, nameservers = ?, dns_provider = ?, managed_by = ?,
+    UPDATE m365_domains SET detected_m365 = ?, status = ?, status_reason = ?, issues = ?, issue_reasons = ?, nameservers = ?, dns_provider = ?, managed_by = ?,
       last_checked = NOW() ${changed ? ', last_status_change = NOW()' : ''}
     WHERE id = ?
-  `, [detected, status, reason, issues, r.nameservers ? JSON.stringify(r.nameservers) : d.nameservers, provider, managedBy, d.id]);
+  `, [detected, status, reason, issues, reasons.length ? JSON.stringify(reasons) : null, r.nameservers ? JSON.stringify(r.nameservers) : d.nameservers, provider, managedBy, d.id]);
   if (changed) {
     const alert = ALERTED.has(`${d.status}>${status}`) && !d.hidden_at;
     await pool.query(
       `INSERT INTO m365_events (domain_id, type, old_status, new_status, details, user_id, alerted_at) VALUES (?, 'status_changed', ?, ?, ?, ?, ${alert ? 'NULL' : 'NOW()'})`,
-      [d.id, d.status || null, status, JSON.stringify({ issues: issues ? issues.split(',') : [], reason }), user ? user.id : null]
+      [d.id, d.status || null, status, JSON.stringify({ issues: issues ? issues.split(',') : [], reasons, reason }), user ? user.id : null]
     );
     await log(user, {
       id: d.id, action: 'updated',
-      summary: `Email Services: ${d.domain} is now ${status === 'not_m365' ? 'not Microsoft 365' : status}${issues ? ` (${issues.split(',').map((k) => LABELS[k]).join(', ')})` : ''}${reason ? ` (${reason})` : ''}${d.status ? ` (was ${d.status})` : ''}`,
+      summary: `Email Services: ${d.domain} is now ${status === 'not_m365' ? 'not Microsoft 365' : status}${reasons.length ? ` (${reasonsList(reasons).join(', ')})` : ''}${reason ? ` (${reason})` : ''}${d.status ? ` (was ${d.status})` : ''}`,
     });
   }
   return { status, changed };
@@ -121,11 +126,12 @@ async function sendStatusAlerts() {
     if (claim.affectedRows !== 1 || ev.hidden_at || !users.length) continue;
     let details = {};
     try { details = JSON.parse(ev.details || '{}') || {}; } catch (err) { details = {}; }
-    const records = (details.issues || []).map((k) => LABELS[k] || k).join(', ');
+    const reasons = parseReasons(JSON.stringify(details.reasons || []));
+    const records = reasons.length ? reasonsList(reasons).join(', ') : (details.issues || []).join(', ');
     const bad = ev.new_status === 'issues';
-    const title = bad ? `${ev.domain}: Microsoft 365 email issues (${records})` : `${ev.domain}: Microsoft 365 email is healthy again`;
+    const title = bad ? `${ev.domain}: Microsoft 365 email issues (${reasons.length ? reasonsSummary(reasons) : records})` : `${ev.domain}: Microsoft 365 email is healthy again`;
     const link = `/microsoft/email-services/${ev.domain_id}`;
-    const rows = [['Domain', ev.domain], ['Status', bad ? 'Issues' : 'Healthy'], ...(bad ? [['Records', records]] : []), ...(ev.dns_provider ? [['DNS provider', ev.dns_provider]] : [])];
+    const rows = [['Domain', ev.domain], ['Status', bad ? 'Issues' : 'Healthy'], ...(bad ? [['Not right', records]] : []), ...(ev.dns_provider ? [['DNS provider', ev.dns_provider]] : [])];
     const email = brandedEmail({ section: 'Microsoft Email Services', subject: `Microsoft: ${title}`, heading: title, rows, link, buttonText: 'Open the domain' });
     const reached = await deliver(users, { type: 'm365', title, body: rows.map(([l, v]) => `${l}: ${v}`).join(' · '), link, email, tag: `m365-${ev.id}` });
     sent += 1;

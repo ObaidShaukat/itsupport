@@ -1,7 +1,9 @@
 // Microsoft > Email Services data: domains shaped for the views, the latest record checks,
 // the status history and settings.
 const { pool } = require('../../db');
-const { LABELS, RECORDS, CORE } = require('./dns');
+const {
+  LABELS, RECORDS, CORE, parseReasons, reasonsList, reasonsSummary,
+} = require('./dns');
 
 const STATUS_LABELS = {
   healthy: 'Healthy', issues: 'Issues', not_m365: 'Not Microsoft', error: 'Error', unchecked: 'Not checked',
@@ -21,12 +23,19 @@ const parseList = (json) => {
 function shapeDomain(d) {
   const status = d.status || 'unchecked';
   const issueList = String(d.issues || '').split(',').filter(Boolean);
+  // One reason per failing record ({ r, p }); rows checked before issue_reasons existed fall
+  // back to "{record} not right".
+  const stored = parseReasons(d.issue_reasons);
+  const reasons = stored.length ? stored : issueList.map((r) => ({ r, p: 'not right' }));
   return {
     ...d,
     statusKey: status,
     statusLabel: STATUS_LABELS[status] || status,
     issueList,
     issueLabels: issueList.map((r) => LABELS[r] || r),
+    reasons,
+    reasonLines: reasonsList(reasons), // "DMARC policy is none", "DKIM selector2 missing"
+    reasonSummary: reasonsSummary(reasons), // "DKIM selector1, DKIM selector2 missing · DMARC policy is none"
     nameserverList: parseList(d.nameservers),
     hidden: Boolean(d.hidden_at),
     // Red LED: email issues or a failed check.
@@ -77,7 +86,7 @@ function cleanDomain(value) {
 
 // The dashboard "Email services" card (views/partials/dash-email.ejs): domains with Issues (not
 // hidden), worst first (most failing core records, then the longest-standing), each with a
-// short reason ("MX, SPF missing" / "SPF wrong"), and the healthy count and last check time
+// reason listing every failing record (reasonSummary: "MX, DMARC missing · SPF has 2 records"), and the healthy count and last check time
 // for the all-healthy state. null when no domains have been added.
 async function dashboardEmail(db = pool, limit = 5) {
   const all = (await listDomains(db)).filter((d) => !d.hidden);
@@ -86,17 +95,6 @@ async function dashboardEmail(db = pool, limit = 5) {
   const since = (d) => (d.last_status_change ? new Date(d.last_status_change).getTime() : Infinity);
   issues.sort((a, b) => b.issueList.length - a.issueList.length || since(a) - since(b) || a.domain.localeCompare(b.domain));
   const top = issues.slice(0, limit);
-  const found = new Map();
-  if (top.length) {
-    const [rows] = await db.query('SELECT domain_id, record, found FROM m365_checks WHERE domain_id IN (?) AND record IN (?)', [top.map((d) => d.id), CORE]);
-    for (const r of rows) found.set(`${r.domain_id}:${r.record}`, r.found);
-  }
-  const reasonOf = (d) => {
-    const missing = d.issueList.filter((k) => !found.get(`${d.id}:${k}`));
-    const wrong = d.issueList.filter((k) => found.get(`${d.id}:${k}`));
-    const part = (keys, word) => (keys.length ? `${keys.map((k) => LABELS[k] || k).join(', ')} ${word}` : '');
-    return [part(missing, 'missing'), part(wrong, 'wrong')].filter(Boolean).join(' · ') || 'Email records not right';
-  };
   const checked = all.map((d) => (d.last_checked ? new Date(d.last_checked).getTime() : 0)).filter(Boolean);
   return {
     issues: issues.length,
@@ -105,7 +103,7 @@ async function dashboardEmail(db = pool, limit = 5) {
     m365: all.filter((d) => d.usesM365 || ['healthy', 'issues'].includes(d.statusKey)).length,
     lastChecked: checked.length ? new Date(Math.max(...checked)) : null,
     items: top.map((d) => ({
-      id: d.id, domain: d.domain, reason: reasonOf(d), provider: d.dns_provider, managedBy: d.managed_by, since: d.last_status_change,
+      id: d.id, domain: d.domain, reason: d.reasonSummary || 'Email records not right', provider: d.dns_provider, managedBy: d.managed_by, since: d.last_status_change,
     })),
   };
 }

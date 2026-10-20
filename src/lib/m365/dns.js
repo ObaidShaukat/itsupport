@@ -4,18 +4,21 @@
 //   spf           TXT v=spf1 ... include:spf.protection.outlook.com (2+ SPF records = wrong)
 //   autodiscover  CNAME autodiscover.{domain} -> autodiscover.outlook.com
 //   dkim1 / dkim2 CNAME selector1/2._domainkey.{domain} -> *._domainkey.*.onmicrosoft.com or *.dkim.mail.microsoft
-//   dmarc         TXT _dmarc.{domain} starting v=DMARC1 (policy shown)
+//   dmarc         exactly one TXT on _dmarc.{domain}, starting v=DMARC1, p=quarantine or p=reject
 //   ms_verify     TXT MS=ms... (Microsoft 365 domain verification)
-// mx, spf and autodiscover decide the status; the others are information only for now.
+// Every record except ms_verify is required (CORE): one missing or wrong = Issues. Each record
+// that is not right has a short problem ("missing", "policy is none", ...); the reason shown is
+// "{label} {problem}", e.g. "DMARC policy is none", "DKIM selector2 missing".
 const dns = require('dns');
 
 const resolver = new dns.promises.Resolver({ timeout: 5000, tries: 2 });
 resolver.setServers(['1.1.1.1', '8.8.8.8']);
 
-const CORE = ['mx', 'spf', 'autodiscover'];
+const CORE = ['mx', 'spf', 'autodiscover', 'dkim1', 'dkim2', 'dmarc'];
+const DMARC_SUGGESTED = 'v=DMARC1; p=quarantine; rua=mailto:reports@cleartwo.it';
 const RECORDS = ['mx', 'spf', 'autodiscover', 'dkim1', 'dkim2', 'dmarc', 'ms_verify'];
 const LABELS = {
-  mx: 'MX', spf: 'SPF', autodiscover: 'Autodiscover', dkim1: 'DKIM selector 1', dkim2: 'DKIM selector 2', dmarc: 'DMARC', ms_verify: 'Microsoft verification',
+  mx: 'MX', spf: 'SPF', autodiscover: 'Autodiscover', dkim1: 'DKIM selector1', dkim2: 'DKIM selector2', dmarc: 'DMARC', ms_verify: 'Microsoft verification',
 };
 
 const host = (h) => String(h || '').trim().toLowerCase().replace(/\.$/, '');
@@ -64,6 +67,7 @@ async function checkDns(domain) {
     found: mxList.length ? mxList.map((m) => `${m.priority} ${m.exchange}`).join(', ') : '',
     expected: `${mxHost(name)} (priority 0), and no other MX records`,
     microsoft: mxList.some((m) => isMicrosoftMx(m.exchange)),
+    problem: mxOk ? null : !mxList.length ? 'missing' : mxList.some((m) => isMicrosoftMx(m.exchange)) ? 'has non-Microsoft records too' : 'not pointing to Microsoft',
   };
   // SPF and the MS=ms verification record (both TXT on the domain)
   const spf = txt.value.filter((t) => /^v=spf1(\s|$)/i.test(t.trim()));
@@ -74,34 +78,72 @@ async function checkDns(domain) {
     expected: 'One TXT record: v=spf1 include:spf.protection.outlook.com -all',
     microsoft: spfMs,
     count: spf.length,
+    problem: spf.length === 1 && spfMs ? null : !spf.length ? 'missing' : spf.length > 1 ? `has ${spf.length} records (only one allowed)` : 'does not include spf.protection.outlook.com',
   };
   const verify = txt.value.filter((t) => /^MS=ms\d+/i.test(t.trim()));
-  records.ms_verify = { ok: verify.length > 0, found: verify.join(', '), expected: 'TXT MS=ms######## (from the Microsoft 365 admin centre)', microsoft: verify.length > 0 };
+  records.ms_verify = {
+    ok: verify.length > 0, found: verify.join(', '), expected: 'TXT MS=ms######## (from the Microsoft 365 admin centre)', microsoft: verify.length > 0, problem: verify.length ? null : 'missing',
+  };
   // Autodiscover
   records.autodiscover = {
     ok: auto.value.includes('autodiscover.outlook.com'),
     found: auto.value.join(', '),
     expected: `CNAME autodiscover.${name} → autodiscover.outlook.com`,
     microsoft: auto.value.includes('autodiscover.outlook.com'),
+    problem: auto.value.includes('autodiscover.outlook.com') ? null : auto.value.length ? 'not pointing to autodiscover.outlook.com' : 'missing',
   };
-  // DKIM (information only)
+  // DKIM: both selectors must be CNAMEs to Microsoft.
   for (const [key, r, selector] of [['dkim1', dkim1, 'selector1'], ['dkim2', dkim2, 'selector2']]) {
-    records[key] = r.ok
-      ? { ok: r.value.some(isMicrosoftDkim), found: r.value.join(', '), expected: `CNAME ${selector}._domainkey.${name} → ${selector}-${name.replace(/\./g, '-')}._domainkey.<tenant>.onmicrosoft.com` }
-      : { ok: false, found: r.error, expected: `CNAME ${selector}._domainkey.${name} → ${selector}-${name.replace(/\./g, '-')}._domainkey.<tenant>.onmicrosoft.com` };
+    const expected = `CNAME ${selector}._domainkey.${name} → ${selector}-${name.replace(/\./g, '-')}._domainkey.<tenant>.onmicrosoft.com`;
+    if (!r.ok) records[key] = { ok: false, found: '', expected, problem: `lookup failed (${r.error})` };
+    else {
+      const ok = r.value.length > 0 && r.value.every(isMicrosoftDkim);
+      records[key] = { ok, found: r.value.join(', '), expected, problem: ok ? null : r.value.length ? 'not pointing to Microsoft' : 'missing' };
+    }
   }
-  // DMARC (information only)
-  const dm = dmarc.ok ? dmarc.value.filter((t) => /^v=DMARC1/i.test(t.trim())) : [];
-  const policy = dm.length ? ((/;\s*p=([a-z]+)/i.exec(dm[0]) || [])[1] || '').toLowerCase() : '';
-  records.dmarc = {
-    ok: dm.length === 1,
-    found: dmarc.ok ? dm.join('  |  ') : dmarc.error,
-    expected: `TXT _dmarc.${name}: v=DMARC1; p=quarantine (or p=none while testing, p=reject when ready)`,
-    policy,
-  };
+  // DMARC: exactly one TXT record on _dmarc, starting v=DMARC1, with p=quarantine or p=reject.
+  records.dmarc = dmarcRecord(dmarc, name);
   const detected = Boolean(records.mx.microsoft || records.spf.microsoft || records.autodiscover.microsoft || records.ms_verify.microsoft);
   return { nameservers: ns.value.sort(), records, detected };
 }
+
+// DMARC from the TXT answers on _dmarc.{domain}: every TXT record there counts as a DMARC record.
+function dmarcRecord(answer, name) {
+  const expected = `TXT _dmarc.${name}: ${DMARC_SUGGESTED} (p=reject also passes)`;
+  if (!answer.ok) return { ok: false, found: '', expected, problem: `lookup failed (${answer.error})`, policy: '' };
+  const all = answer.value.map((t) => t.trim()).filter(Boolean);
+  const found = all.join('  |  ');
+  const policyOf = (t) => ((/(?:^|;)\s*p\s*=\s*([a-z]+)/i.exec(t) || [])[1] || '').toLowerCase();
+  const policy = all.length === 1 ? policyOf(all[0]) : '';
+  let problem = null;
+  if (!all.length) problem = 'missing';
+  else if (all.length > 1) problem = `has ${all.length} records (only one allowed)`;
+  else if (!/^v=DMARC1(\s*;|\s*$)/i.test(all[0])) problem = 'does not start with v=DMARC1';
+  else if (!policy) problem = 'has no policy (p=)';
+  else if (policy === 'none') problem = 'policy is none';
+  else if (!['quarantine', 'reject'].includes(policy)) problem = `policy "${policy}" is not valid`;
+  return { ok: !problem, found, expected, problem, policy, count: all.length };
+}
+
+// The reasons of the failing required records, stored as [{ r: record, p: problem }]:
+// reasonsList() gives one line each ("DMARC policy is none"); reasonsSummary() groups the
+// missing ones for small places ("MX, DMARC missing · SPF has 2 records (only one allowed)").
+const reasonText = (x) => `${LABELS[x.r] || x.r} ${x.p}`;
+const reasonsList = (reasons) => (reasons || []).map(reasonText);
+function reasonsSummary(reasons) {
+  const list = reasons || [];
+  const missing = list.filter((x) => x.p === 'missing').map((x) => LABELS[x.r] || x.r);
+  const other = list.filter((x) => x.p !== 'missing').map(reasonText);
+  return [missing.length ? `${missing.join(', ')} missing` : '', ...other].filter(Boolean).join(' · ');
+}
+const parseReasons = (json) => {
+  try {
+    const v = JSON.parse(json || '[]');
+    return Array.isArray(v) ? v.filter((x) => x && x.r && x.p) : [];
+  } catch (err) {
+    return [];
+  }
+};
 
 // A short "How to fix" line for a record that is not right, at the domain's DNS provider.
 function fixHint(record, r, domain, provider) {
@@ -113,12 +155,15 @@ function fixHint(record, r, domain, provider) {
       if (r.count > 1) return `There are ${r.count} SPF records: merge them into one TXT record that includes include:spf.protection.outlook.com${at}.`;
       if (r.count === 1) return `Add include:spf.protection.outlook.com to the existing SPF record${at}.`;
       return `Add a TXT record v=spf1 include:spf.protection.outlook.com -all on ${name}${at}.`;
-    case 'autodiscover': return `Add a CNAME autodiscover → autodiscover.outlook.com${at}.`;
+    case 'autodiscover': return r.found ? `Change the CNAME autodiscover to point to autodiscover.outlook.com${at}.` : `Add a CNAME autodiscover → autodiscover.outlook.com${at}.`;
     case 'dkim1': case 'dkim2': {
       const sel = record === 'dkim1' ? 'selector1' : 'selector2';
-      return `Add the CNAME ${sel}._domainkey from Microsoft Defender (Email authentication > DKIM)${at}, then enable DKIM signing.`;
+      return `${r.found ? 'Change' : 'Add'} the CNAME ${sel}._domainkey to the value from Microsoft Defender (Email authentication > DKIM)${at}, then enable DKIM signing.`;
     }
-    case 'dmarc': return `Add a TXT record _dmarc with v=DMARC1; p=quarantine${at} (start with p=none to monitor).`;
+    case 'dmarc':
+      if (r.count > 1) return `There are ${r.count} TXT records on _dmarc: keep only one, ${DMARC_SUGGESTED}${at}.`;
+      if (r.count === 1) return `Replace the TXT record on _dmarc with ${DMARC_SUGGESTED}${at}.`;
+      return `Add a TXT record _dmarc with ${DMARC_SUGGESTED}${at}.`;
     case 'ms_verify': return 'Add the TXT MS=ms… value shown in the Microsoft 365 admin centre (Settings > Domains) to verify the domain.';
     default: return '';
   }
@@ -175,5 +220,5 @@ function m365Missing(records) {
 }
 
 module.exports = {
-  checkDns, fixHint, whereOf, providerDefault, m365Missing, CORE, RECORDS, LABELS, host, mxHost,
+  checkDns, fixHint, whereOf, reasonsList, reasonsSummary, parseReasons, DMARC_SUGGESTED, providerDefault, m365Missing, CORE, RECORDS, LABELS, host, mxHost,
 };

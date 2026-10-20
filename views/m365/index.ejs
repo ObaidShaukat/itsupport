@@ -18,7 +18,7 @@
   <div>
     <p class="crumbs">Microsoft</p>
     <h1>Email Services</h1>
-    <p class="muted">Microsoft 365 email records of each domain, from public DNS (read only): MX, SPF and Autodiscover decide the status; DKIM, DMARC and the Microsoft verification record are shown too. Checked every 6 hours.</p>
+    <p class="muted">Microsoft 365 email records of each domain, from public DNS (read only): Healthy only when MX, SPF, Autodiscover, DKIM (selector1 and selector2) and DMARC (p=quarantine or p=reject) are all right; the Microsoft verification record is shown too. Checked every 6 hours.</p>
   </div>
   <div class="actions">
     <a href="/microsoft/email-services/settings" class="btn btn-small btn-ghost"><%- icon('sliders') %><span>Settings</span></a>
