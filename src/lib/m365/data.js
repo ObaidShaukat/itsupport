@@ -75,6 +75,42 @@ function cleanDomain(value) {
   return /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$/.test(v) ? v : null;
 }
 
+// The dashboard "Email services" card (views/partials/dash-email.ejs): domains with Issues (not
+// hidden), worst first (most failing core records, then the longest-standing), each with a
+// short reason ("MX, SPF missing" / "SPF wrong"), and the healthy count and last check time
+// for the all-healthy state. null when no domains have been added.
+async function dashboardEmail(db = pool, limit = 5) {
+  const all = (await listDomains(db)).filter((d) => !d.hidden);
+  if (!all.length) return null;
+  const issues = all.filter((d) => d.statusKey === 'issues');
+  const since = (d) => (d.last_status_change ? new Date(d.last_status_change).getTime() : Infinity);
+  issues.sort((a, b) => b.issueList.length - a.issueList.length || since(a) - since(b) || a.domain.localeCompare(b.domain));
+  const top = issues.slice(0, limit);
+  const found = new Map();
+  if (top.length) {
+    const [rows] = await db.query('SELECT domain_id, record, found FROM m365_checks WHERE domain_id IN (?) AND record IN (?)', [top.map((d) => d.id), CORE]);
+    for (const r of rows) found.set(`${r.domain_id}:${r.record}`, r.found);
+  }
+  const reasonOf = (d) => {
+    const missing = d.issueList.filter((k) => !found.get(`${d.id}:${k}`));
+    const wrong = d.issueList.filter((k) => found.get(`${d.id}:${k}`));
+    const part = (keys, word) => (keys.length ? `${keys.map((k) => LABELS[k] || k).join(', ')} ${word}` : '');
+    return [part(missing, 'missing'), part(wrong, 'wrong')].filter(Boolean).join(' · ') || 'Email records not right';
+  };
+  const checked = all.map((d) => (d.last_checked ? new Date(d.last_checked).getTime() : 0)).filter(Boolean);
+  return {
+    issues: issues.length,
+    healthy: all.filter((d) => d.statusKey === 'healthy').length,
+    errors: all.filter((d) => d.statusKey === 'error').length,
+    m365: all.filter((d) => d.usesM365 || ['healthy', 'issues'].includes(d.statusKey)).length,
+    lastChecked: checked.length ? new Date(Math.max(...checked)) : null,
+    items: top.map((d) => ({
+      id: d.id, domain: d.domain, reason: reasonOf(d), provider: d.dns_provider, managedBy: d.managed_by, since: d.last_status_change,
+    })),
+  };
+}
+
 module.exports = {
+  dashboardEmail,
   STATUS_LABELS, STATUS_RANK, shapeDomain, listDomains, getDomain, defaultOrder, recordsFor, getSettings, saveSetting, cleanDomain, parseList,
 };

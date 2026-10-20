@@ -3582,3 +3582,23 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .m365-missing { display: flex; gap: 10px; align-items: flex-start; }
 .m365-missing .icon { flex: none; width: 18px; height: 18px; margin-top: 1px; }
 @media (prefers-reduced-motion: reduce) { .icon-btn.is-busy .icon { animation: none; } }
+/* Dashboard Email services card (views/partials/dash-email.ejs): 4th column of Updates on wide
+   screens, 2 x 2 from 1024px to 1439px, one column below. */
+.updates-grid.updates-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.updates-grid.updates-grid-4 > :last-child { grid-column: auto; }
+@media (max-width: 1439.98px) { .updates-grid.updates-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 1023.98px) { .updates-grid.updates-grid-4 { grid-template-columns: minmax(0, 1fr); } }
+.dash-email-title { display: flex; align-items: center; gap: 8px; }
+.dash-email-count { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px; background: var(--border); color: var(--ink-2); font: 700 12px/1 Poppins, sans-serif; }
+.dash-email-count.has-issues { background: var(--ink); color: #FFFFFF; }
+.dash-email-domain { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-email-reason { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.dash-email-provider { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dash-email-who { flex: none; padding: 1px 8px; border-radius: 999px; background: var(--surface-main); border: 1px solid var(--border); color: var(--ink-2); font-size: 11.5px; font-weight: 700; }
+.dash-email-ok { justify-items: start; padding: 18px 16px; }
+.dash-email-tick { color: var(--ink); line-height: 0; }
+.dash-email-tick svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.dash-email-tick circle { stroke-dasharray: 63; stroke-dashoffset: 63; animation: draw 0.5s ease-out 0.2s forwards; }
+.dash-email-tick path { stroke-dasharray: 16; stroke-dashoffset: 16; animation: draw 0.35s ease-out 0.6s forwards; }
+.dash-email-more { padding: 2px 4px; }
+@media (prefers-reduced-motion: reduce) { .dash-email-tick circle, .dash-email-tick path { animation: none; stroke-dashoffset: 0; } }

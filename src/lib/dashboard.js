@@ -112,6 +112,11 @@ async function recentUpdates(db) {
 
 // Cloudflare: domains with problems (not hidden), for the small Domains tile. null when
 // Cloudflare is not set up and there are no domains.
+// Microsoft Email Services card (src/lib/m365/data.js), also refreshed by GET /dashboard/email-services.
+function dashboardEmail(db) {
+  return require('./m365/data').dashboardEmail(db); // eslint-disable-line global-require
+}
+
 async function domainProblems(db) {
   const { listDomains } = require('./cloudflare/data'); // eslint-disable-line global-require
   const { cfConfig } = require('./cloudflare/api'); // eslint-disable-line global-require
@@ -145,6 +150,7 @@ async function dashboardData(user) {
   const [[unassigned]] = await pool.query("SELECT COUNT(*) AS n FROM tickets WHERE status <> 'closed' AND assigned_to IS NULL");
   const updates = await recentUpdates(pool);
   const domains = await domainProblems(pool);
+  const email = await dashboardEmail(pool);
   return {
     week,
     chart,
@@ -155,6 +161,7 @@ async function dashboardData(user) {
     unassigned: Number(unassigned.n),
     updates,
     domains,
+    email,
   };
 }
 
@@ -164,4 +171,4 @@ function greeting(now = new Date()) {
   return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 }
 
-module.exports = { dashboardData, boardColumns, ukWeek, greeting, addDays };
+module.exports = { dashboardData, dashboardEmail, boardColumns, ukWeek, greeting, addDays };

@@ -1,0 +1,40 @@
+<%#
+  Dashboard "Email services" card contents (inside section[data-dash-email] in dashboard.ejs;
+  also the HTML of GET /dashboard/email-services, polled every 60s by app.js). email =
+  dashboardEmail() in src/lib/m365/data.js, or null when no domains have been added.
+%>
+<% const issues = email ? email.issues : 0; %>
+<header class="board-col-head">
+  <h3 id="up-email" class="dash-email-title">
+    <% if (issues) { %><span class="led led-urgent" aria-hidden="true"></span><% } %>Email services
+    <span class="dash-email-count <%= issues ? 'has-issues' : '' %>" data-count="<%= issues %>" title="<%= issues %> domain<%= issues === 1 ? '' : 's' %> with issues" aria-label="<%= issues %> with issues"><%= issues %></span>
+  </h3>
+  <a href="/microsoft/email-services?status=issues" class="link-more">View all</a>
+</header>
+<div class="board-cards">
+  <% if (!email) { %>
+    <a href="/microsoft/email-services#add" class="ucard dash-email-ok">
+      <span class="ucard-title">No domains yet</span>
+      <span class="muted small">Add domains under Microsoft &gt; Email Services to watch their Microsoft 365 email records.</span>
+    </a>
+  <% } else if (!issues) { %>
+    <a href="/microsoft/email-services" class="ucard dash-email-ok">
+      <span class="dash-email-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M7.5 12.5l3 3 6-6.5"></path></svg></span>
+      <span class="ucard-title">All <%= email.healthy %> Microsoft 365 domain<%= email.healthy === 1 ? '' : 's' %> healthy</span>
+      <span class="muted small"><%= email.lastChecked ? `Last checked ${fmtAgo(email.lastChecked)}` : 'Not checked yet' %><%= email.errors ? ` · ${email.errors} check${email.errors === 1 ? '' : 's'} failed` : '' %></span>
+    </a>
+  <% } else { %>
+    <% for (const d of email.items) { %>
+      <a href="/microsoft/email-services/<%= d.id %>" class="ucard dash-email-item">
+        <span class="ucard-title dash-email-domain" title="<%= d.domain %>"><%= d.domain %></span>
+        <span class="dash-email-reason"><%= d.reason %></span>
+        <span class="ucard-foot">
+          <span class="dash-email-provider" title="DNS provider"><%= d.provider || 'Unknown DNS' %></span>
+          <% if (d.managedBy) { %><span class="chip dash-email-who" title="<%= d.managedBy === 'Us' ? 'DNS managed by us (in Cloudflare)' : 'DNS managed by the customer' %>"><%= d.managedBy %></span><% } %>
+          <% if (d.since) { %><span class="ucard-when" title="<%= fmtDate(d.since) %>">since <%= fmtAgo(d.since) %></span><% } %>
+        </span>
+      </a>
+    <% } %>
+    <% if (issues > email.items.length) { %><a href="/microsoft/email-services?status=issues" class="link-more dash-email-more">+<%= issues - email.items.length %> more with issues</a><% } %>
+  <% } %>
+</div>

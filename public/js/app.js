@@ -3767,26 +3767,59 @@ document.addEventListener('keydown', (e) => {
 })();
 
 // ---- Big numbers count up from 0 on load ([data-count], optional data-suffix) ----
+// countUp(el, from) also animates a number that changed after a refresh (Email services card).
+function countUp(el, from = 0) {
+  const target = Number(el.dataset.count);
+  if (!Number.isFinite(target) || target === from || (from === 0 && target <= 0)) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const suffix = el.dataset.suffix || '';
+  const duration = 900;
+  const start = performance.now();
+  el.textContent = `${from}${suffix}`;
+  const step = (now) => {
+    const p = Math.min(1, (now - start) / duration);
+    const eased = 1 - (1 - p) ** 3;
+    el.textContent = `${Math.round(from + (target - from) * eased)}${suffix}`;
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+  // Background tabs pause animation frames: the real number always shows in the end.
+  setTimeout(() => { el.textContent = `${target}${suffix}`; }, duration + 150);
+}
+document.querySelectorAll('[data-count]').forEach((el) => countUp(el));
+
+// ---- Dashboard Email services card (section[data-dash-email]) ----
+// Drawn again every 60s from GET /dashboard/email-services (JSON { html }), so it follows the
+// Email Services checks without reloading; only replaced when it changed, and the count badge
+// counts from its old number to the new one. Skipped while the tab is in the background.
 (() => {
-  const nums = document.querySelectorAll('[data-count]');
-  if (!nums.length || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  nums.forEach((el) => {
-    const target = Number(el.dataset.count);
-    if (!Number.isFinite(target) || target <= 0) return;
-    const suffix = el.dataset.suffix || '';
-    const duration = 900;
-    const start = performance.now();
-    el.textContent = `0${suffix}`;
-    const step = (now) => {
-      const p = Math.min(1, (now - start) / duration);
-      const eased = 1 - (1 - p) ** 3;
-      el.textContent = `${Math.round(target * eased)}${suffix}`;
-      if (p < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    // Background tabs pause animation frames: the real number always shows in the end.
-    setTimeout(() => { el.textContent = `${target}${suffix}`; }, duration + 150);
-  });
+  const card = document.querySelector('[data-dash-email]');
+  if (!card) return;
+  let last = null; // the last HTML from the server (the first reply is drawn once, unchanged)
+  let busy = false;
+  const refresh = async () => {
+    if (busy || document.hidden) return;
+    busy = true;
+    try {
+      const r = await fetch('/dashboard/email-services', { headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store' });
+      const json = r.ok ? await r.json() : null;
+      if (json && json.ok && typeof json.html === 'string' && json.html !== last) {
+        const before = card.querySelector('.dash-email-count');
+        const old = before ? Number(before.dataset.count) || 0 : 0;
+        card.innerHTML = json.html;
+        last = json.html;
+        card.querySelectorAll('.ucard').forEach((c) => { c.style.animation = 'none'; });
+        const badge = card.querySelector('.dash-email-count');
+        if (badge) countUp(badge, old);
+      }
+    } catch (err) {
+      // Offline or signed out: try again next time.
+    } finally {
+      busy = false;
+    }
+  };
+  setInterval(refresh, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
 })();
 
 // ---- New items slide in: the comment / note the page was sent back to (#comment-12) ----

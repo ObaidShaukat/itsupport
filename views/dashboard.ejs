@@ -2,7 +2,8 @@
 <%#
   Dashboard (src/lib/dashboard.js): greeting, "Open per person" avatar stack, the summary
   panel (this week's tickets chart, closed-within-24h gauge, Open tickets and Reminders today
-  tiles) and Updates (latest tickets, recent client services, recent articles).
+  tiles) and Updates (latest tickets, recent client services, recent articles, and the Email services
+  card: views/partials/dash-email.ejs, refreshed every 60s).
 %>
 <%
   const shownPeople = people.slice(0, 6);
@@ -88,7 +89,7 @@
 
 <section class="updates reveal" aria-labelledby="updates-title">
   <div class="section-head"><h2 id="updates-title">Updates</h2></div>
-  <div class="updates-grid">
+  <div class="updates-grid updates-grid-4">
     <section class="board-col updates-col" aria-labelledby="up-tickets">
       <header class="board-col-head">
         <h3 id="up-tickets">Tickets</h3>
@@ -142,6 +143,10 @@
         <% } %>
         <% if (!updates.articles.length) { %><p class="board-empty">No articles yet</p><% } %>
       </div>
+    </section>
+
+    <section class="board-col updates-col dash-email" aria-labelledby="up-email" data-dash-email aria-live="polite">
+      <%- include('partials/dash-email', { email }) %>
     </section>
   </div>
 </section>
