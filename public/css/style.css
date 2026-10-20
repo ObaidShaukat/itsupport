@@ -3560,10 +3560,25 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .m365-event-issues .cf-event-dot, .m365-event-error .cf-event-dot { background: var(--led-urgent); border-color: var(--led-urgent); }
 .m365-event-healthy .cf-event-dot { background: var(--ink); border-color: var(--ink); }
 @media (max-width: 1023.98px) { .m365-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .m365-table { width: max(760px, 100%); } }
-.m365-records .m365-col-record { width: 150px; }
+.m365-records .m365-col-record { width: 210px; }
 .m365-records .m365-col-status { width: 72px; }
 .m365-records .m365-col-found { width: 32%; }
 /* The spelling popup is shown in the top layer (popover API): undo the browser's popover
    defaults (centred, inset 0); its top / left come from the word's own box. */
 .spell-pop[popover] { inset: auto; margin: 0; overflow: visible; width: auto; height: auto; }
 .spell-pop.is-above { transform-origin: bottom left; }
+/* Email Services row actions: their own fixed 80px column, the two icons side by side. */
+.m365-table th.m365-actions, .m365-table td.m365-actions { width: 80px; padding: 0 8px 0 0; text-align: right; overflow: visible; }
+.m365-actions-box { display: flex; justify-content: flex-end; align-items: center; gap: 4px; }
+.m365-actions-box form { display: inline-flex; margin: 0; }
+.m365-actions-box .icon-btn { width: 32px; height: 32px; }
+.icon-btn.is-busy { pointer-events: none; opacity: 0.7; }
+.icon-btn.is-busy .icon { animation: spin 0.8s linear infinite; }
+.m365-toast { grid-template-columns: auto 1fr auto; }
+.m365-toast .btn { min-height: 0; height: 30px; }
+/* Email Services domain page: where each record lives, provider default records, summary. */
+.m365-where { display: block; margin-top: 2px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11.5px; color: var(--muted); overflow-wrap: anywhere; font-weight: 400; }
+.m365-by { display: inline-block; margin-top: 6px; padding: 2px 8px; border-radius: 999px; background: var(--surface-main); color: var(--ink-2); font-size: 12px; }
+.m365-missing { display: flex; gap: 10px; align-items: flex-start; }
+.m365-missing .icon { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+@media (prefers-reduced-motion: reduce) { .icon-btn.is-busy .icon { animation: none; } }

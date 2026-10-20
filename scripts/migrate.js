@@ -182,6 +182,13 @@ const ONE_TIME_STEPS = [
   ['m365_test_domain_v1', async (conn) => {
     await conn.query("INSERT IGNORE INTO m365_domains (domain, notes) VALUES ('foreversundays.com', 'Test domain')");
   }],
+  // Email Services: every domain so far was added by hand, so it uses Microsoft 365 ('yes';
+  // auto is only for domains added automatically later). Forgetting last_run makes the app
+  // check them all again as soon as it starts, so they show Issues instead of Not Microsoft.
+  ['m365_manual_yes_v1', async (conn) => {
+    await conn.query("UPDATE m365_domains SET uses_m365 = 'yes' WHERE uses_m365 = 'auto'");
+    await conn.query("DELETE FROM m365_settings WHERE name = 'last_run'");
+  }],
 ];
 
 async function main() {

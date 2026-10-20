@@ -1,0 +1,29 @@
+<%#
+  One Email Services domain row (views/m365/index.ejs, and the JSON reply of Check now / Hide,
+  which app.js "Email Services row actions" puts in place). d = a prepareRows() row, here = the
+  list address the forms return to without JavaScript.
+%>
+<% const tone = { healthy: 'is-ok', issues: 'is-bad', not_m365: 'is-muted', error: 'is-bad', unchecked: 'is-info' }; %>
+<tr class="<%= d.hidden ? 'is-hidden-row' : '' %>" data-list-item data-m365-row="<%= d.id %>" data-search="<%= d.search %>" data-tags="<%= d.tags %>" data-rank="<%= d.rank %>"
+    <% for (const [k, v] of Object.entries(d.sortValues)) { %>data-sort-<%= k %>="<%= v %>" <% } %><%= d.visible === false ? 'hidden' : '' %>>
+  <td class="cf-led"><% if (d.led) { %><span class="led led-<%= d.led %>" title="<%= d.statusKey === 'error' ? 'The check failed' : 'Email issues' %>"></span><% } %></td>
+  <td title="<%= d.domain %>"><a href="/microsoft/email-services/<%= d.id %>"><strong><%= d.domain %></strong></a><% if (d.notes) { %> <span class="muted" title="<%= d.notes %>"><%- icon('file') %></span><% } %></td>
+  <td title="<%= d.statusKey === 'issues' ? `Not right: ${d.issueLabels.join(', ')}` : (d.status_reason || '') %>">
+    <span class="status-pill <%= tone[d.statusKey] %>"><%= d.statusLabel %></span><% if (d.statusKey === 'issues') { %> <span class="muted small"><%= d.issueLabels.join(', ') %></span><% } %><% if (d.hidden) { %> <span class="status-pill is-muted">Hidden</span><% } %>
+  </td>
+  <td><%= d.managed_by || '—' %></td>
+  <td title="<%= d.nameserverList.join(', ') %>"><%= d.dns_provider || '—' %></td>
+  <td class="right muted" title="<%= d.last_checked ? fmtDate(d.last_checked) : '' %>"><%= d.last_checked ? fmtAgo(d.last_checked) : '—' %></td>
+  <td class="m365-actions">
+    <div class="m365-actions-box">
+      <form method="post" action="/microsoft/email-services/<%= d.id %>/check" data-m365-action="check">
+        <%- csrfField %><input type="hidden" name="back" value="<%= here %>" data-list-back>
+        <button type="submit" class="icon-btn" title="Check now" aria-label="Check <%= d.domain %> now"><%- icon('refresh') %></button>
+      </form>
+      <form method="post" action="/microsoft/email-services/<%= d.id %>/hide" data-m365-action="hide">
+        <%- csrfField %><input type="hidden" name="back" value="<%= here %>" data-list-back><input type="hidden" name="hide" value="<%= d.hidden ? '0' : '1' %>">
+        <button type="submit" class="icon-btn" title="<%= d.hidden ? 'Unhide' : 'Hide (no counts, no alerts)' %>" aria-label="<%= d.hidden ? 'Unhide' : 'Hide' %> <%= d.domain %>"><%- icon(d.hidden ? 'eye' : 'eye-off') %></button>
+      </form>
+    </div>
+  </td>
+</tr>

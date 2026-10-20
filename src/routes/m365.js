@@ -11,10 +11,13 @@ const {
   STATUS_LABELS, STATUS_RANK, listDomains, getDomain, defaultOrder, recordsFor, getSettings, saveSetting, cleanDomain,
 } = require('../lib/m365/data');
 const { runChecks, checkDomain } = require('../lib/m365/check');
-const { fixHint, LABELS, CORE } = require('../lib/m365/dns');
+const {
+  fixHint, whereOf, providerDefault, m365Missing, LABELS, CORE,
+} = require('../lib/m365/dns');
 
 const router = express.Router();
 const BASE = '/microsoft/email-services';
+const wantsJson = (req) => req.accepts(['html', 'json']) === 'json';
 const log = (req, entry) => logActivity(null, req.user, { type: 'm365', subject: 'Email Services', ...entry });
 
 const STATUS_FILTERS = {
@@ -34,6 +37,43 @@ const SORTS = {
   checked: (d) => (d.last_checked ? new Date(d.last_checked).getTime() : 0),
 };
 
+// Each row's search text, tags, rank (default order) and sort values, made once.
+function prepareRows(all) {
+  const ranked = defaultOrder(all);
+  for (const [i, d] of ranked.entries()) {
+    d.rank = i;
+    d.search = [d.domain, d.statusLabel, d.managed_by, d.dns_provider, d.notes, ...d.issueLabels].filter(Boolean).join(' ').toLowerCase();
+    d.tags = [
+      ...Object.entries(STATUS_FILTERS).filter(([, f]) => f.test(d)).map(([k]) => `status:${k}`),
+      d.managed_by ? `managed:${encodeURIComponent(d.managed_by)}` : '',
+    ].filter(Boolean).join(' ');
+    d.sortValues = Object.fromEntries(Object.entries(SORTS).map(([k, fn]) => [k, fn(d)]));
+  }
+  return ranked;
+}
+
+function summaryOf(all) {
+  const shown = all.filter((d) => !d.hidden);
+  return {
+    m365: shown.filter((d) => d.usesM365 || ['healthy', 'issues'].includes(d.statusKey)).length,
+    healthy: shown.filter((d) => d.statusKey === 'healthy').length,
+    issues: shown.filter((d) => d.statusKey === 'issues').length,
+    notM365: shown.filter((d) => d.statusKey === 'not_m365').length,
+  };
+}
+
+// The JSON reply of the row actions (Check now, Hide): the row drawn again (views/m365/_row.ejs)
+// and the tile numbers, so the list updates in place.
+async function rowReply(req, res, id, extra) {
+  const all = await listDomains(pool);
+  const d = prepareRows(all).find((x) => x.id === id);
+  if (!d) return res.status(404).json({ ok: false, error: 'That domain no longer exists.' });
+  res.render('m365/_row', { d, here: backPath(req, BASE) }, (err, html) => {
+    if (err) return res.status(500).json({ ok: false, error: 'The row could not be drawn again. Reload the page.' });
+    return res.json({ ok: true, rowHtml: html, summary: summaryOf(all), status: d.statusKey, hidden: d.hidden, ...extra });
+  });
+}
+
 router.get('/', async (req, res) => {
   const all = await listDomains(pool);
   const state = {
@@ -44,18 +84,9 @@ router.get('/', async (req, res) => {
     dir: req.query.dir === 'desc' ? 'desc' : 'asc',
   };
   // Every domain goes to the page and is filtered there (instant); rows the address's filters
-  // leave out start hidden. Each row's search text, tags, rank and sort values are made here.
-  const ranked = defaultOrder(all);
+  // leave out start hidden.
+  const ranked = prepareRows(all);
   const words = state.q.split(/\s+/).filter(Boolean);
-  for (const [i, d] of ranked.entries()) {
-    d.rank = i;
-    d.search = [d.domain, d.statusLabel, d.managed_by, d.dns_provider, d.notes, ...d.issueLabels].filter(Boolean).join(' ').toLowerCase();
-    d.tags = [
-      ...Object.entries(STATUS_FILTERS).filter(([, f]) => f.test(d)).map(([k]) => `status:${k}`),
-      d.managed_by ? `managed:${encodeURIComponent(d.managed_by)}` : '',
-    ].filter(Boolean).join(' ');
-    d.sortValues = Object.fromEntries(Object.entries(SORTS).map(([k, fn]) => [k, fn(d)]));
-  }
   const match = (d, skip) => (skip === 'status' || STATUS_FILTERS[state.status].test(d))
     && (!state.managed || d.managed_by === state.managed) && words.every((w) => d.search.includes(w));
   for (const d of ranked) d.visible = match(d);
@@ -69,13 +100,7 @@ router.get('/', async (req, res) => {
       return (x < y ? -1 : x > y ? 1 : 0) * sign || a.rank - b.rank;
     });
   }
-  const shown = all.filter((d) => !d.hidden);
-  const summary = {
-    m365: shown.filter((d) => d.usesM365 || ['healthy', 'issues'].includes(d.statusKey)).length,
-    healthy: shown.filter((d) => d.statusKey === 'healthy').length,
-    issues: shown.filter((d) => d.statusKey === 'issues').length,
-    notM365: shown.filter((d) => d.statusKey === 'not_m365').length,
-  };
+  const summary = summaryOf(all);
   const href = (changes) => {
     const next = { ...state, ...changes };
     const q = new URLSearchParams();
@@ -92,7 +117,8 @@ router.get('/', async (req, res) => {
   });
 });
 
-// Add domains: one per line (or separated by commas / spaces); duplicates are ignored.
+// Add domains: one per line (or separated by commas / spaces); duplicates are ignored. Domains
+// added by hand use Microsoft 365 (uses_m365 'yes'); auto is for domains added automatically.
 router.post('/add', async (req, res) => {
   const text = str(req.body.domains, 20000);
   const notes = str(req.body.notes, 2000) || null;
@@ -110,7 +136,7 @@ router.post('/add', async (req, res) => {
   }
   const added = [];
   for (const d of wanted) {
-    const [r] = await pool.query('INSERT IGNORE INTO m365_domains (domain, notes, created_by) VALUES (?, ?, ?)', [d, notes, req.user.id]);
+    const [r] = await pool.query("INSERT IGNORE INTO m365_domains (domain, notes, uses_m365, created_by) VALUES (?, ?, 'yes', ?)", [d, notes, req.user.id]);
     if (r.affectedRows === 1) {
       added.push({ id: r.insertId, domain: d });
       await pool.query("INSERT INTO m365_events (domain_id, type, user_id, alerted_at) VALUES (?, 'added', ?, NOW())", [r.insertId, req.user.id]);
@@ -169,8 +195,19 @@ router.get('/:id', async (req, res) => {
   const domain = await domainOr404(req.params.id);
   const records = (await recordsFor(domain.id)).map((r) => {
     const count = r.found ? String(r.found).split('  |  ').length : 0;
-    return { ...r, hint: r.ok ? '' : fixHint(r.record, { found: r.found, count }, domain.domain, domain.dns_provider) };
+    return {
+      ...r,
+      where: whereOf(r.record, domain.domain),
+      byProvider: providerDefault(r.record, r.found),
+      hint: r.ok ? '' : fixHint(r.record, { found: r.found, count }, domain.domain, domain.dns_provider),
+    };
   });
+  // Set to use Microsoft 365 but nothing of it is in DNS: most likely the nameservers moved and
+  // the records were not copied over.
+  const provider = domain.dns_provider && !/^(None|Unknown)$/i.test(domain.dns_provider) ? domain.dns_provider : 'another provider';
+  const missingSummary = domain.uses_m365 === 'yes' && domain.statusKey !== 'error' && m365Missing(records)
+    ? `Microsoft 365 records are missing. The DNS is now hosted at ${provider}, so the records probably weren't copied over when the nameservers changed.`
+    : '';
   const [events] = await pool.query(`
     SELECT e.*, COALESCE(NULLIF(u.display_name, ''), u.username) AS user_name FROM m365_events e LEFT JOIN users u ON u.id = e.user_id
     WHERE e.domain_id = ? ORDER BY e.created_at DESC, e.id DESC LIMIT 200
@@ -179,21 +216,26 @@ router.get('/:id', async (req, res) => {
   const coreBad = records.filter((r) => r.core && !r.ok);
   const infoBad = records.filter((r) => !r.core && !r.ok && r.record !== 'ms_verify');
   const at = domain.dns_provider && !/^(None|Unknown)$/i.test(domain.dns_provider) ? ` (DNS hosted at ${domain.dns_provider})` : '';
-  const line = (r, i) => `${i + 1}. ${r.label}: ${r.hint}\n   Expected: ${r.expected}${r.found ? `\n   Found now: ${r.found}` : '\n   Found now: nothing'}`;
+  const line = (r, i) => `${i + 1}. ${r.label} (${r.where}): ${r.hint}\n   Expected: ${r.expected}${r.found ? `\n   Found now: ${r.found}${r.byProvider ? ` (${r.byProvider})` : ''}` : '\n   Found now: nothing'}`;
   const fixText = coreBad.length || infoBad.length ? [
     `Microsoft 365 email DNS records for ${domain.domain}${at}`,
     '',
+    ...(missingSummary ? [missingSummary, ''] : []),
     ...(coreBad.length ? ['Needed for email to work:', ...coreBad.map(line), ''] : []),
     ...(infoBad.length ? ['Recommended (email security):', ...infoBad.map(line), ''] : []),
   ].join('\n').trim() : '';
   res.render('m365/domain', {
-    title: domain.domain, nav: 'microsoft', domain, records, events, fixText, STATUS_LABELS, LABELS, CORE,
+    title: domain.domain, nav: 'microsoft', domain, records, events, fixText, missingSummary, STATUS_LABELS, LABELS, CORE,
   });
 });
 
 router.post('/:id/check', async (req, res) => {
   const d = await domainOr404(req.params.id);
   const result = await checkDomain(req.user, d.id);
+  if (wantsJson(req)) {
+    if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+    return rowReply(req, res, d.id, { message: `Checked ${result.domain}: ${STATUS_LABELS[result.status] || result.status}${result.changed ? ' (changed)' : ''}.` });
+  }
   if (result.ok) flash(req, 'saved', `Checked ${result.domain}: ${STATUS_LABELS[result.status] || result.status}${result.changed ? ' (changed)' : ''}.`);
   else flash(req, 'error', result.error);
   res.redirect(backPath(req, `${BASE}/${d.id}`));
@@ -207,6 +249,7 @@ router.post('/:id/hide', async (req, res) => {
     else await pool.query('UPDATE m365_domains SET hidden_at = NULL, hidden_by = NULL WHERE id = ?', [d.id]);
     await log(req, { id: d.id, action: 'updated', summary: `${hide ? 'Hid' : 'Unhid'} the Email Services domain ${d.domain}` });
   }
+  if (wantsJson(req)) return rowReply(req, res, d.id, { message: hide ? `Hidden: ${d.domain}.` : `Unhidden: ${d.domain}.` });
   flash(req, 'saved', hide ? `Hidden: ${d.domain}. Find it under Hidden.` : `Unhidden: ${d.domain}.`);
   res.redirect(backPath(req, BASE));
 });

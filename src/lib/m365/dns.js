@@ -124,6 +124,56 @@ function fixHint(record, r, domain, provider) {
   }
 }
 
+// Where a record lives: "TXT on _dmarc.example.com".
+function whereOf(record, domain) {
+  const name = host(domain);
+  switch (record) {
+    case 'mx': return `MX on ${name}`;
+    case 'spf': case 'ms_verify': return `TXT on ${name}`;
+    case 'autodiscover': return `CNAME on autodiscover.${name}`;
+    case 'dkim1': return `CNAME on selector1._domainkey.${name}`;
+    case 'dkim2': return `CNAME on selector2._domainkey.${name}`;
+    case 'dmarc': return `TXT on _dmarc.${name}`;
+    default: return '';
+  }
+}
+
+// Records a DNS provider adds by itself, recognised from what was found:
+// [records, pattern, label]. The first match wins.
+const PROVIDER_DEFAULTS = [
+  [['dmarc'], /onsecureserver\.net/i, 'default record added by GoDaddy'],
+  [['mx'], /\.secureserver\.net\b/i, 'default record added by GoDaddy'],
+  [['spf'], /include:secureserver\.net/i, 'default record added by GoDaddy'],
+  [['mx'], /\.mx\.cloudflare\.net\b/i, 'added by Cloudflare Email Routing'],
+  [['spf'], /include:_spf\.mx\.cloudflare\.net/i, 'added by Cloudflare Email Routing'],
+  [['dmarc'], /dmarc-reports\.cloudflare\.net/i, 'added by Cloudflare DMARC Management'],
+  [['mx'], /eforward\d*\.registrar-servers\.com/i, 'default record added by Namecheap (email forwarding)'],
+  [['spf'], /include:spf\.efwd\.registrar-servers\.com/i, 'default record added by Namecheap (email forwarding)'],
+  [['mx'], /\.123-reg\.co\.uk\b/i, 'default record added by 123 Reg'],
+  [['mx'], /\.ionos\.(co\.uk|com|de)\b|\.1and1\./i, 'default record added by IONOS'],
+  [['spf'], /include:_spf(-eu)?\.ionos\.com/i, 'default record added by IONOS'],
+  [['mx'], /\.hostinger\.com\b/i, 'default record added by Hostinger'],
+  [['spf'], /include:_spf\.mail\.hostinger\.com/i, 'default record added by Hostinger'],
+];
+function providerDefault(record, found) {
+  if (!found) return '';
+  const hit = PROVIDER_DEFAULTS.find(([recs, re]) => recs.includes(record) && re.test(found));
+  return hit ? hit[2] : '';
+}
+
+// True when nothing of Microsoft 365 is left: no Microsoft MX, no SPF including
+// spf.protection.outlook.com and no MS=ms verification record (records = recordsFor() rows
+// or checkDns() records, keyed by record name or with .record).
+function m365Missing(records) {
+  const by = Array.isArray(records) ? Object.fromEntries(records.map((r) => [r.record, r])) : records;
+  if (!by.mx || !by.spf || !by.ms_verify) return false;
+  const mxFound = String(by.mx.found || '').split(/,\s*/).map((m) => host(m.split(/\s+/).pop()));
+  const msMx = mxFound.some(isMicrosoftMx);
+  const msSpf = /include:spf\.protection\.outlook\.com/i.test(String(by.spf.found || ''));
+  const verify = /MS=ms\d+/i.test(String(by.ms_verify.found || ''));
+  return !msMx && !msSpf && !verify;
+}
+
 module.exports = {
-  checkDns, fixHint, CORE, RECORDS, LABELS, host, mxHost,
+  checkDns, fixHint, whereOf, providerDefault, m365Missing, CORE, RECORDS, LABELS, host, mxHost,
 };

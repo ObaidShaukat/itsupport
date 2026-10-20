@@ -4154,6 +4154,17 @@ document.querySelectorAll('[data-list]').forEach((root) => {
   root.querySelectorAll('form').forEach((form) => {
     if (form.querySelector('[data-list-select], [data-list-search]')) form.addEventListener('submit', (e) => e.preventDefault());
   });
+  // A row changed in place (e.g. Email Services Check now / Hide): read its data-* again,
+  // then filter, count and sort as now.
+  root.addEventListener('list:update', () => {
+    for (const item of items) {
+      item.search = item.el.dataset.search || '';
+      item.tags = new Set((item.el.dataset.tags || '').split(' ').filter(Boolean));
+      item.rank = Number(item.el.dataset.rank) || 0;
+    }
+    reorder();
+    apply();
+  });
   apply();
 });
 // Forms on an instant list return to the list as it is filtered now (input[data-list-back]).
@@ -4171,6 +4182,107 @@ document.addEventListener('submit', (e) => {
     });
   }
 }, true);
+
+// ---- Email Services row actions (form[data-m365-action] in views/m365/_row.ejs) ----
+// Check now and Hide post with fetch (Accept JSON); the reply's rowHtml replaces the row's
+// contents in place (same element, so the instant list keeps it), the tiles get the new
+// numbers and the list filters again (a hidden row moves to the Hidden filter). Check now
+// spins its icon while it runs; Hide shows a toast with Undo. Without JS the forms post.
+(() => {
+  const toastBox = () => document.querySelector('[data-toasts]');
+  const TICK = '<span class="toast-icon toast-tick" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M7.5 12.5l3 3 6-6.5"></path></svg></span>';
+  const leave = (t) => { t.classList.add('is-leaving'); setTimeout(() => t.remove(), 300); };
+  function note(text, { error = false, undo = null } = {}) {
+    const box = toastBox();
+    if (!box) return;
+    const t = document.createElement('div');
+    t.className = error ? 'toast toast-error' : 'toast toast-saved m365-toast';
+    t.setAttribute('role', error ? 'alert' : 'status');
+    if (!error) t.innerHTML = TICK;
+    const span = document.createElement('span');
+    span.textContent = text;
+    t.append(span);
+    if (undo) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-small';
+      b.textContent = 'Undo';
+      b.addEventListener('click', () => { leave(t); undo(); });
+      t.append(b);
+    }
+    box.append(t);
+    setTimeout(() => { if (t.isConnected) leave(t); }, undo ? 6000 : 3000);
+  }
+  function putRow(row, html) {
+    const tpl = document.createElement('template');
+    tpl.innerHTML = `<table><tbody>${html.trim()}</tbody></table>`;
+    const fresh = tpl.content.querySelector('tr');
+    if (!fresh) return;
+    for (const a of [...row.attributes]) if (a.name !== 'hidden' && !fresh.hasAttribute(a.name)) row.removeAttribute(a.name);
+    for (const a of [...fresh.attributes]) if (a.name !== 'hidden') row.setAttribute(a.name, a.value);
+    row.innerHTML = fresh.innerHTML;
+  }
+  function putSummary(summary) {
+    if (!summary) return;
+    document.querySelectorAll('[data-m365-tile]').forEach((el) => {
+      const v = summary[el.dataset.m365Tile];
+      if (v === undefined) return;
+      el.textContent = String(v);
+      el.dataset.count = String(v);
+    });
+  }
+  async function send(form, data) {
+    const body = new URLSearchParams(new FormData(form));
+    for (const [k, v] of Object.entries(data || {})) body.set(k, v);
+    const back = form.querySelector('input[name="back"]');
+    if (back) body.set('back', `${location.pathname}${location.search}`);
+    try {
+      const r = await fetch(form.action, {
+        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, body, credentials: 'same-origin',
+      });
+      const json = await r.json().catch(() => ({ ok: false, error: `The server answered ${r.status}.` }));
+      return json;
+    } catch (err) {
+      return { ok: false, error: 'Could not reach the portal. Check your connection and try again.' };
+    }
+  }
+  function settle(row, json) {
+    putRow(row, json.rowHtml);
+    putSummary(json.summary);
+    const list = row.closest('[data-list]');
+    if (list) list.dispatchEvent(new Event('list:update'));
+  }
+  document.addEventListener('submit', async (e) => {
+    const form = e.target.closest && e.target.closest('form[data-m365-action]');
+    if (!form) return;
+    e.preventDefault();
+    const row = form.closest('tr[data-m365-row]');
+    const button = form.querySelector('button[type="submit"]');
+    if (!row || !button || button.disabled) return;
+    const kind = form.dataset.m365Action;
+    button.disabled = true;
+    button.classList.add('is-busy');
+    button.setAttribute('aria-busy', 'true');
+    const json = await send(form);
+    button.disabled = false;
+    button.classList.remove('is-busy');
+    button.removeAttribute('aria-busy');
+    if (!json.ok || !json.rowHtml) { note(json.error || 'That did not work. Reload the page and try again.', { error: true }); return; }
+    settle(row, json);
+    if (kind === 'hide' && json.hidden) {
+      note(json.message || 'Hidden.', {
+        undo: async () => {
+          const again = row.querySelector('form[data-m365-action="hide"]');
+          if (!again) return;
+          const back = await send(again, { hide: '0' });
+          if (back.ok && back.rowHtml) { settle(row, back); note(back.message || 'Unhidden.'); } else note(back.error || 'Could not undo. Use the Hidden filter.', { error: true });
+        },
+      });
+    } else {
+      note(json.message || 'Done.');
+    }
+  });
+})();
 // Links that switch the view (Board / List) keep the filters and search set in the browser.
 document.addEventListener('click', (e) => {
   const a = e.target.closest && e.target.closest('a[data-keep-query]');

@@ -3,7 +3,8 @@
   One Email Services domain (GET /microsoft/email-services/:id): status, managed by, DNS
   provider, one row per record (found now, expected, how to fix), "Copy fix instructions"
   (plain text for the customer, [data-copy-text] in app.js), the Uses Microsoft 365 override,
-  notes and the status history.
+  notes and the status history. Each record shows where it lives ("TXT on _dmarc.{domain}") and,
+  when recognised, that the DNS provider added it by default (providerDefault() in dns.js).
 %>
 <%
   const page = `/microsoft/email-services/${domain.id}`;
@@ -33,6 +34,7 @@
   </div>
 </header>
 <% if (domain.statusKey === 'error') { %><div class="flash flash-error" role="alert"><strong>The last check failed:</strong> <%= domain.status_reason %>. The records below are from the last check that worked.</div><% } %>
+<% if (missingSummary) { %><div class="flash flash-error m365-missing" role="alert"><%- icon('alert') %><span><%= missingSummary %></span></div><% } %>
 <% if (domain.statusKey === 'not_m365') { %><div class="flash flash-info" role="status"><%= domain.uses_m365 === 'no' ? 'Set to not use Microsoft 365.' : 'Nothing in DNS points to Microsoft 365 (MX, SPF, Autodiscover or the MS=ms verification record).' %> Change "Uses Microsoft 365" below if that is wrong.</div><% } %>
 
 <div class="grid-2 grid-wide-left">
@@ -53,9 +55,9 @@
             <tbody>
               <% for (const r of records) { %>
                 <tr class="<%= r.ok ? '' : 'is-bad-row' %>">
-                  <td><strong><%= r.label %></strong><% if (!r.core) { %><br><span class="muted small">Information</span><% } %></td>
+                  <td><strong><%= r.label %></strong><% if (r.where) { %><span class="m365-where"><%= r.where %></span><% } %><% if (!r.core) { %><span class="muted small">Information</span><% } %></td>
                   <td><span class="m365-mark <%= r.ok ? 'is-ok' : (r.core ? 'is-bad' : 'is-info') %>" aria-label="<%= r.ok ? 'OK' : 'Not right' %>"><%= r.ok ? '✅' : '❌' %></span></td>
-                  <td class="m365-found" title="<%= r.found || 'Nothing found' %>"><%= r.found || 'Nothing found' %></td>
+                  <td class="m365-found" title="<%= r.found || 'Nothing found' %>"><%= r.found || 'Nothing found' %><% if (r.byProvider) { %><br><span class="m365-by"><%= r.byProvider %></span><% } %></td>
                   <td class="m365-expected" title="<%= r.expected %>">
                     <%= r.expected %>
                     <% if (r.hint) { %><div class="m365-hint small"><%- icon('tool') %> <%= r.hint %></div><% } %>

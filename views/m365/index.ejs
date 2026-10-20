@@ -3,11 +3,10 @@
   Microsoft > Email Services (src/routes/m365.js): Microsoft 365 email health of domains from
   public DNS. Tiles, status / managed-by filters, search and sortable columns, all instant
   ([data-list] in app.js); default order: issues first. Add domains (paste a list), Check now
-  for all and per row, Hide. Red LED = issues or a failed check.
+  for all and per row (in place with fetch), Hide (undo toast). Red LED = issues or a failed check.
 %>
 <%
   const here = href({});
-  const tone = { healthy: 'is-ok', issues: 'is-bad', not_m365: 'is-muted', error: 'is-bad', unchecked: 'is-info' };
   const sortHead = (key, label, cls = '') => {
     const active = state.sort === key;
     const dir = active && state.dir === 'asc' ? 'desc' : 'asc';
@@ -55,10 +54,10 @@
 
 <div data-list>
 <div class="cf-tiles m365-tiles reveal">
-  <a href="/microsoft/email-services" class="tile cf-tile" data-list-set="status:all"><span class="tile-label">Microsoft 365 domains</span><span class="big-num" data-count="<%= summary.m365 %>"><%= summary.m365 %></span></a>
-  <a href="/microsoft/email-services?status=healthy" class="tile cf-tile" data-list-set="status:healthy"><span class="tile-label">Healthy</span><span class="big-num" data-count="<%= summary.healthy %>"><%= summary.healthy %></span></a>
-  <a href="/microsoft/email-services?status=issues" class="tile cf-tile <%= summary.issues ? 'has-problem' : '' %>" data-list-set="status:issues"><span class="tile-label"><% if (summary.issues) { %><span class="led led-urgent" aria-hidden="true"></span><% } %>Issues</span><span class="big-num" data-count="<%= summary.issues %>"><%= summary.issues %></span></a>
-  <a href="/microsoft/email-services?status=not_m365" class="tile cf-tile" data-list-set="status:not_m365"><span class="tile-label">Not Microsoft</span><span class="big-num" data-count="<%= summary.notM365 %>"><%= summary.notM365 %></span></a>
+  <a href="/microsoft/email-services" class="tile cf-tile" data-list-set="status:all"><span class="tile-label">Microsoft 365 domains</span><span class="big-num" data-count="<%= summary.m365 %>" data-m365-tile="m365"><%= summary.m365 %></span></a>
+  <a href="/microsoft/email-services?status=healthy" class="tile cf-tile" data-list-set="status:healthy"><span class="tile-label">Healthy</span><span class="big-num" data-count="<%= summary.healthy %>" data-m365-tile="healthy"><%= summary.healthy %></span></a>
+  <a href="/microsoft/email-services?status=issues" class="tile cf-tile <%= summary.issues ? 'has-problem' : '' %>" data-list-set="status:issues"><span class="tile-label"><% if (summary.issues) { %><span class="led led-urgent" aria-hidden="true"></span><% } %>Issues</span><span class="big-num" data-count="<%= summary.issues %>" data-m365-tile="issues"><%= summary.issues %></span></a>
+  <a href="/microsoft/email-services?status=not_m365" class="tile cf-tile" data-list-set="status:not_m365"><span class="tile-label">Not Microsoft</span><span class="big-num" data-count="<%= summary.notM365 %>" data-m365-tile="notM365"><%= summary.notM365 %></span></a>
 </div>
 
 <section class="panel reveal" id="domains">
@@ -100,33 +99,11 @@
             <%- sortHead('managed', 'Managed by', 'm365-managed') %>
             <%- sortHead('provider', 'DNS provider', 'm365-provider') %>
             <%- sortHead('checked', 'Last checked', 'm365-checked right') %>
-            <th class="cf-actions"><span class="visually-hidden">Actions</span></th>
+            <th class="m365-actions"><span class="visually-hidden">Actions</span></th>
           </tr>
         </thead>
         <tbody>
-          <% for (const d of rows) { %>
-            <tr class="<%= d.hidden ? 'is-hidden-row' : '' %>" data-list-item data-search="<%= d.search %>" data-tags="<%= d.tags %>" data-rank="<%= d.rank %>"
-                <% for (const [k, v] of Object.entries(d.sortValues)) { %>data-sort-<%= k %>="<%= v %>" <% } %><%= d.visible ? '' : 'hidden' %>>
-              <td class="cf-led"><% if (d.led) { %><span class="led led-<%= d.led %>" title="<%= d.statusKey === 'error' ? 'The check failed' : 'Email issues' %>"></span><% } %></td>
-              <td title="<%= d.domain %>"><a href="/microsoft/email-services/<%= d.id %>"><strong><%= d.domain %></strong></a><% if (d.notes) { %> <span class="muted" title="<%= d.notes %>"><%- icon('file') %></span><% } %></td>
-              <td title="<%= d.statusKey === 'issues' ? `Not right: ${d.issueLabels.join(', ')}` : (d.status_reason || '') %>">
-                <span class="status-pill <%= tone[d.statusKey] %>"><%= d.statusLabel %></span><% if (d.statusKey === 'issues') { %> <span class="muted small"><%= d.issueLabels.join(', ') %></span><% } %><% if (d.hidden) { %> <span class="status-pill is-muted">Hidden</span><% } %>
-              </td>
-              <td><%= d.managed_by || '—' %></td>
-              <td title="<%= d.nameserverList.join(', ') %>"><%= d.dns_provider || '—' %></td>
-              <td class="right muted" title="<%= d.last_checked ? fmtDate(d.last_checked) : '' %>"><%= d.last_checked ? fmtAgo(d.last_checked) : '—' %></td>
-              <td class="row-actions cf-actions">
-                <form method="post" action="/microsoft/email-services/<%= d.id %>/check" class="inline" data-busy-label="…">
-                  <%- csrfField %><input type="hidden" name="back" value="<%= here %>" data-list-back>
-                  <button type="submit" class="icon-btn" title="Check now" aria-label="Check <%= d.domain %> now"><%- icon('refresh') %></button>
-                </form>
-                <form method="post" action="/microsoft/email-services/<%= d.id %>/hide" class="inline">
-                  <%- csrfField %><input type="hidden" name="back" value="<%= here %>" data-list-back><input type="hidden" name="hide" value="<%= d.hidden ? '0' : '1' %>">
-                  <button type="submit" class="icon-btn" title="<%= d.hidden ? 'Unhide' : 'Hide (no counts, no alerts)' %>" aria-label="<%= d.hidden ? 'Unhide' : 'Hide' %> <%= d.domain %>"><%- icon(d.hidden ? 'eye' : 'eye-off') %></button>
-                </form>
-              </td>
-            </tr>
-          <% } %>
+          <% for (const d of rows) { %><%- include('_row', { d, here }) %><% } %>
         </tbody>
       </table>
     </div>
