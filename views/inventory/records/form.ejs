@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/t/<%= tab.id %>"><%= tab.name %></a><% if (record) { %> / <a href="/inventory/r/<%= record.id %>"><%= recordTitle %></a><% } %></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: tab.name, href: `/inventory/t/${tab.id}` }, ...(record ? [{ label: recordTitle, href: `/inventory/r/${record.id}` }] : []), { label: record ? 'Edit' : 'Add' }] }) %>
     <h1><%= record ? `Edit ${recordTitle}` : `Add to ${tab.name}` %></h1>
   </div>
 </header>

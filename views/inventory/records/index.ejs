@@ -1,6 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: tab.name }] }) %>
     <h1><%= tab.name %></h1>
     <p class="muted">
       <% if (tab.kind === 'employees') { %>Active employees. Click a row to open the profile.<% } else if (tab.kind === 'ex_employees') { %>Employees marked inactive, with the date they left. Their records stay as they were.<% } else { %>Click a row to open it.<% } %>

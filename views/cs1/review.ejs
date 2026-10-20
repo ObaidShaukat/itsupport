@@ -1,5 +1,5 @@
 <%- include('../partials/head') %>
-<%- include('_head', { area, settings, heading: `Billing · ${month}`, intro: `${run.file_name || 'CDR file'} · ${run.row_count} call lines · uploaded by ${run.uploaded_name || 'someone'} ${fmtDate(run.uploaded_at)} · ${Number(run.margin)}% margin, £${run.minimum} minimum` }) %>
+<%- include('_head', { area, settings, heading: `Billing · ${month}`, crumb: month, intro: `${run.file_name || 'CDR file'} · ${run.row_count} call lines · uploaded by ${run.uploaded_name || 'someone'} ${fmtDate(run.uploaded_at)} · ${Number(run.margin)}% margin, £${run.minimum} minimum` }) %>
 <% const back = `/call-switch-one/billing/runs/${run.id}${showExcluded ? '?excluded=1' : ''}`; const shown = lines.filter((l) => showExcluded || l.included); const unknown = lines.filter((l) => !l.known).length; %>
 
 <div class="cs1-cards">

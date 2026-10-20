@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/workbook">Import / Export</a> / Import</p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Import / Export', href: '/inventory/workbook' }, { label: 'Import' }] }) %>
     <h1>Match sheets and columns</h1>
     <p class="muted"><%= stage.fileName %> · <%= stage.sheets.length %> sheet<%= stage.sheets.length === 1 ? '' : 's' %>. Each sheet was matched to a tab by name and its columns to fields by name. Change anything that is wrong, then preview.</p>
   </div>

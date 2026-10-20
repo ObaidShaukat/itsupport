@@ -12,7 +12,7 @@ const {
 } = require('../lib/m365/data');
 const { runChecks, checkDomain } = require('../lib/m365/check');
 const {
-  fixHint, whereOf, providerDefault, m365Missing, LABELS, CORE,
+  fixSteps, stepsText, expectedValue, TTL, whereOf, providerDefault, m365Missing, LABELS, CORE,
 } = require('../lib/m365/dns');
 
 const router = express.Router();
@@ -193,15 +193,18 @@ async function domainOr404(id) {
 
 router.get('/:id', async (req, res) => {
   const domain = await domainOr404(req.params.id);
-  const records = (await recordsFor(domain.id)).map((r) => {
-    const count = r.found ? String(r.found).split('  |  ').length : 0;
-    return {
-      ...r,
-      where: whereOf(r.record, domain.domain),
-      byProvider: providerDefault(r.record, r.found),
-      hint: r.ok ? '' : fixHint(r.record, { found: r.found, count }, domain.domain, domain.dns_provider),
-    };
-  });
+  const checks = await recordsFor(domain.id);
+  // The DKIM selectors share a tenant: a right one tells the other's expected value.
+  const ctx = Object.fromEntries(checks.filter((r) => ['dkim1', 'dkim2'].includes(r.record)).map((r) => [r.record, r.ok ? r.found : '']));
+  // Each record: where it lives, the expected value only, and the fix steps when it fails
+  // (Type / Host / Value / Priority / TTL, or Remove: ...).
+  const records = checks.map((r) => ({
+    ...r,
+    where: whereOf(r.record, domain.domain),
+    byProvider: providerDefault(r.record, r.found),
+    expectedShort: expectedValue(r.record, domain.domain, ctx),
+    steps: fixSteps(r.record, r, domain.domain, ctx),
+  }));
   // Set to use Microsoft 365 but nothing of it is in DNS: most likely the nameservers moved and
   // the records were not copied over.
   const provider = domain.dns_provider && !/^(None|Unknown)$/i.test(domain.dns_provider) ? domain.dns_provider : 'another provider';
@@ -212,20 +215,25 @@ router.get('/:id', async (req, res) => {
     SELECT e.*, COALESCE(NULLIF(u.display_name, ''), u.username) AS user_name FROM m365_events e LEFT JOIN users u ON u.id = e.user_id
     WHERE e.domain_id = ? ORDER BY e.created_at DESC, e.id DESC LIMIT 200
   `, [domain.id]);
-  // Plain-text fix instructions for the customer (what is missing or wrong).
+  // Plain-text fix instructions for the customer: every failing record in the same
+  // Type / Host / Value / Priority / TTL format as the page.
   const coreBad = records.filter((r) => r.core && !r.ok);
-  const infoBad = records.filter((r) => !r.core && !r.ok && r.record !== 'ms_verify');
+  const infoBad = records.filter((r) => !r.core && !r.ok);
   const at = domain.dns_provider && !/^(None|Unknown)$/i.test(domain.dns_provider) ? ` (DNS hosted at ${domain.dns_provider})` : '';
-  const line = (r, i) => `${i + 1}. ${r.label}${r.problem ? ` ${r.problem}` : ''} (${r.where}): ${r.hint}\n   Expected: ${r.expected}${r.found ? `\n   Found now: ${r.found}${r.byProvider ? ` (${r.byProvider})` : ''}` : '\n   Found now: nothing'}`;
+  const line = (r, i) => [
+    `${i + 1}. ${r.label}${r.problem ? ` ${r.problem}` : ''} (${r.where})`,
+    `   Found now: ${r.found ? `${r.found}${r.byProvider ? ` (${r.byProvider})` : ''}` : 'nothing'}`,
+    ...stepsText(r.steps),
+  ].join('\n');
   const fixText = coreBad.length || infoBad.length ? [
     `Microsoft 365 email DNS records for ${domain.domain}${at}`,
     '',
     ...(missingSummary ? [missingSummary, ''] : []),
-    ...(coreBad.length ? ['Needed for Microsoft 365 email to be healthy:', ...coreBad.map(line), ''] : []),
-    ...(infoBad.length ? ['Recommended (email security):', ...infoBad.map(line), ''] : []),
+    ...(coreBad.length ? ['Needed for Microsoft 365 email to be healthy:', '', ...coreBad.map(line).join('\n\n').split('\n'), ''] : []),
+    ...(infoBad.length ? ['Also recommended:', '', ...infoBad.map(line).join('\n\n').split('\n'), ''] : []),
   ].join('\n').trim() : '';
   res.render('m365/domain', {
-    title: domain.domain, nav: 'microsoft', domain, records, events, fixText, missingSummary, STATUS_LABELS, LABELS, CORE,
+    title: domain.domain, nav: 'microsoft', domain, records, events, fixText, missingSummary, STATUS_LABELS, LABELS, CORE, TTL,
   });
 });
 

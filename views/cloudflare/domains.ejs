@@ -17,7 +17,7 @@
 %>
 <header class="page-head reveal">
   <div>
-    <p class="crumbs">Cloudflare</p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Cloudflare', href: '/cloudflare' }, { label: 'Domains' }] }) %>
     <h1>Domains</h1>
     <p class="muted">Every zone in the Cloudflare accounts the token can see (read only), checked every 6 hours: status, nameservers in public DNS and expiry.</p>
   </div>

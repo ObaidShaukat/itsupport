@@ -1,6 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Stock', href: '/inventory/stock' }, { label: 'Stock summary' }] }) %>
     <h1>Stock summary</h1>
     <p class="muted">Items per category. Click a number to see those items.</p>
   </div>

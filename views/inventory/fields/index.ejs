@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="<%= area.back %>"><%= area.kind === 'tab' ? area.name : 'Stock categories' %></a></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: area.kind === 'tab' ? area.name : 'Stock categories', href: area.back }, { label: 'Columns' }] }) %>
     <h1>Columns · <%= area.name %></h1>
     <p class="muted"><%= area.kind === 'tab' ? 'The fields every record in this tab has.' : `Extra fields for ${area.name} items, shown on the item, in Stock when filtered to ${area.name}, and in employee profiles.` %> Drag to reorder (also possible by dragging the column headers in the table).</p>
   </div>

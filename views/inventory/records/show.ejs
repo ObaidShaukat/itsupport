@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/t/<%= tab.id %>"><%= tab.name %></a></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: tab.name, href: `/inventory/t/${tab.id}` }, { label: title }] }) %>
     <h1><%= title %></h1>
     <p class="record-meta">
       <span>Added<%= record.created_by_name ? ` by ${record.created_by_name}` : '' %> on <%= fmtDate(record.created_at) %></span>

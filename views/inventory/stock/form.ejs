@@ -6,7 +6,7 @@
 %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/stock">Stock</a><% if (!isNew) { %> / <a href="/inventory/stock?category=<%= item.category_id %>"><%= item.category_name %></a><% } %></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Stock', href: '/inventory/stock' }, ...(!isNew ? [{ label: item.category_name, href: `/inventory/stock?category=${item.category_id}` }] : []), { label: isNew ? 'Add stock item' : title }] }) %>
     <h1><%= isNew ? 'Add stock item' : title %></h1>
     <% if (!isNew) { %>
       <p class="emp-status">

@@ -1,6 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Settings' }] }) %>
     <h1>Inventory settings</h1>
     <p class="muted">Drag to change the order (for everyone). Employees, Ex Employees and Stock can be renamed and moved but not deleted.</p>
   </div>

@@ -1,6 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Stock', href: '/inventory/stock' }, { label: 'Brands & models' }] }) %>
     <h1>Brands &amp; models</h1>
     <p class="muted">Every brand and model in stock, per category, with counts. Rename one, or merge it into another, to tidy up duplicates (for example brand "MacBook" into "Apple"). You see a preview before anything changes.</p>
   </div>

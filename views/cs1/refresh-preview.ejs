@@ -6,7 +6,7 @@
 %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/call-switch-one/customers">Call Switch One · Customers</a></p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Call Switch One', href: '/call-switch-one' }, { label: 'Customers', href: '/call-switch-one/customers' }, { label: 'Refresh from CallSwitch' }] }) %>
     <h1>Refresh from CallSwitch</h1>
     <p class="muted"><%= records %> customer<%= records === 1 ? '' : 's' %> in the CallSwitch list<%= skipped ? ` (${skipped} without a CS1 ID are left out)` : '' %><%= demo ? `, ${demo} demo account${demo === 1 ? '' : 's'} (hidden on Customers unless shown)` : '' %>. Nothing is saved until you confirm.</p>
   </div>

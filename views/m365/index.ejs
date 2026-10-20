@@ -16,7 +16,7 @@
 %>
 <header class="page-head reveal">
   <div>
-    <p class="crumbs">Microsoft</p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Microsoft', href: '/microsoft' }, { label: 'Email Services' }] }) %>
     <h1>Email Services</h1>
     <p class="muted">Microsoft 365 email records of each domain, from public DNS (read only): Healthy only when MX, SPF, Autodiscover, DKIM (selector1 and selector2) and DMARC (p=quarantine or p=reject) are all right; the Microsoft verification record is shown too. Checked every 6 hours.</p>
   </div>
@@ -93,7 +93,6 @@
       <table class="table m365-table">
         <thead>
           <tr>
-            <th class="cf-led"><span class="visually-hidden">Problem</span></th>
             <%- sortHead('domain', 'Domain', 'm365-domain') %>
             <%- sortHead('status', 'Status', 'm365-status') %>
             <%- sortHead('managed', 'Managed by', 'm365-managed') %>

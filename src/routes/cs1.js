@@ -29,7 +29,6 @@ const MAX_BYTES = 50 * 1024 * 1024;
 const OUR_DOMAIN = '@cleartwo.co.uk';
 const MAX_RECIPIENTS = 25;
 
-router.get('/', (req, res) => res.redirect(BASE));
 
 // ---- Upload & review ----
 

@@ -145,28 +145,104 @@ const parseReasons = (json) => {
   }
 };
 
-// A short "How to fix" line for a record that is not right, at the domain's DNS provider.
-function fixHint(record, r, domain, provider) {
-  const at = provider && !/^(None|Not checked|Unknown)$/i.test(provider) ? ` at ${provider}` : ' with whoever hosts the DNS';
-  const name = host(domain);
+// ---- Fix steps for the domain page's "How to fix" and "Copy fix instructions" ----
+// A step is { action: 'add' | 'change' | 'remove', type, host, value, priority, from, remove }:
+// add / change carry Type / Host / Value (+ Priority for MX; TTL is always 3600 or Auto);
+// change also has from (what is there now); remove has remove = the record to delete
+// ("MX 10 mailstore1.secureserver.net"). Hosts are relative: "@" is the domain itself.
+const TTL = '3600 (or Auto)';
+const MS_SPF = 'v=spf1 include:spf.protection.outlook.com -all';
+const splitFound = (record, found) => {
+  const v = String(found || '').trim();
+  if (!v) return [];
+  return ['spf', 'dmarc'].includes(record) ? v.split(/\s+\|\s+/) : v.split(/,\s*/);
+};
+const sel = (record) => (record === 'dkim1' ? 'selector1' : 'selector2');
+
+// The Microsoft DKIM target of a selector: from the other selector when that one is right
+// (same tenant), else the usual pattern with <tenant> to fill in from Microsoft Defender.
+function dkimTarget(record, domain, otherFound) {
+  const other = splitFound('dkim', otherFound).map(host).find(isMicrosoftDkim);
+  const want = sel(record);
+  if (other) return other.replace(/selector[12]/, want);
+  return `${want}-${host(domain).replace(/\./g, '-')}._domainkey.<tenant>.onmicrosoft.com`;
+}
+
+// The expected value only, short and plain ("example-com.mail.protection.outlook.com").
+function expectedValue(record, domain, ctx = {}) {
   switch (record) {
-    case 'mx': return r.found ? `Change the MX record to ${mxHost(name)} (priority 0)${at} and remove the other MX records.` : `Add an MX record ${mxHost(name)} (priority 0)${at}.`;
-    case 'spf':
-      if (r.count > 1) return `There are ${r.count} SPF records: merge them into one TXT record that includes include:spf.protection.outlook.com${at}.`;
-      if (r.count === 1) return `Add include:spf.protection.outlook.com to the existing SPF record${at}.`;
-      return `Add a TXT record v=spf1 include:spf.protection.outlook.com -all on ${name}${at}.`;
-    case 'autodiscover': return r.found ? `Change the CNAME autodiscover to point to autodiscover.outlook.com${at}.` : `Add a CNAME autodiscover → autodiscover.outlook.com${at}.`;
-    case 'dkim1': case 'dkim2': {
-      const sel = record === 'dkim1' ? 'selector1' : 'selector2';
-      return `${r.found ? 'Change' : 'Add'} the CNAME ${sel}._domainkey to the value from Microsoft Defender (Email authentication > DKIM)${at}, then enable DKIM signing.`;
-    }
-    case 'dmarc':
-      if (r.count > 1) return `There are ${r.count} TXT records on _dmarc: keep only one, ${DMARC_SUGGESTED}${at}.`;
-      if (r.count === 1) return `Replace the TXT record on _dmarc with ${DMARC_SUGGESTED}${at}.`;
-      return `Add a TXT record _dmarc with ${DMARC_SUGGESTED}${at}.`;
-    case 'ms_verify': return 'Add the TXT MS=ms… value shown in the Microsoft 365 admin centre (Settings > Domains) to verify the domain.';
+    case 'mx': return mxHost(host(domain));
+    case 'spf': return MS_SPF;
+    case 'autodiscover': return 'autodiscover.outlook.com';
+    case 'dkim1': return dkimTarget('dkim1', domain, ctx.dkim2);
+    case 'dkim2': return dkimTarget('dkim2', domain, ctx.dkim1);
+    case 'dmarc': return DMARC_SUGGESTED;
+    case 'ms_verify': return 'MS=ms######## (from the Microsoft 365 admin centre)';
     default: return '';
   }
+}
+
+// SPF with the Microsoft include added: one record keeps its own mechanisms; several are
+// merged into one (duplicates dropped), ending with the first record's "all" (else -all).
+function fixedSpf(records) {
+  const terms = [];
+  let all = '';
+  for (const rec of records) {
+    for (const t of rec.trim().split(/\s+/).slice(1)) {
+      if (/^[~?+-]?all$/i.test(t)) { if (!all) all = t; } else if (!terms.some((x) => x.toLowerCase() === t.toLowerCase())) terms.push(t);
+    }
+  }
+  if (!terms.some((t) => /^include:spf\.protection\.outlook\.com$/i.test(t))) terms.push('include:spf.protection.outlook.com');
+  return ['v=spf1', ...terms, all || '-all'].join(' ');
+}
+
+// The steps that fix one record that is not right (an empty list when it is right).
+function fixSteps(record, check, domain, ctx = {}) {
+  if (!check || check.ok) return [];
+  const name = host(domain);
+  const found = splitFound(record, check.found);
+  const value = expectedValue(record, name, ctx);
+  switch (record) {
+    case 'mx': {
+      const list = found.map((m) => { const [p, h] = m.trim().split(/\s+/); return { priority: p, exchange: host(h || p) }; });
+      const steps = [];
+      if (!list.some((m) => isMicrosoftMx(m.exchange))) steps.push({ action: 'add', type: 'MX', host: '@', value, priority: '0' });
+      for (const m of list.filter((x) => !isMicrosoftMx(x.exchange))) steps.push({ action: 'remove', remove: `MX ${m.priority} ${m.exchange}` });
+      return steps;
+    }
+    case 'spf':
+      if (!found.length) return [{ action: 'add', type: 'TXT', host: '@', value }];
+      if (found.length === 1) return [{ action: 'change', type: 'TXT', host: '@', value: fixedSpf(found), from: found[0] }];
+      return [...found.map((f) => ({ action: 'remove', remove: `TXT @ "${f}"` })), { action: 'add', type: 'TXT', host: '@', value: fixedSpf(found) }];
+    case 'autodiscover':
+      return [found.length
+        ? { action: 'change', type: 'CNAME', host: 'autodiscover', value, from: found.join(', ') }
+        : { action: 'add', type: 'CNAME', host: 'autodiscover', value }];
+    case 'dkim1': case 'dkim2':
+      return [found.length
+        ? { action: 'change', type: 'CNAME', host: `${sel(record)}._domainkey`, value, from: found.join(', ') }
+        : { action: 'add', type: 'CNAME', host: `${sel(record)}._domainkey`, value }];
+    case 'dmarc':
+      if (!found.length) return [{ action: 'add', type: 'TXT', host: '_dmarc', value }];
+      if (found.length === 1) return [{ action: 'change', type: 'TXT', host: '_dmarc', value, from: found[0] }];
+      return [...found.map((f) => ({ action: 'remove', remove: `TXT _dmarc "${f}"` })), { action: 'add', type: 'TXT', host: '_dmarc', value }];
+    case 'ms_verify':
+      return [{ action: 'add', type: 'TXT', host: '@', value: 'MS=ms######## (copy it from the Microsoft 365 admin centre: Settings > Domains)' }];
+    default: return [];
+  }
+}
+
+// Plain-text lines of the steps, in the same Type / Host / Value / Priority / TTL format.
+function stepsText(steps, indent = '   ') {
+  const out = [];
+  for (const s of steps) {
+    if (s.action === 'remove') { out.push(`${indent}Remove: ${s.remove}`); continue; }
+    out.push(`${indent}${s.action === 'change' ? `Change (now: ${s.from})` : 'Add'}:`);
+    out.push(`${indent}  Type: ${s.type}`, `${indent}  Host: ${s.host}`, `${indent}  Value: ${s.value}`);
+    if (s.priority !== undefined) out.push(`${indent}  Priority: ${s.priority}`);
+    out.push(`${indent}  TTL: ${TTL}`);
+  }
+  return out;
 }
 
 // Where a record lives: "TXT on _dmarc.example.com".
@@ -220,5 +296,5 @@ function m365Missing(records) {
 }
 
 module.exports = {
-  checkDns, fixHint, whereOf, reasonsList, reasonsSummary, parseReasons, DMARC_SUGGESTED, providerDefault, m365Missing, CORE, RECORDS, LABELS, host, mxHost,
+  checkDns, fixSteps, stepsText, expectedValue, TTL, whereOf, reasonsList, reasonsSummary, parseReasons, DMARC_SUGGESTED, providerDefault, m365Missing, CORE, RECORDS, LABELS, host, mxHost,
 };

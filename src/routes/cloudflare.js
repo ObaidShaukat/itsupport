@@ -17,7 +17,6 @@ const { providersLabel } = require('../lib/cloudflare/lookups');
 const router = express.Router();
 const log = (req, entry) => logActivity(null, req.user, { type: 'cloudflare', subject: 'Cloudflare', ...entry });
 
-router.get('/', (req, res) => res.redirect('/cloudflare/domains'));
 
 // ---- Domains ----
 const STATUS_FILTERS = {

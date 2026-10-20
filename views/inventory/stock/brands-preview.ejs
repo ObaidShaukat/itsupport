@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/stock/brands">Brands &amp; models</a></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Stock', href: '/inventory/stock' }, { label: 'Brands & models', href: '/inventory/stock/brands' }, { label: 'Preview' }] }) %>
     <h1>Preview: <%= describe %></h1>
     <p class="muted">In <%= where %>. Nothing has changed yet.</p>
   </div>

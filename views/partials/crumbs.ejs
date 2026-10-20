@@ -1,0 +1,8 @@
+<%#
+  Breadcrumbs: crumbs = [{ label, href }, ...]. Every crumb but the last links to its page
+  (a section group to its overview, e.g. Microsoft -> /microsoft; a sub-section to its own
+  page); the last one is the current page, plain text.
+%>
+<nav class="crumbs" aria-label="Breadcrumb">
+  <% crumbs.forEach((c, i) => { const last = i === crumbs.length - 1; %><% if (i) { %><span class="crumb-sep" aria-hidden="true">/</span><% } %><% if (!last && c.href) { %><a href="<%= c.href %>"><%= c.label %></a><% } else { %><span <%- last ? 'aria-current="page"' : '' %>><%= c.label %></span><% } %><% }) %>
+</nav>

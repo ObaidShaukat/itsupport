@@ -2,7 +2,7 @@
 <% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users).split(',').map(Number); %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/microsoft/partner">Microsoft Partner</a></p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Microsoft', href: '/microsoft' }, { label: 'Microsoft Partner', href: '/microsoft/partner' }, { label: 'Settings' }] }) %>
     <h1>Microsoft Partner settings</h1>
     <p class="muted">Who is alerted about expiring relationships, the Partner Center link and the client secret reminder.</p>
   </div>

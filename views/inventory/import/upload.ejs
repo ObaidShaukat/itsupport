@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="<%= area.back %>"><%= area.name %></a></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: area.name, href: area.back }, { label: 'Import' }] }) %>
     <h1>Import into <%= area.name %></h1>
     <p class="muted">Upload an .xlsx or .csv file (up to 20 MB). Next you match its columns to fields, check a preview, then confirm. Nothing changes until you confirm.</p>
   </div>

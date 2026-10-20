@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/stock">Stock</a></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Stock', href: '/inventory/stock' }, { label: 'Add multiple items' }] }) %>
     <h1>Add multiple items</h1>
     <p class="muted">Same category, brand and model. One row per item for its serial / asset number. Extra field values apply to all of them.</p>
   </div>

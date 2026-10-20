@@ -4327,13 +4327,17 @@ document.addEventListener('click', (e) => {
 });
 
 // Buttons that copy a block of text (e.g. Email Services "Copy fix instructions"):
-// button[data-copy-text="#id"] copies that element's text and says so in a toast.
+// button[data-copy-text="#id"] copies that element's text and says so in a toast;
+// button[data-copy-value="..."] copies that value (e.g. a DNS Host / Value) and ticks for a moment.
 document.addEventListener('click', async (e) => {
-  const btn = e.target.closest && e.target.closest('button[data-copy-text]');
+  const btn = e.target.closest && e.target.closest('button[data-copy-text], button[data-copy-value]');
   if (!btn) return;
-  const source = document.querySelector(btn.dataset.copyText);
-  if (!source) return;
-  const text = source.value !== undefined ? source.value : source.textContent;
+  let text = btn.dataset.copyValue;
+  if (text === undefined) {
+    const source = document.querySelector(btn.dataset.copyText);
+    if (!source) return;
+    text = source.value !== undefined ? source.value : source.textContent;
+  }
   const box = document.querySelector('[data-toasts]');
   const toast = (msg, isError) => {
     if (!box) return;
@@ -4346,6 +4350,10 @@ document.addEventListener('click', async (e) => {
   };
   try {
     await copyPlain(text);
+    if (btn.dataset.copyValue !== undefined) {
+      btn.classList.add('is-copied');
+      setTimeout(() => btn.classList.remove('is-copied'), 1500);
+    }
     toast(btn.dataset.copied || 'Copied.');
   } catch (err) {
     toast('Could not copy automatically. Select the text and copy it by hand.', true);

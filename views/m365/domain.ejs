@@ -14,7 +14,7 @@
 %>
 <header class="page-head reveal">
   <div>
-    <p class="crumbs"><a href="/microsoft/email-services">Microsoft</a> / <a href="/microsoft/email-services">Email Services</a></p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Microsoft', href: '/microsoft' }, { label: 'Email Services', href: '/microsoft/email-services' }, { label: domain.domain }] }) %>
     <h1><% if (domain.led) { %><span class="led led-<%= domain.led %>" aria-hidden="true"></span> <% } %><%= domain.domain %></h1>
     <p class="cf-head-line">
       <span class="status-pill <%= tone[domain.statusKey] %>"><%= domain.statusLabel %></span>
@@ -37,43 +37,71 @@
 <% if (missingSummary) { %><div class="flash flash-error m365-missing" role="alert"><%- icon('alert') %><span><%= missingSummary %></span></div><% } %>
 <% if (domain.statusKey === 'not_m365') { %><div class="flash flash-info" role="status"><%= domain.uses_m365 === 'no' ? 'Set to not use Microsoft 365.' : 'Nothing in DNS points to Microsoft 365 (MX, SPF, Autodiscover or the MS=ms verification record).' %> Change "Uses Microsoft 365" below if that is wrong.</div><% } %>
 
+<section class="card reveal" aria-labelledby="m365-records">
+  <div class="card-head">
+    <h2 id="m365-records">Records</h2>
+    <% if (fixText) { %>
+      <button type="button" class="btn btn-small" data-copy-text="#m365-fix" data-copied="Copied. Paste it into your email to the customer."><%- icon('copy') %><span>Copy fix instructions</span></button>
+    <% } %>
+  </div>
+  <% if (domain.statusKey === 'issues' && domain.reasonLines.length) { %>
+    <div class="m365-reasons" role="status"><strong>Not right:</strong><ul><% for (const line of domain.reasonLines) { %><li><%= line %></li><% } %></ul></div>
+  <% } %>
+  <% if (!records.length) { %>
+    <p class="empty">Not checked yet: click Check now.</p>
+  <% } else { %>
+    <div class="table-wrap">
+      <table class="table m365-records">
+        <thead><tr><th class="m365-col-status">Status</th><th class="m365-col-record">Record</th><th class="m365-col-found">Current status</th><th class="m365-col-expected">Expected record</th><th class="m365-col-fix">How to fix</th></tr></thead>
+        <tbody>
+          <% for (const r of records) { %>
+            <tr class="<%= r.ok ? '' : 'is-bad-row' %>">
+              <td class="m365-col-status">
+                <span class="m365-mark <%= r.ok ? 'is-ok' : 'is-bad' %>" role="img" aria-label="<%= r.ok ? 'Correct' : 'Not right' %>" title="<%= r.ok ? 'Correct' : 'Not right' %>"><%- icon(r.ok ? 'check' : 'x') %></span>
+              </td>
+              <td>
+                <strong><%= r.label %></strong>
+                <% if (r.where) { %><span class="m365-where"><%= r.where %></span><% } %>
+                <% if (!r.ok && r.problem) { %><span class="m365-problem"><%= r.label %> <%= r.problem %></span><% } %>
+                <% if (!r.core) { %><span class="muted small">Information</span><% } %>
+              </td>
+              <td class="m365-found">
+                <% if (r.found) { %><span class="m365-code"><%= r.found %></span><% } else { %><span class="m365-none">Nothing found</span><% } %>
+                <% if (r.byProvider) { %><span class="m365-by"><%= r.byProvider %></span><% } %>
+              </td>
+              <td class="m365-expected"><span class="m365-code"><%= r.expectedShort %></span></td>
+              <td class="m365-fix">
+                <% if (r.ok || !r.steps.length) { %>
+                  <span class="muted"><%= r.ok ? 'Nothing to do' : '—' %></span>
+                <% } else { %>
+                  <% for (const st of r.steps) { %>
+                    <% if (st.action === 'remove') { %>
+                      <div class="m365-step is-remove"><span class="m365-step-head">Remove:</span> <span class="m365-code"><%= st.remove %></span></div>
+                    <% } else { %>
+                      <div class="m365-step"><div class="m365-step-head"><%= st.action === 'change' ? 'Change the record to' : 'Add this record' %></div><dl>
+                        <dt>Type</dt><dd><%= st.type %></dd>
+                        <dt>Host</dt><dd><span class="m365-code"><%= st.host %></span><button type="button" class="icon-btn m365-copy" data-copy-value="<%= st.host %>" data-copied="Host copied." title="Copy host" aria-label="Copy host <%= st.host %>"><%- icon('copy') %><%- icon('check') %></button></dd>
+                        <dt>Value</dt><dd><span class="m365-code"><%= st.value %></span><button type="button" class="icon-btn m365-copy" data-copy-value="<%= st.value %>" data-copied="Value copied." title="Copy value" aria-label="Copy value"><%- icon('copy') %><%- icon('check') %></button></dd>
+                        <% if (st.priority !== undefined) { %><dt>Priority</dt><dd><%= st.priority %></dd><% } %>
+                        <dt>TTL</dt><dd><%= TTL %></dd>
+                      </dl></div>
+                    <% } %>
+                  <% } %>
+                  <% if (['dkim1', 'dkim2'].includes(r.record)) { %><p class="muted small m365-step-note">Copy the exact value from Microsoft Defender (Email authentication &gt; DKIM), then turn on DKIM signing.</p><% } %>
+                <% } %>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+    <p class="muted small">Healthy only when MX, SPF, Autodiscover, DKIM selector1 and selector2 and DMARC (one record, p=quarantine or p=reject) are all right. The Microsoft verification record is information only. Last looked up <%= fmtDate(records[0].checked_at) %> (1.1.1.1 / 8.8.8.8).</p>
+  <% } %>
+  <% if (fixText) { %><textarea id="m365-fix" hidden readonly data-spell="off"><%= fixText %></textarea><% } %>
+</section>
+
 <div class="grid-2 grid-wide-left">
   <div>
-    <section class="card reveal" aria-labelledby="m365-records">
-      <div class="card-head">
-        <h2 id="m365-records">Records</h2>
-        <% if (fixText) { %>
-          <button type="button" class="btn btn-small" data-copy-text="#m365-fix" data-copied="Copied. Paste it into your email to the customer."><%- icon('copy') %><span>Copy fix instructions</span></button>
-        <% } %>
-      </div>
-      <% if (domain.statusKey === 'issues' && domain.reasonLines.length) { %>
-        <div class="m365-reasons" role="status"><strong>Not right:</strong><ul><% for (const line of domain.reasonLines) { %><li><%= line %></li><% } %></ul></div>
-      <% } %>
-      <% if (!records.length) { %>
-        <p class="empty">Not checked yet: click Check now.</p>
-      <% } else { %>
-        <div class="table-wrap">
-          <table class="table m365-records">
-            <thead><tr><th class="m365-col-record">Record</th><th class="m365-col-status">Status</th><th class="m365-col-found">Found now</th><th>Expected and how to fix</th></tr></thead>
-            <tbody>
-              <% for (const r of records) { %>
-                <tr class="<%= r.ok ? '' : 'is-bad-row' %>">
-                  <td><strong><%= r.label %></strong><% if (r.where) { %><span class="m365-where"><%= r.where %></span><% } %><% if (!r.ok && r.problem) { %><span class="m365-problem"><%= r.label %> <%= r.problem %></span><% } %><% if (!r.core) { %><span class="muted small">Information</span><% } %></td>
-                  <td><span class="m365-mark <%= r.ok ? 'is-ok' : (r.core ? 'is-bad' : 'is-info') %>" aria-label="<%= r.ok ? 'OK' : 'Not right' %>"><%= r.ok ? '✅' : '❌' %></span></td>
-                  <td class="m365-found" title="<%= r.found || 'Nothing found' %>"><%= r.found || 'Nothing found' %><% if (r.byProvider) { %><br><span class="m365-by"><%= r.byProvider %></span><% } %></td>
-                  <td class="m365-expected" title="<%= r.expected %>">
-                    <%= r.expected %>
-                    <% if (r.hint) { %><div class="m365-hint small"><%- icon('tool') %> <%= r.hint %></div><% } %>
-                  </td>
-                </tr>
-              <% } %>
-            </tbody>
-          </table>
-        </div>
-        <p class="muted small">Healthy only when MX, SPF, Autodiscover, DKIM selector1 and selector2 and DMARC (one record, p=quarantine or p=reject) are all right. The Microsoft verification record is information only. Last looked up <%= fmtDate(records[0].checked_at) %> (1.1.1.1 / 8.8.8.8).</p>
-      <% } %>
-      <% if (fixText) { %><textarea id="m365-fix" hidden readonly data-spell="off"><%= fixText %></textarea><% } %>
-    </section>
 
     <section class="card reveal" aria-labelledby="m365-history">
       <h2 id="m365-history">History</h2>

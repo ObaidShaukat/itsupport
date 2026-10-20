@@ -10,7 +10,7 @@
 %>
 <header class="page-head reveal">
   <div>
-    <p class="crumbs"><a href="/cloudflare/domains">Cloudflare</a> / <a href="/cloudflare/domains">Domains</a></p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Cloudflare', href: '/cloudflare' }, { label: 'Domains', href: '/cloudflare/domains' }, { label: domain.name }] }) %>
     <h1><% if (domain.led) { %><span class="led led-<%= domain.led %>" aria-hidden="true"></span> <% } %><%= domain.name %></h1>
     <p class="cf-head-line"><%- include('_status-pill', { d: domain }) %> <span class="muted small"><%= domain.account_name ? `Cloudflare account ${domain.account_name}` : 'No Cloudflare account' %><%= domain.plan ? ` · ${domain.plan}` : '' %></span></p>
   </div>

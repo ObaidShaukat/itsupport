@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/settings/tabs">Inventory tabs</a></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Settings', href: '/inventory/settings/tabs' }, { label: 'Delete tab' }] }) %>
     <h1>Delete the tab "<%= tab.name %>"?</h1>
   </div>
 </header>

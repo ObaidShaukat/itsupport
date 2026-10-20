@@ -6,7 +6,7 @@
   const accessFields = fields.filter((f) => f.visible && f.field_type === 'access');
   const back = `/inventory/r/${record.id}`;
 %>
-<p class="crumbs"><a href="/inventory/t/<%= tab.id %>"><%= tab.name %></a><% if (readOnly) { %> / Ex employee<% } %></p>
+<%- include('../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: tab.name, href: `/inventory/t/${tab.id}` }, { label: title }] }) %>
 
 <section class="card emp-head <%= readOnly ? 'is-inactive' : '' %>">
   <%- avatar({ name: title }, 'lg') %>

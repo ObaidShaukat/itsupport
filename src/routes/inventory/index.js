@@ -23,10 +23,7 @@ router.use(async (req, res, next) => {
   next();
 });
 
-router.get('/', async (req, res) => {
-  const tabs = await listTabs();
-  res.redirect(tabs.length ? tabUrl(tabs[0]) : '/inventory/settings/tabs');
-});
+// GET /inventory is the section overview (src/routes/overview.js, mounted first in index.js).
 
 // Reveal or copy one password / PIN. Returns the plain value as JSON (the browser hides
 // it again after 30 seconds) and logs who saw which field of which record.

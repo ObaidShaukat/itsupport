@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory">Inventory</a></p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Import / Export' }] }) %>
     <h1>Import / Export (Excel)</h1>
     <p class="muted">Download all inventory as one Excel file, edit it, and upload it back to update everything at once.</p>
     <p class="muted small">One .xlsx with a sheet per tab (<%= tabs.map((t) => t.name).join(', ') %>), every column, and an Instructions sheet.</p>

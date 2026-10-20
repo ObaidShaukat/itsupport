@@ -3607,3 +3607,63 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; a
 .m365-reasons { margin: 0 0 12px; padding: 10px 14px; border-radius: var(--radius-item); background: var(--red-soft); color: var(--ink); font-size: 13px; }
 .m365-reasons ul { margin: 4px 0 0; padding-left: 18px; }
 .m365-reasons li { margin: 2px 0; }
+/* Email Services list: the status as an LED + label (green glowing Healthy, red pulsing
+   Issues / Error, grey dot Not Microsoft, hollow = not checked). */
+.m365-state { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
+.m365-state strong { font-weight: 700; }
+.led.led-steady::after { display: none; }
+.led.led-off { --led: var(--grey); box-shadow: none; }
+.led.led-off::after { display: none; }
+.led.led-hollow { background: transparent; border: 2px solid var(--grey); }
+.m365-table .m365-domain { width: 30%; }
+.m365-table .m365-status { width: 30%; }
+/* Email Services domain page: Records table = Status | Record | Current status | Expected record |
+   How to fix. Fixed widths, long values wrap inside their cell. */
+.m365-records { table-layout: fixed; width: 100%; }
+.m365-records th.m365-col-status, .m365-records td.m365-col-status { width: 52px; text-align: center; }
+.m365-records .m365-col-record { width: 19%; }
+.m365-records .m365-col-found { width: 24%; }
+.m365-records .m365-col-expected { width: 21%; }
+.m365-records .m365-col-fix { width: auto; }
+.m365-records td { overflow: visible; text-overflow: clip; }
+.m365-mark { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; font-size: 0; }
+.m365-mark .icon { width: 14px; height: 14px; stroke-width: 3; }
+.m365-mark.is-ok { background: var(--led-low); color: var(--ink); box-shadow: 0 0 8px color-mix(in srgb, var(--led-low) 55%, transparent); }
+.m365-mark.is-bad { background: var(--red); color: #FFFFFF; }
+.m365-code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; word-break: break-word; }
+.m365-none { color: var(--red); font-weight: 700; font-size: 13px; }
+.m365-found .m365-by { display: table; margin-top: 6px; }
+.m365-step { display: grid; gap: 4px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-main); margin-bottom: 6px; font-size: 12.5px; }
+.m365-step.is-remove { display: block; border-color: color-mix(in srgb, var(--red) 35%, var(--border)); background: var(--red-soft); }
+.m365-step-head { font-weight: 700; color: var(--ink); }
+.m365-step dl { display: grid; grid-template-columns: 62px minmax(0, 1fr); gap: 3px 8px; margin: 0; }
+.m365-step dt { color: var(--muted); font-weight: 600; }
+.m365-step dd { margin: 0; display: flex; align-items: flex-start; gap: 4px; min-width: 0; }
+.m365-step dd .m365-code { flex: 1; min-width: 0; }
+.m365-copy { flex: none; width: 24px !important; height: 24px !important; margin-top: -3px; }
+.m365-copy .icon { width: 13px; height: 13px; }
+.m365-copy .icon + .icon { display: none; }
+.m365-copy.is-copied .icon:first-child { display: none; }
+.m365-copy.is-copied .icon + .icon { display: inline-block; }
+.m365-step-note { margin: 2px 0 0; }
+@media (max-width: 1100px) { .m365-records { width: max(920px, 100%); } }
+.crumbs .crumb-sep { margin: 0 6px; color: var(--grey); }
+.crumbs [aria-current="page"] { color: var(--ink-2); }
+/* Section overview pages (views/overview.ejs): one white card per sub-section. */
+.ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.ov-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 20px; background: #FFFFFF; color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--radius); transition: transform 0.22s, box-shadow 0.22s;
+}
+.ov-card:hover { color: var(--ink); transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+.ov-card-top { display: flex; align-items: center; justify-content: space-between; }
+.ov-icon { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; background: var(--ink); color: #FFFFFF; }
+.ov-icon .icon { width: 20px; height: 20px; }
+.ov-title { font: 600 17px/1.3 Poppins, sans-serif; }
+.ov-desc { color: var(--muted); font-size: 13.5px; line-height: 1.5; }
+.ov-stats { display: flex; flex-wrap: wrap; gap: 10px 24px; margin-top: auto; padding-top: 12px; border-top: 1px solid var(--border); }
+.ov-stat { display: grid; gap: 2px; min-width: 0; }
+.ov-num { display: inline-flex; align-items: center; gap: 8px; font: 700 26px/1.1 Poppins, sans-serif; }
+.ov-label { color: var(--muted); font-size: 12.5px; font-weight: 600; }
+.ov-card:hover .tile-arrow { transform: translateX(3px); }
+@media (prefers-reduced-motion: reduce) { .ov-card:hover { transform: none; } }

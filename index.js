@@ -79,6 +79,8 @@ app.locals.invFieldTypes = FIELD_TYPES;
 // their sub-items (children; Inventory's are its tabs, loaded per page as navInvTabs). Add more
 // Call Switch One tools (Devices, Numbers...) as children here. Users is in the avatar menu.
 // secondary: true items move into a "More" pill on screens 1024-1439px wide (head.ejs).
+// A group's href is its overview page (src/routes/overview.js), listed first in its dropdown as
+// "Overview".
 app.locals.navItems = [
   { key: 'dashboard', href: '/', label: 'Dashboard', icon: 'home' },
   { key: 'tickets', href: '/tickets', label: 'Tickets', icon: 'message' },
@@ -88,21 +90,21 @@ app.locals.navItems = [
   { key: 'report', href: '/report', label: 'Daily Report', icon: 'calendar', secondary: true },
   { key: 'inventory', href: '/inventory', label: 'Inventory', icon: 'clipboard', group: true },
   {
-    key: 'microsoft', href: '/microsoft/partner', label: 'Microsoft', icon: 'shield', group: true, secondary: true,
+    key: 'microsoft', href: '/microsoft', label: 'Microsoft', icon: 'shield', group: true, secondary: true,
     children: [
       { href: '/microsoft/partner', label: 'Microsoft Partner', match: '/microsoft/partner' },
       { href: '/microsoft/email-services', label: 'Email Services', match: '/microsoft/email-services' },
     ],
   },
   {
-    key: 'cloudflare', href: '/cloudflare/domains', label: 'Cloudflare', icon: 'globe', group: true, secondary: true,
+    key: 'cloudflare', href: '/cloudflare', label: 'Cloudflare', icon: 'globe', group: true, secondary: true,
     children: [
       { href: '/cloudflare/domains', label: 'Domains', match: '/cloudflare/domains' },
       { href: '/cloudflare/accounts', label: 'Accounts', match: '/cloudflare/accounts' },
     ],
   },
   {
-    key: 'cs1', href: '/call-switch-one/billing', label: 'Call Switch One', icon: 'phone', group: true, secondary: true,
+    key: 'cs1', href: '/call-switch-one', label: 'Call Switch One', icon: 'phone', group: true, secondary: true,
     children: [
       { href: '/call-switch-one/customers', label: 'Customers', match: '/call-switch-one/customers' },
       { href: '/call-switch-one/billing', label: 'Billing', match: '/call-switch-one/billing' },
@@ -265,6 +267,8 @@ app.use('/activity', require('./src/routes/activity-log'));
 app.use('/reminders', require('./src/routes/reminders'));
 app.use('/notifications', require('./src/routes/notifications'));
 app.use('/push', require('./src/routes/push'));
+// Section overviews: /microsoft, /cloudflare, /inventory, /call-switch-one (exact addresses).
+app.use(require('./src/routes/overview'));
 app.use('/microsoft/partner', require('./src/routes/gdap'));
 app.use('/microsoft/email-services', require('./src/routes/m365'));
 app.use('/microsoft-partner', moved('/microsoft/partner'));

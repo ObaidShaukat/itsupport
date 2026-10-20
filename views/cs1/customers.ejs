@@ -26,7 +26,7 @@
 %>
 <header class="page-head">
   <div>
-    <p class="crumbs">Call Switch One</p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Call Switch One', href: '/call-switch-one' }, { label: 'Customers' }] }) %>
     <h1>Customers</h1>
     <p class="muted">Our customer accounts in CallSwitch One. The company is the name used on the call charges; link a portal client if you like.</p>
   </div>

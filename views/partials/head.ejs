@@ -37,17 +37,16 @@
         <% for (const item of navItems) {
           const here = locals.nav === item.key; %>
           <% if (item.group) {
-            const children = item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []); %>
+            const children = [{ href: item.href, label: 'Overview', exact: true }, ...(item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []))]; %>
             <li class="pillnav-group <%= item.secondary ? 'is-secondary' : '' %>" data-menu>
               <button type="button" class="pill-item <%= here ? 'is-active' : '' %>" data-menu-toggle aria-haspopup="true" aria-expanded="false" <%- here ? 'aria-current="page"' : '' %>>
                 <span><%= item.label %></span><span class="pill-caret" aria-hidden="true"><%- icon('down') %></span>
               </button>
               <div class="menu" data-menu-panel hidden>
                 <% for (const c of children) {
-                  const active = path === c.href || path.startsWith(`${c.match || c.href}/`); %>
+                  const active = c.exact ? path === c.href : path === c.href || path.startsWith(`${c.match || c.href}/`); %>
                   <a href="<%= c.href %>" class="menu-item <%= here && active ? 'is-active' : '' %>" <%- here && active ? 'aria-current="page"' : '' %>><%= c.label %></a>
                 <% } %>
-                <% if (!children.length) { %><a href="<%= item.href %>" class="menu-item">Open <%= item.label %></a><% } %>
               </div>
             </li>
           <% } else { %>
@@ -65,8 +64,8 @@
               <% for (const item of extra) { %>
                 <% if (item.group) { %>
                   <span class="menu-label"><%= item.label %></span>
-                  <% for (const c of (item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []))) {
-                    const active = locals.nav === item.key && (path === c.href || path.startsWith(`${c.match || c.href}/`)); %>
+                  <% for (const c of [{ href: item.href, label: 'Overview', exact: true }, ...(item.key === 'inventory' ? (locals.navInvTabs || []) : (item.children || []))]) {
+                    const active = locals.nav === item.key && (c.exact ? path === c.href : path === c.href || path.startsWith(`${c.match || c.href}/`)); %>
                     <a href="<%= c.href %>" class="menu-item menu-item-sub <%= active ? 'is-active' : '' %>"><%= c.label %></a>
                   <% } %>
                 <% } else { %>

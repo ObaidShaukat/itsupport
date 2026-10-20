@@ -6,7 +6,7 @@
 %>
 <header class="page-head reveal">
   <div>
-    <p class="crumbs">Cloudflare</p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Cloudflare', href: '/cloudflare' }, { label: 'Accounts' }] }) %>
     <h1>Accounts</h1>
     <p class="muted">The Cloudflare accounts the token can see (one per customer).</p>
   </div>

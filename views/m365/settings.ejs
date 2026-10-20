@@ -2,7 +2,7 @@
 <% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users || '').split(',').map(Number); %>
 <header class="page-head reveal">
   <div>
-    <p class="crumbs"><a href="/microsoft/email-services">Microsoft</a> / <a href="/microsoft/email-services">Email Services</a></p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Microsoft', href: '/microsoft' }, { label: 'Email Services', href: '/microsoft/email-services' }, { label: 'Settings' }] }) %>
     <h1>Email Services settings</h1>
     <p class="muted">Who is alerted when a domain's Microsoft 365 email goes from Healthy to Issues (or back).</p>
   </div>

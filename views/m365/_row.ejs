@@ -3,13 +3,13 @@
   which app.js "Email Services row actions" puts in place). d = a prepareRows() row, here = the
   list address the forms return to without JavaScript.
 %>
-<% const tone = { healthy: 'is-ok', issues: 'is-bad', not_m365: 'is-muted', error: 'is-bad', unchecked: 'is-info' }; %>
+<%# Status LED: green glowing = Healthy, red pulsing = Issues / Error, grey dot = Not Microsoft, hollow = not checked. %>
+<% const LED = { healthy: 'led-low led-steady', issues: 'led-urgent', error: 'led-urgent', not_m365: 'led-off', unchecked: 'led-off led-hollow' }; %>
 <tr class="<%= d.hidden ? 'is-hidden-row' : '' %>" data-list-item data-m365-row="<%= d.id %>" data-search="<%= d.search %>" data-tags="<%= d.tags %>" data-rank="<%= d.rank %>"
     <% for (const [k, v] of Object.entries(d.sortValues)) { %>data-sort-<%= k %>="<%= v %>" <% } %><%= d.visible === false ? 'hidden' : '' %>>
-  <td class="cf-led"><% if (d.led) { %><span class="led led-<%= d.led %>" title="<%= d.statusKey === 'error' ? 'The check failed' : 'Email issues' %>"></span><% } %></td>
-  <td title="<%= d.domain %>"><a href="/microsoft/email-services/<%= d.id %>"><strong><%= d.domain %></strong></a><% if (d.notes) { %> <span class="muted" title="<%= d.notes %>"><%- icon('file') %></span><% } %></td>
+  <td title="<%= d.domain %>"><a href="/microsoft/email-services/<%= d.id %>"><strong><%= d.domain %></strong></a></td>
   <td title="<%= d.statusKey === 'issues' ? `Not right:\n${d.reasonLines.join('\n')}` : (d.status_reason || '') %>">
-    <span class="status-pill <%= tone[d.statusKey] %>"><%= d.statusLabel %></span><% if (d.statusKey === 'issues') { %> <span class="muted small"><%= d.reasonSummary %></span><% } %><% if (d.hidden) { %> <span class="status-pill is-muted">Hidden</span><% } %>
+    <span class="m365-state"><span class="led <%= LED[d.statusKey] || 'led-off' %>" aria-hidden="true"></span><strong><%= d.statusLabel %></strong></span><% if (d.statusKey === 'issues') { %> <span class="muted small"><%= d.reasonSummary %></span><% } %><% if (d.hidden) { %> <span class="status-pill is-muted">Hidden</span><% } %>
   </td>
   <td><%= d.managed_by || '—' %></td>
   <td title="<%= d.nameserverList.join(', ') %>"><%= d.dns_provider || '—' %></td>

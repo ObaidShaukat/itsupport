@@ -5,7 +5,7 @@
 %>
 <header class="page-head">
   <div>
-    <p class="crumbs">Call Switch One</p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Call Switch One', href: '/call-switch-one' }, ...(locals.crumb ? [{ label: 'Billing', href: '/call-switch-one/billing' }, { label: crumb }] : [{ label: 'Billing' }])] }) %>
     <h1><%= locals.heading || 'Billing' %></h1>
     <p class="muted"><%= locals.intro || 'Monthly call charges from the CallSwitch One CDR file: the sum of Salesprice per customer, plus the margin.' %></p>
   </div>

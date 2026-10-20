@@ -2,7 +2,7 @@
 <% const everyone = String(settings.alert_users || 'all') === 'all'; const chosen = everyone ? [] : String(settings.alert_users || '').split(',').map(Number); %>
 <header class="page-head reveal">
   <div>
-    <p class="crumbs"><a href="/cloudflare/domains">Cloudflare</a></p>
+    <%- include('../partials/crumbs', { crumbs: [{ label: 'Cloudflare', href: '/cloudflare' }, { label: 'Settings' }] }) %>
     <h1>Cloudflare settings</h1>
     <p class="muted">Who is alerted when a domain stops using Cloudflare's nameservers, is removed from Cloudflare or is about to expire, or an account can no longer be read.</p>
   </div>

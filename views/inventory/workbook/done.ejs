@@ -1,7 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="/inventory/workbook">Import / Export</a> / Import</p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Import / Export', href: '/inventory/workbook' }, { label: 'Import' }] }) %>
     <h1>Import / Export: imported</h1>
     <p class="muted"><%= stage.fileName %> was imported. The file and its staged copy have been deleted.</p>
   </div>

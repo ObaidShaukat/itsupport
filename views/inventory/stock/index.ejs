@@ -1,6 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Stock' }] }) %>
     <h1>Stock</h1>
     <p class="muted">Every item, one row each. Click a row to edit, assign or return it.</p>
   </div>

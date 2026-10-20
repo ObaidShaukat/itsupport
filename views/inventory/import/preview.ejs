@@ -2,7 +2,7 @@
 <% const labels = { create: 'Create', update: 'Update', unchanged: 'No change', skip: 'Skip' }; %>
 <header class="page-head">
   <div>
-    <p class="crumbs"><a href="<%= area.back %>"><%= area.name %></a> / Import</p>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: area.name, href: area.back }, { label: 'Import' }, { label: 'Preview' }] }) %>
     <h1>Preview</h1>
     <p class="muted"><%= stage.fileName %>. Nothing has been changed yet. Rows with problems are skipped, not guessed.</p>
   </div>

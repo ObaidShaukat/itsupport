@@ -1,6 +1,7 @@
 <%- include('../../partials/head') %>
 <header class="page-head">
   <div>
+    <%- include('../../partials/crumbs', { crumbs: [{ label: 'Inventory', href: '/inventory' }, { label: 'Stock', href: '/inventory/stock' }, { label: 'Stock categories' }] }) %>
     <h1>Stock categories</h1>
     <p class="muted">Each category can have its own extra fields. New categories show up in employee profiles (Equipment) and the reports straight away. Drag to reorder.</p>
   </div>
